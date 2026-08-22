@@ -17,6 +17,7 @@ import type { GameAction } from '../src/engine/actions'
 import { flagship } from '../src/engine/state'
 import type { GameState, JoinPolicy } from '../src/engine/state'
 import { nextEventAt } from '../src/engine/selectors'
+import { projectFor } from '../src/engine/fog'
 import type { TravelMode } from '../src/engine/types'
 
 export interface Env {
@@ -29,6 +30,7 @@ export interface GameMeta {
   readonly totalRounds: number
   readonly startingCapital: number
   readonly joinPolicy: JoinPolicy
+  readonly sicht: 'normal' | 'realistisch'
   readonly travel: TravelMode
   readonly minutesPerPip: number
   readonly durationHours: number
@@ -46,6 +48,12 @@ type ClientMessage =
 type ServerMessage =
   | { t: 'welcome'; playerId: string | null; token: string; meta: GameMeta; actions: GameAction[] }
   | { t: 'append'; actions: GameAction[]; from: number }
+  /**
+   * Sicht "realistisch": the log itself is secret, because a client that
+   * receives the truth has the truth whatever it chooses to draw. Each seat
+   * is sent a projected state instead.
+   */
+  | { t: 'view'; state: GameState }
   | { t: 'presence'; online: string[] }
   | { t: 'error'; reason: string }
   | { t: 'pong' }
@@ -91,6 +99,7 @@ export default {
         totalRounds: clamp(body.totalRounds ?? 30, 1, 200),
         startingCapital: clamp(body.startingCapital ?? 500_000, 50_000, 5_000_000),
         joinPolicy: body.joinPolicy === 'jederzeit' ? 'jederzeit' : 'nur-zu-beginn',
+        sicht: body.sicht === 'realistisch' ? 'realistisch' : 'normal',
         travel: body.travel === 'echtzeit' ? 'echtzeit' : 'runde',
         // Fractional minutes are allowed: handy for a blitz table, and the
         // only way an automated test can watch a voyage finish.
@@ -171,6 +180,7 @@ export class GameRoom {
       totalRounds: this.meta.totalRounds,
       startingCapital: this.meta.startingCapital,
       joinPolicy: this.meta.joinPolicy,
+      sicht: this.meta.sicht,
       travel: this.meta.travel,
       minutesPerPip: this.meta.minutesPerPip,
       durationHours: this.meta.durationHours,
@@ -214,9 +224,9 @@ export class GameRoom {
           this.state?.players.map((p) => ({
             id: p.id,
             name: p.name,
-            at: flagship(p).nodeId,
-            cash: p.cash,
-            destination: flagship(p).voyage?.destination ?? null,
+            at: this.foggy ? null : flagship(p).nodeId,
+            cash: this.foggy ? null : p.cash,
+            destination: this.foggy ? null : (flagship(p).voyage?.destination ?? null),
           })) ?? [],
       })
     }
@@ -262,6 +272,18 @@ export class GameRoom {
     for (const socket of this.sockets.keys()) this.send(socket, message)
   }
 
+  private get foggy(): boolean {
+    return this.meta?.sicht === 'realistisch'
+  }
+
+  /** Under fog every seat gets a different letter. */
+  private broadcastViews(): void {
+    if (!this.state) return
+    for (const [socket, playerId] of this.sockets) {
+      this.send(socket, { t: 'view', state: projectFor(this.state, playerId) })
+    }
+  }
+
   private broadcastPresence(): void {
     const online = [...this.sockets.values()].filter((id): id is string => id !== null)
     this.broadcast({ t: 'presence', online })
@@ -295,8 +317,11 @@ export class GameRoom {
             playerId: existing.playerId,
             token: existing.token,
             meta: this.meta,
-            actions: this.actions,
+            actions: this.foggy ? [] : this.actions,
           })
+          if (this.foggy) {
+            this.send(socket, { t: 'view', state: projectFor(this.state, existing.playerId) })
+          }
           this.broadcastPresence()
           return
         }
@@ -317,20 +342,23 @@ export class GameRoom {
             playerId,
             token,
             meta: this.meta,
-            actions: this.actions,
+            actions: this.foggy ? [] : this.actions,
           })
+          if (this.foggy) this.broadcastViews()
           this.broadcastPresence()
           return
         }
 
-        // A spectator: everything to watch, no seat.
+        // A spectator: everything to watch, no seat — unless the table is
+        // playing under fog, in which case there is nothing to watch.
         this.send(socket, {
           t: 'welcome',
           playerId: null,
           token: '',
           meta: this.meta,
-          actions: this.actions,
+          actions: this.foggy ? [] : this.actions,
         })
+        if (this.foggy) this.send(socket, { t: 'view', state: projectFor(this.state, null) })
         return
       }
 
@@ -380,7 +408,8 @@ export class GameRoom {
     const from = this.actions.length
     this.actions.push(action)
     await this.persist()
-    this.broadcast({ t: 'append', actions: [action], from })
+    if (this.foggy) this.broadcastViews()
+    else this.broadcast({ t: 'append', actions: [action], from })
     await this.scheduleWake()
     return { ok: true }
   }
@@ -416,6 +445,7 @@ export class GameRoom {
   async alarm(): Promise<void> {
     await this.load()
     await this.catchUp()
+    if (this.foggy) this.broadcastViews()
     await this.scheduleWake()
   }
 }

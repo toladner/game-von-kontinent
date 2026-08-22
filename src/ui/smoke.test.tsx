@@ -277,6 +277,78 @@ describe('the map on a touch screen', () => {
   })
 })
 
+describe('Sicht realistisch in the interface', () => {
+  it('draws a distant ship as a belief and offers a pigeon', () => {
+    render(<App />)
+    const ctx = useGame.getState().ctx
+
+    act(() =>
+      useGame.getState().begin(['Ada'], {
+        travel: 'echtzeit',
+        sicht: 'realistisch',
+        minutesPerPip: 1,
+        durationHours: 6,
+        seed: 'fog-ui',
+      }),
+    )
+    act(() => useGame.getState().dispatch({ type: 'buyVehicle', kindId: 'kuestenschoner' }))
+
+    const truth = useGame.getState().truth!
+    const schooner = truth.players[0]!.fleet[1]!
+    const home = truth.players[0]!.fleet[0]!.nodeId
+    const away = [...ctx.portsById.keys()].find(
+      (id) => id !== home && routeTo(ctx, home, null, id).length >= 3,
+    )!
+
+    act(() =>
+      useGame.getState().dispatch({ type: 'setCourse', vehicleId: schooner.id, to: away }),
+    )
+    act(() =>
+      useGame.getState().dispatch({ type: 'tick', at: truth.now + 60 * 60_000 }),
+    )
+
+    // The truth: she has arrived. The view: Ada has heard nothing.
+    const after = useGame.getState().truth!
+    const seen = useGame.getState().state!
+    expect(after.players[0]!.fleet[1]!.nodeId).toBe(away)
+    expect(seen.players[0]!.fleet[1]!.unseen).toBe(true)
+    expect(seen.players[0]!.fleet[1]!.nodeId).not.toBe(away)
+
+    // The fleet register says so in as many words, and offers a bird.
+    fireEvent.click(screen.getByLabelText(/^Flotte:/))
+    expect(screen.getByText(/Zuletzt gemeldet/)).toBeTruthy()
+    expect(screen.getByText('Taube schicken')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Taube schicken'))
+    expect(screen.getByText('Brieftaube')).toBeTruthy()
+    expect(screen.getByLabelText('Adressiert an')).toBeTruthy()
+    expect(screen.getByText(/Ob die Taube ankommt, erfahren Sie nicht/)).toBeTruthy()
+  })
+
+  it('keeps a notebook because nothing else remembers', () => {
+    render(<App />)
+    act(() =>
+      useGame.getState().begin(['Ada'], {
+        travel: 'echtzeit',
+        sicht: 'realistisch',
+        minutesPerPip: 1,
+        seed: 'note-ui',
+      }),
+    )
+
+    fireEvent.click(screen.getByLabelText(/^Flotte:/))
+    fireEvent.click(screen.getByText('Notizbuch'))
+
+    const pad = screen.getByLabelText('Notizbuch') as HTMLTextAreaElement
+    fireEvent.change(pad, { target: { value: 'Stella nach Dakar, Taube 14:25' } })
+    fireEvent.click(screen.getByText('Eintragen'))
+
+    expect(useGame.getState().state!.players[0]!.knowledge.notebook).toBe(
+      'Stella nach Dakar, Taube 14:25',
+    )
+  })
+})
+
 describe('saving', () => {
   it('resumes a game from the action log alone', () => {
     render(<App />)

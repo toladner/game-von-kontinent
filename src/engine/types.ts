@@ -126,8 +126,14 @@ export interface Vehicle {
   /** null = no limit, as in the original rules. */
   readonly capacity: number | null
   readonly modes: readonly TransportMode[]
-  /** Kilometres per pip; lets a lorry and a steamer share one map. */
-  readonly kmPerPip?: number
+  /** What the yard charges. Zero for the vessel a house starts with. */
+  readonly price: Money
+  /**
+   * Multiplies the time a leg takes. Below 1 is a flyer, above 1 a lumberer.
+   */
+  readonly speedFactor: number
+  /** One line of sales patter for the shipyard. */
+  readonly blurb?: string
 }
 
 export interface GameMap {
@@ -197,8 +203,24 @@ export interface RealtimeConfig {
   readonly durationHours: number
 }
 
+/** How much of the world a house may see. */
+export type Sicht = 'normal' | 'realistisch'
+
+export interface PigeonConfig {
+  /** Real minutes a bird needs per pip of distance. */
+  readonly minutesPerPip: number
+  /** Chance in percent that a bird is lost on the way. */
+  readonly lossPercent: number
+  /** What the loft charges to release one. */
+  readonly price: Money
+}
+
 export interface RuleConfig {
   readonly travel: TravelMode
+  readonly sicht: Sicht
+  readonly pigeon: PigeonConfig
+  /** Characters a player's notebook holds. */
+  readonly notebookLimit: number
   readonly realtime: RealtimeConfig
   readonly startingCapital: Money
   /** Denominations dealt out, purely for the cash drawer visualisation. */
@@ -226,6 +248,8 @@ export interface RuleConfig {
   readonly diceSides: number
   /** What every player starts out travelling in. */
   readonly startingVehicle: Vehicle
+  /** How many vessels one house may run at once. */
+  readonly maxFleetSize: number
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +260,8 @@ export interface ContentPack {
   readonly id: string
   readonly name: string
   readonly map: GameMap
+  /** Vessels the shipyards offer, beyond the one every house starts with. */
+  readonly vehicles: readonly Vehicle[]
   readonly goods: readonly Good[]
   readonly konjunktur: readonly KonjunkturCard[]
   readonly config: RuleConfig

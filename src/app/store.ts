@@ -5,6 +5,7 @@ import { createGame, openingActions } from '@engine/setup'
 import { applyAction, replay } from '@engine/reducer'
 import type { GameAction, GameEvent } from '@engine/actions'
 import type { GameState, JoinPolicy } from '@engine/state'
+import { projectFor } from '@engine/fog'
 import {
   createOnlineGame,
   Session,
@@ -32,6 +33,7 @@ export interface BeginOptions {
   readonly travel?: 'runde' | 'echtzeit'
   readonly minutesPerPip?: number
   readonly durationHours?: number
+  readonly sicht?: 'normal' | 'realistisch'
 }
 
 export interface LogLine {
@@ -51,7 +53,16 @@ export interface NetState {
 
 interface Store {
   readonly ctx: EngineContext
+  /**
+   * What the screen may draw. Under Sicht "realistisch" this is a projection,
+   * not the world: distant ships sit where they were last reported.
+   */
   state: GameState | null
+  /**
+   * The world as it really is. Local games only — online, the server keeps it
+   * and never sends it, which is the whole point of the fog.
+   */
+  truth: GameState | null
   log: LogLine[]
   /** Events from the most recent action, for animations and flashes. */
   lastEvents: readonly GameEvent[]
@@ -66,7 +77,10 @@ interface Store {
   localActing: string | null
 
   begin: (names: string[], options?: BeginOptions) => void
-  host: (name: string, options: BeginOptions & { joinPolicy: JoinPolicy }) => Promise<string>
+  host: (
+    name: string,
+    options: BeginOptions & { joinPolicy: JoinPolicy; sicht?: 'normal' | 'realistisch' },
+  ) => Promise<string>
   join: (code: string, name: string) => void
   dispatch: (action: GameAction) => void
   resume: () => boolean
@@ -179,6 +193,7 @@ let ticker: ReturnType<typeof setInterval> | null = null
 export const useGame = create<Store>((set, get) => ({
   ctx,
   state: null,
+  truth: null,
   log: [],
   lastEvents: [],
   notice: null,
@@ -205,6 +220,7 @@ export const useGame = create<Store>((set, get) => ({
         totalRounds,
         startingCapital,
         travel,
+        ...(options.sicht ? { sicht: options.sicht } : {}),
         ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),
         ...(options.durationHours ? { durationHours: options.durationHours } : {}),
       }),
@@ -215,12 +231,14 @@ export const useGame = create<Store>((set, get) => ({
     if (options.minutesPerPip) saved.minutesPerPip = options.minutesPerPip
     if (options.durationHours) saved.durationHours = options.durationHours
     persist()
+    const firstActing = state.players[0]?.id ?? null
     session?.close()
     session = null
     set({
-      state,
+      state: projectFor(state, firstActing),
+      truth: state,
       net: null,
-      localActing: state.players[0]?.id ?? null,
+      localActing: firstActing,
       log: [
         {
           id: ++logId,
@@ -239,6 +257,7 @@ export const useGame = create<Store>((set, get) => ({
       totalRounds: options.totalRounds ?? 30,
       startingCapital: options.startingCapital ?? ctx.pack.config.startingCapital,
       joinPolicy: options.joinPolicy,
+      sicht: options.sicht ?? 'normal',
       travel: options.travel ?? 'runde',
       minutesPerPip: options.minutesPerPip ?? 6,
       durationHours: options.durationHours ?? 24,
@@ -267,11 +286,17 @@ export const useGame = create<Store>((set, get) => ({
           minutesPerPip: meta.minutesPerPip,
           durationHours: meta.durationHours,
         })
+        // Under fog the log is withheld; a view arrives separately.
+        const rebuilt = meta.sicht === 'realistisch' ? null : replay(ctx, initial, actions)
         set((s) => ({
-          state: replay(ctx, initial, actions),
+          ...(rebuilt ? { state: rebuilt, truth: null } : {}),
           net: s.net ? { ...s.net, playerId } : s.net,
           notice: null,
         }))
+      },
+
+      onView: (view) => {
+        set({ state: view, truth: null })
       },
 
       onAppend: (actions) => {
@@ -301,7 +326,11 @@ export const useGame = create<Store>((set, get) => ({
   },
 
   setActing(playerId) {
-    set({ localActing: playerId })
+    // Changing hands changes what may be seen.
+    set((s) => ({
+      localActing: playerId,
+      state: s.truth ? projectFor(s.truth, playerId) : s.state,
+    }))
   },
 
   acting() {
@@ -325,16 +354,26 @@ export const useGame = create<Store>((set, get) => ({
   },
 
   dispatch(action) {
-    const { state, net } = get()
+    const { state, net, truth } = get()
     if (!state) return
 
     // Real-time actions name their actor, because there is no turn to infer
     // it from.
-    if (
-      state.config.travel === 'echtzeit' &&
-      (action.type === 'buy' || action.type === 'sell' || action.type === 'setCourse') &&
-      !action.by
-    ) {
+    const NAMES_AN_ACTOR = [
+      'buy',
+      'sell',
+      'setCourse',
+      'buyVehicle',
+      'boardVehicle',
+      'sendPigeon',
+      'collectMail',
+      'writeNote',
+    ] as const
+    type ActorAction = Extract<GameAction, { type: (typeof NAMES_AN_ACTOR)[number] }>
+    const namesAnActor = (a: GameAction): a is ActorAction =>
+      (NAMES_AN_ACTOR as readonly string[]).includes(a.type)
+
+    if (state.config.travel === 'echtzeit' && namesAnActor(action) && !action.by) {
       const me = get().acting()
       if (!me) return
       action = { ...action, by: me.id }
@@ -349,7 +388,8 @@ export const useGame = create<Store>((set, get) => ({
       return
     }
 
-    const result = applyAction(ctx, state, action)
+    // Local play reduces against the truth, never against the projection.
+    const result = applyAction(ctx, truth ?? state, action)
 
     const rejection = result.events.find((e) => e.type === 'rejected')
     if (rejection && rejection.type === 'rejected') {
@@ -367,7 +407,8 @@ export const useGame = create<Store>((set, get) => ({
       .filter((l): l is LogLine => l !== null)
 
     set((s) => ({
-      state: result.state,
+      state: projectFor(result.state, s.localActing),
+      truth: result.state,
       lastEvents: result.events,
       log: [...fresh.reverse(), ...s.log].slice(0, 200),
       notice: null,
@@ -391,7 +432,8 @@ export const useGame = create<Store>((set, get) => ({
       const state = replay(ctx, initial, file.actions ?? [])
       saved = file
       set({
-        state,
+        state: projectFor(state, state.players[0]?.id ?? null),
+        truth: state,
         log: [],
         lastEvents: [],
         notice: null,
@@ -416,7 +458,15 @@ export const useGame = create<Store>((set, get) => ({
     } catch {
       /* nothing to clean up */
     }
-    set({ state: null, log: [], lastEvents: [], notice: null, net: null, localActing: null })
+    set({
+      state: null,
+      truth: null,
+      log: [],
+      lastEvents: [],
+      notice: null,
+      net: null,
+      localActing: null,
+    })
   },
 
   dismissNotice() {

@@ -1,5 +1,5 @@
 import type { CargoItem, GameState, PlayerState } from './state'
-import { activePlayer, flagship, netWorth } from './state'
+import { activePlayer, flagship, netWorth, type VehicleInstance } from './state'
 import { goodOf, type EngineContext } from './context'
 import { isPort } from './mapbuild'
 import type { GoodId, Money, NodeId, PortId } from './types'
@@ -134,6 +134,11 @@ export interface Destination {
   readonly sellable: number
   /** Goods this port exports that are not already in the hold. */
   readonly offers: number
+}
+
+/** How long one pip takes this vessel, in milliseconds. */
+export function legMsFor(state: GameState, vehicle: VehicleInstance): number {
+  return state.config.realtime.minutesPerPip * (vehicle.kind.speedFactor || 1) * 60_000
 }
 
 /** Distance in pips from a node to every other node, honouring the no-turn rule. */
@@ -283,13 +288,16 @@ export function standings(state: GameState): readonly Standing[] {
 export function nextEventAt(state: GameState): number | null {
   if (state.config.travel !== 'echtzeit' || state.phase !== 'laufend') return null
 
-  const legMs = state.config.realtime.minutesPerPip * 60_000
   const times: number[] = []
 
   for (const p of state.players) {
-    const voyage = flagship(p).voyage
-    // One tick at the final arrival walks the ship through every leg at once.
-    if (voyage) times.push(voyage.legArrivesAt + legMs * (voyage.route.length - 1))
+    for (const vehicle of p.fleet) {
+      const voyage = vehicle.voyage
+      // One tick at the final arrival walks a ship through every leg at once.
+      if (voyage) {
+        times.push(voyage.legArrivesAt + legMsFor(state, vehicle) * (voyage.route.length - 1))
+      }
+    }
   }
   if (state.config.realtime.marketIntervalMinutes > 0) {
     times.push(state.marketSince + state.config.realtime.marketIntervalMinutes * 60_000)
@@ -302,10 +310,13 @@ export function nextEventAt(state: GameState): number | null {
 
 /** Arrival time of the whole voyage, not just the current leg. */
 export function arrivalAt(state: GameState, player: PlayerState): number | null {
-  const voyage = flagship(player).voyage
+  return arrivalOf(state, flagship(player))
+}
+
+export function arrivalOf(state: GameState, vehicle: VehicleInstance): number | null {
+  const voyage = vehicle.voyage
   if (!voyage) return null
-  const legMs = state.config.realtime.minutesPerPip * 60_000
-  return voyage.legArrivesAt + legMs * (voyage.route.length - 1)
+  return voyage.legArrivesAt + legMsFor(state, vehicle) * (voyage.route.length - 1)
 }
 
 export function isRedField(state: GameState): boolean {

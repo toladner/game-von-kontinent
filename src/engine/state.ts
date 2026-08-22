@@ -50,6 +50,13 @@ export interface VehicleInstance {
   readonly cargo: readonly CargoItem[]
   /** Goods bought during the current port call; max 2, never twice the same. */
   readonly purchasesThisVisit: readonly GoodId[]
+  /**
+   * Set only in a projected view under Sicht "realistisch": this position is
+   * the last thing you were told, not where the ship is now.
+   */
+  readonly unseen?: boolean
+  /** Set only in a projected view: another house's vessel you cannot see. */
+  readonly hidden?: boolean
 }
 
 /** Kept as an alias: a great deal of code speaks of a player's ship. */
@@ -73,6 +80,75 @@ export interface PlayerState {
   readonly hasDeparted: boolean
   /** Round in which a levy of each kind was last settled (grace period). */
   readonly levyPaidRound: { readonly steuer: number | null; readonly versicherung: number | null }
+  /** Only meaningful under Sicht "realistisch". */
+  readonly knowledge: PlayerKnowledge
+}
+
+// ---------------------------------------------------------------------------
+// Sicht "realistisch": belief, letters and pigeons
+// ---------------------------------------------------------------------------
+
+/** What a house last learned about one of its vessels, and when. */
+export interface Sighting {
+  readonly vehicleId: string
+  readonly nodeId: NodeId
+  /** World time the news describes — not when it was read. */
+  readonly asOf: number
+  /** Where the news was written, or seen with one's own eyes. */
+  readonly place: PortId | null
+  /** Where she was said to be bound, if anywhere. */
+  readonly bound: PortId | null
+  /** The hold as it stood then. */
+  readonly cargo: readonly CargoItem[]
+  /** True when the merchant was standing on the deck at the time. */
+  readonly firsthand: boolean
+}
+
+export interface Letter {
+  readonly id: string
+  readonly vehicleId: string
+  readonly vehicleName: string
+  readonly captain: string
+  readonly writtenAt: number
+  readonly writtenIn: PortId
+  readonly sighting: Sighting
+}
+
+/**
+ * A bird in the air. Nobody is told whether it arrives; the only evidence is
+ * the world changing, or not.
+ */
+export interface Pigeon {
+  readonly id: string
+  readonly playerId: string
+  readonly kind: 'befehl' | 'bericht'
+  /** The harbour it is flying to — where the sender believed to find someone. */
+  readonly toNode: PortId
+  readonly sentAt: number
+  readonly arrivesAt: number
+  /**
+   * Decided by the seeded generator the moment it is released, so every
+   * device agrees about a bird that never arrives.
+   */
+  readonly doomed: boolean
+  /** For an order: which ship, where to, and where to answer. */
+  readonly order?: {
+    readonly vehicleId: string
+    readonly destination: PortId
+    readonly replyTo: PortId | null
+  }
+  readonly letter?: Letter
+}
+
+export interface PlayerKnowledge {
+  /** Last known whereabouts of each of the house's own vessels. */
+  readonly sightings: Readonly<Record<string, Sighting>>
+  /** Letters lying at a harbour, waiting to be fetched in person. */
+  readonly waiting: Readonly<Record<string, readonly Letter[]>>
+  /** Letters read, newest last. */
+  readonly read: readonly Letter[]
+  /** The player's own notes. Nothing else remembers for them. */
+  readonly notebook: string
 }
 
 export type JoinPolicy = 'nur-zu-beginn' | 'jederzeit'
@@ -153,6 +229,8 @@ export interface GameState {
   /** The Konjunktur card the world market is currently under, if any. */
   readonly marketCardId: string | null
   readonly marketSince: number
+  /** Birds currently in the air. Empty unless Sicht is "realistisch". */
+  readonly pigeons: readonly Pigeon[]
   readonly seq: number
 }
 

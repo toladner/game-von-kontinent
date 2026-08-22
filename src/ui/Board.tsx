@@ -310,20 +310,34 @@ export function Board({
     [state.players],
   )
 
-  const ships = state.players.map((p, i) => {
-    const here = at(flagship(p).nodeId)
-    if (!here) return null
-    const voyage = flagship(p).voyage ?? null
-    const next = voyage ? at(voyage.route[0]) : null
+  // Every vessel of every house, not just the flagships.
+  const ships = state.players
+    .flatMap((p, playerIndex) =>
+      p.fleet.map((vehicle, vehicleIndex) => ({ p, vehicle, playerIndex, vehicleIndex })),
+    )
+    .map(({ p, vehicle, playerIndex, vehicleIndex }) => {
+      // A rival's ship you cannot see is simply not drawn.
+      if (vehicle.hidden) return null
+      const here = at(vehicle.nodeId)
+      if (!here) return null
+      const voyage = vehicle.voyage ?? null
+      const next = voyage ? at(voyage.route[0]) : null
 
-    let pos = here
-    if (voyage && next) {
-      const t = voyageProgress(voyage, now || voyage.legStartedAt)
-      pos = { x: here.x + (next.x - here.x) * t, y: here.y + (next.y - here.y) * t }
-    }
-    const from = voyage && next ? here : at(flagship(p).cameFrom)
-    return { player: p, pos, from, sailing: Boolean(voyage), index: i }
-  })
+      let pos = here
+      if (voyage && next) {
+        const t = voyageProgress(voyage, now || voyage.legStartedAt)
+        pos = { x: here.x + (next.x - here.x) * t, y: here.y + (next.y - here.y) * t }
+      }
+      const from = voyage && next ? here : at(vehicle.cameFrom)
+      return {
+        player: p,
+        vehicle,
+        pos,
+        from,
+        sailing: Boolean(voyage),
+        nudge: vehicleIndex * 5 + playerIndex * 4 - 2,
+      }
+    })
 
   const coursePath = useMemo(() => {
     if (course.length < 2) return ''
@@ -456,15 +470,16 @@ export function Board({
           {ships.map((s) =>
             s ? (
               <Ship
-                key={s.player.id}
+                key={s.vehicle.id}
                 player={s.player}
                 x={s.pos.x}
                 y={s.pos.y}
                 heading={s.from ? Math.atan2(s.pos.y - s.from.y, s.pos.x - s.from.x) : 0}
-                active={flagship(s.player).nodeId === focusNode}
-                nudge={s.index * 4 - 2}
-                laden={flagship(s.player).cargo.length}
+                active={s.vehicle.id === flagship(s.player).id && s.vehicle.nodeId === focusNode}
+                nudge={s.nudge}
+                laden={s.vehicle.cargo.length}
                 sailing={s.sailing}
+                believed={s.vehicle.unseen === true}
               />
             ) : null,
           )}
@@ -582,6 +597,7 @@ const Ship = memo(function Ship({
   nudge,
   laden,
   sailing,
+  believed = false,
 }: {
   player: PlayerState
   x: number
@@ -591,6 +607,8 @@ const Ship = memo(function Ship({
   nudge: number
   laden: number
   sailing: boolean
+  /** Sicht "realistisch": drawn where she was last reported, not where she is. */
+  believed?: boolean
 }) {
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]?.ink ?? '#1b1b1b'
   const deg = (heading * 180) / Math.PI
@@ -598,10 +616,31 @@ const Ship = memo(function Ship({
   return (
     <g
       transform={`translate(${x} ${y - 4 + nudge}) scale(${flip} 1)`}
-      style={{ transition: sailing ? 'none' : 'transform 260ms ease-out' }}
+      style={{
+        transition: sailing ? 'none' : 'transform 260ms ease-out',
+        opacity: believed ? 0.45 : 1,
+      }}
     >
       {active && <circle cx={0} cy={3} r={11} fill="#fff8e0" opacity={0.55} />}
       {sailing && <path d="M-16 5 q6 -2 12 0 q-6 2 -12 0" fill="#ffffff" opacity={0.5} />}
+      {believed && (
+        <>
+          {/* Last reported position: a pencilled guess, not a fix. */}
+          <circle
+            cx={0}
+            cy={3}
+            r={10}
+            fill="none"
+            stroke={color}
+            strokeWidth={0.9}
+            strokeDasharray="2 2"
+            opacity={0.8}
+          />
+          <text x={9} y={-4} fontSize={9} fill={color} opacity={0.9}>
+            ?
+          </text>
+        </>
+      )}
       <g transform="translate(-8 -6) scale(0.5)">
         <path d="M2 22h30l-5 8H7z" fill={color} />
         <path d="M8 21V8h14l7 7v6z" fill={color} opacity={0.85} />

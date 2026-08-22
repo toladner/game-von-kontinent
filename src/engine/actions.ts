@@ -26,7 +26,41 @@ export type GameAction =
    * Real-time play: lay in a course for a harbour and let the ship run.
    * The voyage takes real minutes; nobody has to sit and watch it.
    */
-  | { readonly type: 'setCourse'; readonly to: PortId; readonly by?: string }
+  | {
+      readonly type: 'setCourse'
+      readonly to: PortId
+      /** Which vessel. Defaults to the one the merchant is aboard. */
+      readonly vehicleId?: string
+      readonly by?: string
+    }
+  /** Order a vessel from the yard. It is delivered to the harbour you stand in. */
+  | { readonly type: 'buyVehicle'; readonly kindId: string; readonly by?: string }
+  /** Step across to another of your vessels lying in the same harbour. */
+  | { readonly type: 'boardVehicle'; readonly vehicleId: string; readonly by?: string }
+  /**
+   * Release a bird with an order for a distant captain.
+   *
+   * It flies to where you *believe* the ship to be. You are never told whether
+   * it got there; the only evidence is the ship moving, which you also cannot
+   * see unless you go and look.
+   */
+  | {
+      readonly type: 'sendPigeon'
+      readonly vehicleId: string
+      /**
+       * The harbour the letter is addressed to. You choose it, and you may be
+       * wrong: if she is not there, nobody reads it and nobody tells you.
+       */
+      readonly toPort: PortId
+      readonly destination: PortId
+      /** Where the captain should answer, if you want an answer at all. */
+      readonly replyTo?: PortId | null
+      readonly by?: string
+    }
+  /** Call at the post office of the harbour you are standing in. */
+  | { readonly type: 'collectMail'; readonly by?: string }
+  /** The player's own notes; the game remembers nothing for them. */
+  | { readonly type: 'writeNote'; readonly text: string; readonly by?: string }
   /**
    * The world clock, carried as data so the reducer never reads it itself.
    * Only this action moves time, which is what keeps replays exact.
@@ -53,6 +87,21 @@ export type GameEvent =
       readonly arrivesAt: number
     }
   | { readonly type: 'marketTurned'; readonly cardId: string }
+  | {
+      readonly type: 'vehicleBought'
+      readonly playerId: string
+      readonly vehicleId: string
+      readonly name: string
+      readonly price: Money
+    }
+  | { readonly type: 'boarded'; readonly playerId: string; readonly vehicleId: string }
+  | {
+      readonly type: 'pigeonSent'
+      readonly playerId: string
+      readonly toNode: PortId
+      readonly kind: 'befehl' | 'bericht'
+    }
+  | { readonly type: 'mailCollected'; readonly playerId: string; readonly count: number }
   | { readonly type: 'rolled'; readonly playerId: string; readonly value: number }
   | { readonly type: 'moved'; readonly playerId: string; readonly to: NodeId }
   | { readonly type: 'arrived'; readonly playerId: string; readonly portId: PortId }

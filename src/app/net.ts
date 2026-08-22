@@ -1,5 +1,5 @@
 import type { GameAction } from '@engine/actions'
-import type { JoinPolicy } from '@engine/state'
+import type { GameState, JoinPolicy } from '@engine/state'
 
 /**
  * The wire to the Partieserver.
@@ -15,6 +15,7 @@ export interface GameMeta {
   readonly totalRounds: number
   readonly startingCapital: number
   readonly joinPolicy: JoinPolicy
+  readonly sicht: 'normal' | 'realistisch'
   readonly travel: 'runde' | 'echtzeit'
   readonly minutesPerPip: number
   readonly durationHours: number
@@ -25,6 +26,7 @@ export interface GameMeta {
 type ServerMessage =
   | { t: 'welcome'; playerId: string | null; token: string; meta: GameMeta; actions: GameAction[] }
   | { t: 'append'; actions: GameAction[]; from: number }
+  | { t: 'view'; state: GameState }
   | { t: 'presence'; online: string[] }
   | { t: 'error'; reason: string }
   | { t: 'pong' }
@@ -32,6 +34,8 @@ type ServerMessage =
 export interface SessionHandlers {
   onWelcome: (playerId: string | null, meta: GameMeta, actions: GameAction[]) => void
   onAppend: (actions: GameAction[]) => void
+  /** Under fog the server sends a finished view instead of the log. */
+  onView: (state: GameState) => void
   onPresence: (online: string[]) => void
   onError: (reason: string) => void
   onStatus: (status: ConnectionStatus) => void
@@ -61,6 +65,7 @@ export async function createOnlineGame(options: {
   totalRounds: number
   startingCapital: number
   joinPolicy: JoinPolicy
+  sicht: 'normal' | 'realistisch'
   travel: 'runde' | 'echtzeit'
   minutesPerPip: number
   durationHours: number
@@ -125,6 +130,9 @@ export class Session {
           return
         case 'append':
           this.handlers.onAppend(message.actions)
+          return
+        case 'view':
+          this.handlers.onView(message.state)
           return
         case 'presence':
           this.handlers.onPresence(message.online)

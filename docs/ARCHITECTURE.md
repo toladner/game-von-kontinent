@@ -212,7 +212,67 @@ Deliberate deviations, all reversible in `RuleConfig`:
 
 ---
 
-## Not built yet: Sicht — "normal" or "realistisch"
+## Sicht — "normal" or "realistisch" (built)
+
+A table option chosen at setup, beside the map and the pace:
+
+| Sicht | What a house sees | Giving an order |
+| --- | --- | --- |
+| **normal** | Everything, always | Instant |
+| **realistisch** | Only what is alongside, or what a letter said | By carrier pigeon, with no confirmation |
+
+### The one seam
+
+`projectFor(state, playerId)` returns a **GameState**, not a different shape.
+Under "normal" it returns the state itself — the identity projection, and
+there is a test asserting object identity. Under "realistisch" it returns a
+doctored copy. Because the shape never changes, every screen renders a belief
+without knowing it is looking at one.
+
+Doctoring beats filtering for a second reason: the server can hand a seat this
+object directly.
+
+### Why it could not be done client-side
+
+The server used to broadcast every action to everyone. Under fog it sends each
+seat `{t:'view', state}` and **withholds the log entirely** — a client that
+receives the truth has the truth, whatever it chooses to draw. Positions of
+vessels you cannot see are not merely flagged; they are replaced with the
+owner's home port, which is public knowledge. `/info` returns nulls.
+
+`npm run test:server` proves it against a running server: Ada sails, and her
+true position appears nowhere in the bytes Bo receives.
+
+### The pigeons
+
+- A bird is addressed to a **harbour you choose**. If the ship has already
+  sailed, nobody reads the letter and **nobody tells you** — the reducer emits
+  no event on a miss, which is the whole design.
+- Flight time is distance in pips × `pigeon.minutesPerPip`.
+- Death is decided **the moment the bird is released**, by the seeded RNG in
+  the log. Never a local roll: two devices must agree about a bird that never
+  arrived.
+- A reply is written by the captain, flies to the harbour *you nominated*, and
+  waits there. You must be standing in that harbour to collect it.
+- Letters are signed with a date and a place, and update a belief only if they
+  are fresher than what is already known. Old news stays old news.
+- A captain you are standing next to takes orders by voice: `setCourse` is
+  refused for any vessel not alongside.
+
+### Knowledge
+
+`PlayerKnowledge` holds `sightings` (last known whereabouts per vessel),
+`waiting` (letters lying at harbours), `read`, and a character-capped
+`notebook`. Sightings refresh on every tick for whatever is alongside. There
+is deliberately no fleet overview beyond what you were told — the notebook is
+the only ledger, and it is the player's own hand.
+
+**A leak found while building this:** a vessel bought but never since seen had
+no sighting recorded, and the projection fell back to its true position. The
+fallback is now the home port, and taking delivery of a ship records a
+first-hand sighting.
+
+## Design notes: the premise in full
 
 A table option, chosen at setup beside the map and the pace:
 

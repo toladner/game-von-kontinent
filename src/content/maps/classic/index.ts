@@ -1,4 +1,4 @@
-import type { ContentPack, RuleConfig } from '../../../engine/types'
+import type { ContentPack, RuleConfig, Vehicle } from '../../../engine/types'
 import { buildMap } from '../../../engine/mapbuild'
 import { GOODS } from '../../goods'
 import { KONJUNKTUR_DECK } from '../../konjunktur'
@@ -12,6 +12,14 @@ import { LEGS } from './legs'
  */
 export const CLASSIC_CONFIG: RuleConfig = {
   travel: 'runde',
+  sicht: 'normal',
+  pigeon: {
+    // Birds outpace steamers, but not by as much as one would like.
+    minutesPerPip: 2,
+    lossPercent: 12,
+    price: 4_000,
+  },
+  notebookLimit: 480,
   realtime: {
     // A ten-pip Atlantic crossing takes about an hour at this pace.
     minutesPerPip: 6,
@@ -39,11 +47,50 @@ export const CLASSIC_CONFIG: RuleConfig = {
   startingVehicle: {
     id: 'frachtdampfer',
     name: 'Frachtdampfer',
-    // The Anleitung sets no limit on the hold.
+    // The Anleitung sets no limit on the hold of the ship you begin with.
     capacity: null,
     modes: ['see'],
+    price: 0,
+    speedFactor: 1,
   },
+  maxFleetSize: 5,
 }
+
+/**
+ * What the yards have on the stocks.
+ *
+ * A second ship is not a bigger hold, it is a second trade running at the same
+ * time — and, once the Brieftauben are in play, a captain you cannot see.
+ */
+export const CLASSIC_VEHICLES: readonly Vehicle[] = [
+  {
+    id: 'kuestenschoner',
+    name: 'Küstenschoner',
+    capacity: 3,
+    modes: ['see'],
+    price: 140_000,
+    speedFactor: 0.75,
+    blurb: 'Flink und billig, nimmt aber nur drei Posten.',
+  },
+  {
+    id: 'frachtdampfer',
+    name: 'Frachtdampfer',
+    capacity: 6,
+    modes: ['see'],
+    price: 300_000,
+    speedFactor: 1,
+    blurb: 'Das übliche Arbeitstier der Linie.',
+  },
+  {
+    id: 'grossfrachter',
+    name: 'Großfrachter',
+    capacity: 12,
+    modes: ['see'],
+    price: 620_000,
+    speedFactor: 1.35,
+    blurb: 'Ein schwimmendes Lagerhaus. Nicht eilig.',
+  },
+]
 
 export const CLASSIC_MAP = buildMap({
   id: 'classic',
@@ -59,6 +106,7 @@ export const CLASSIC_PACK: ContentPack = {
   id: 'classic',
   name: 'Von Kontinent zu Kontinent — Originalplan',
   map: CLASSIC_MAP,
+  vehicles: CLASSIC_VEHICLES,
   goods: GOODS,
   konjunktur: KONJUNKTUR_DECK,
   config: CLASSIC_CONFIG,

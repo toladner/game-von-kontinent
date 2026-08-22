@@ -7,6 +7,8 @@ import { PlayerHUD, RoundPill, useCountUp } from './PlayerHUD'
 import { Die } from './Dice'
 import { CargoHold } from './Cargo'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
+import { FleetSheet } from './FleetSheet'
+import { PigeonSheet } from './PigeonSheet'
 import { formatMoney, PLAYER_COLORS, useGame, type LogLine } from '@app/store'
 import { arrivalAt, legalSteps, marketReport, portAt, standings } from '@engine/selectors'
 import {
@@ -20,7 +22,7 @@ import type { EngineContext } from '@engine/context'
 import { clockText, durationText, untilText, useNow } from './useNow'
 import { PLAYER_COLORS as COLORS } from '@app/store'
 
-type SheetKind = 'port' | 'kontor' | 'runde' | 'konjunktur' | 'ende' | null
+type SheetKind = 'port' | 'kontor' | 'runde' | 'konjunktur' | 'ende' | 'flotte' | 'taube' | null
 
 export function GameScreen() {
   const ctx = useGame((s) => s.ctx)
@@ -47,6 +49,7 @@ export function GameScreen() {
 
   const [kind, setKind] = useState<SheetKind>(null)
   const [snap, setSnap] = useState<SheetSnap>('peek')
+  const [pigeonFor, setPigeonFor] = useState<string | null>(null)
 
   // The harbour opens itself; everything else waits to be asked for.
   useEffect(() => {
@@ -102,6 +105,8 @@ export function GameScreen() {
     : `${state.round}:${state.activeIndex}`
   const focusNonce = useFocusNonce(focusKey)
 
+  const waitingMail = portId ? (player.knowledge.waiting[flagship(player).nodeId] ?? []).length : 0
+
   return (
     <div className="relative h-full w-full overflow-hidden">
       <Board
@@ -134,6 +139,11 @@ export function GameScreen() {
               : null
           }
           onOpen={() => open('kontor')}
+        />
+        <FleetPill
+          count={player.fleet.length}
+          waiting={waitingMail}
+          onOpen={() => open('flotte')}
         />
         {realtime ? (
           <ClockPill state={state} now={now} onOpen={() => open('runde')} />
@@ -193,6 +203,43 @@ export function GameScreen() {
         />
       )}
 
+      {kind === 'flotte' && (
+        <FleetSheet
+          ctx={ctx}
+          state={state}
+          player={player}
+          now={now}
+          snap={snap}
+          onSnap={close}
+          onBoard={(vehicleId) => dispatch({ type: 'boardVehicle', vehicleId })}
+          onBuy={(kindId) => dispatch({ type: 'buyVehicle', kindId })}
+          onSendPigeon={(vehicleId) => {
+            setPigeonFor(vehicleId)
+            setKind('taube')
+            setSnap('full')
+          }}
+          onCollectMail={() => dispatch({ type: 'collectMail' })}
+          onWriteNote={(text) => dispatch({ type: 'writeNote', text })}
+        />
+      )}
+
+      {kind === 'taube' && pigeonFor && (
+        <PigeonSheet
+          ctx={ctx}
+          state={state}
+          player={player}
+          vehicleId={pigeonFor}
+          snap={snap}
+          onSnap={close}
+          onSend={(toPort, destination, replyTo) => {
+            dispatch({ type: 'sendPigeon', vehicleId: pigeonFor, toPort, destination, replyTo })
+            setPigeonFor(null)
+            setKind('flotte')
+            setSnap('peek')
+          }}
+        />
+      )}
+
       {kind === 'kontor' && (
         <KontorSheet
           ctx={ctx}
@@ -236,6 +283,35 @@ export function GameScreen() {
 }
 
 // ---------------------------------------------------------------------------
+
+/** The house's own affairs, and any letters lying at this quay. */
+function FleetPill({
+  count,
+  waiting,
+  onOpen,
+}: {
+  count: number
+  waiting: number
+  onOpen: () => void
+}) {
+  return (
+    <button
+      onClick={onOpen}
+      className="paper anim-rise pointer-events-auto relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 shadow-lg"
+      aria-label={`Flotte: ${count} Schiffe${waiting > 0 ? `, ${waiting} Briefe` : ''}`}
+    >
+      <span className="text-base leading-none" aria-hidden>
+        ⚓
+      </span>
+      <span className="tnum text-base leading-none font-bold">{count}</span>
+      {waiting > 0 && (
+        <span className="bg-rot absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold text-white">
+          {waiting}
+        </span>
+      )}
+    </button>
+  )
+}
 
 /** Counts up whenever the key changes, to trigger a one-off camera move. */
 function useFocusNonce(key: string): number {

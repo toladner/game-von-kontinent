@@ -98,10 +98,7 @@ export const CAPABILITIES: Record<string, Capability> = {
   'travel:wuerfel': { ready: true, note: '' },
   'travel:echtzeit': { ready: true, note: '' },
   'sicht:normal': { ready: true, note: '' },
-  'sicht:realistisch': {
-    ready: false,
-    note: 'Braucht eine eigene Sicht je Mitspieler — auch auf dem Server, sonst kennt das Gerät die Wahrheit doch. Die Echtzeitfahrt dafür steht bereits.',
-  },
+  'sicht:realistisch': { ready: true, note: '' },
   'table:lokal': { ready: true, note: '' },
   'table:online-eroeffnen': { ready: true, note: '' },
   'table:online-beitreten': { ready: true, note: '' },

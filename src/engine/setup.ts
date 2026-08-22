@@ -1,7 +1,7 @@
 import type { EngineContext } from './context'
 import type { GameAction } from './actions'
 import type { GameState, JoinPolicy } from './state'
-import type { TravelMode } from './types'
+import type { Sicht, TravelMode } from './types'
 import { seedFrom, shuffle, type RngState } from './rng'
 
 export interface NewGameOptions {
@@ -18,6 +18,7 @@ export interface NewGameOptions {
   readonly minutesPerPip?: number
   /** Real hours the season lasts; only meaningful in real-time play. */
   readonly durationHours?: number
+  readonly sicht?: Sicht
 }
 
 /**
@@ -34,6 +35,7 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     ...(options.totalRounds ? { totalRounds: options.totalRounds } : {}),
     ...(options.startingCapital ? { startingCapital: options.startingCapital } : {}),
     ...(options.travel ? { travel: options.travel } : {}),
+    ...(options.sicht ? { sicht: options.sicht } : {}),
     realtime: {
       ...ctx.pack.config.realtime,
       ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),
@@ -77,6 +79,7 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     endsAt: 0,
     marketCardId: null,
     marketSince: 0,
+    pigeons: [],
     seq: 0,
   }
 }

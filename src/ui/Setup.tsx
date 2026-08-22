@@ -59,6 +59,7 @@ export function Setup() {
           startingCapital: options.startingCapital,
           joinPolicy: options.joinPolicy,
           travel: options.travel === 'echtzeit' ? 'echtzeit' : 'runde',
+          sicht: options.sicht,
           minutesPerPip: options.minutesPerPip,
           durationHours: options.durationHours,
         })
@@ -75,6 +76,7 @@ export function Setup() {
       totalRounds: options.totalRounds,
       startingCapital: options.startingCapital,
       travel: options.travel === 'echtzeit' ? 'echtzeit' : 'runde',
+      sicht: options.sicht,
       minutesPerPip: options.minutesPerPip,
       durationHours: options.durationHours,
     })
@@ -122,6 +124,7 @@ export function Setup() {
             <StepOptionen
               options={options}
               set={set}
+              setOptions={setOptions}
               onBack={() => setStep('modus')}
               onNext={() => setStep('tisch')}
             />
@@ -336,11 +339,13 @@ function StepModus({
 function StepOptionen({
   options,
   set,
+  setOptions,
   onBack,
   onNext,
 }: {
   options: GameOptions
   set: <K extends keyof GameOptions>(k: K, v: GameOptions[K]) => void
+  setOptions: React.Dispatch<React.SetStateAction<GameOptions>>
   onBack: () => void
   onNext: () => void
 }) {
@@ -366,7 +371,7 @@ function StepOptionen({
           title="Mit Würfel"
           blurb="Ein Wurf, so viele Punkte weit. Wie auf dem Brett."
           selected={options.travel === 'wuerfel'}
-          onClick={() => set('travel', 'wuerfel' as Travel)}
+          onClick={() => setOptions((o) => ({ ...o, travel: 'wuerfel', sicht: 'normal' }))}
         />
         <Choice
           title="In Echtzeit"
@@ -388,10 +393,14 @@ function StepOptionen({
         />
         <Choice
           title="Realistisch"
-          blurb="Sie wissen nur, wo Sie selbst sind. Befehle an entfernte Kapitäne gehen per Brieftaube — ob sie ankommt, erfahren Sie nie."
+          blurb="Sie wissen nur, wo Sie selbst sind. Befehle an entfernte Kapitäne gehen per Brieftaube — ob sie ankommt, erfahren Sie nie. Braucht Echtzeitfahrt."
           selected={options.sicht === 'realistisch'}
           disabled={!CAPABILITIES['sicht:realistisch']!.ready}
           note={CAPABILITIES['sicht:realistisch']!.note}
+          onClick={() => {
+            // Fog only means anything once ships take real time to arrive.
+            setOptions((o) => ({ ...o, sicht: 'realistisch', travel: 'echtzeit' }))
+          }}
         />
       </div>
 

@@ -1,11 +1,29 @@
 import type { ActionResult, GameAction, GameEvent } from './actions'
-import type { CargoItem, GameState, PlayerState, VehicleInstance } from './state'
+import type {
+  CargoItem,
+  GameState,
+  Letter,
+  Pigeon,
+  PlayerState,
+  Sighting,
+  VehicleInstance,
+} from './state'
 import { flagship } from './state'
+import { seeVehicle } from './fog'
 import { makePersona, makeShipIdentity } from './persona'
+import { nextInt } from './rng'
 import { goodOf, type EngineContext } from './context'
 import { isPort } from './mapbuild'
 import { rollDie } from './rng'
-import { legalSteps, portAt, quoteSale, routeTo, verkaufszwangOpen } from './selectors'
+import {
+  distancesFrom,
+  legalSteps,
+  legMsFor,
+  portAt,
+  quoteSale,
+  routeTo,
+  verkaufszwangOpen,
+} from './selectors'
 import type { KonjunkturEffect, Money, NodeId } from './types'
 
 type Draft = { -readonly [K in keyof GameState]: GameState[K] } & {
@@ -544,16 +562,25 @@ export function applyAction(
 
     case 'setCourse': {
       if (draft.phase !== 'laufend') return reject(state, 'Die Partie fährt nicht.')
-      const ship = flagship(player)
+      const ship = action.vehicleId
+        ? (player.fleet.find((v) => v.id === action.vehicleId) ?? null)
+        : flagship(player)
+      if (!ship) return reject(state, 'Dieses Schiff gehört nicht zu Ihrem Haus.')
+      if (draft.config.sicht === 'realistisch' && ship.id !== flagship(player).id) {
+        // You can only give an order to a captain you can actually speak to.
+        if (flagship(player).voyage || ship.nodeId !== flagship(player).nodeId) {
+          return reject(state, 'Zu diesem Kapitän müssen Sie eine Taube schicken.')
+        }
+      }
       if (ship.voyage) return reject(state, 'Das Schiff ist bereits unterwegs.')
       const here = portAt(ctx, ship.nodeId)
       if (!here) return reject(state, 'Das Schiff liegt nicht im Hafen.')
-      if (action.to === here) return reject(state, 'Sie liegen bereits dort.')
+      if (action.to === here) return reject(state, 'Es liegt bereits dort.')
 
       const route = routeTo(ctx, ship.nodeId, ship.cameFrom, action.to)
       if (route.length === 0) return reject(state, 'Dorthin führt keine Linie.')
 
-      const legMs = draft.config.realtime.minutesPerPip * 60_000
+      const legMs = legMsFor(draft as GameState, ship)
       patchVehicle(draft, index, ship.id, {
         voyage: {
           route,
@@ -568,6 +595,161 @@ export function applyAction(
         to: action.to,
         arrivesAt: draft.now + legMs * route.length,
       })
+      break
+    }
+
+    case 'buyVehicle': {
+      const buyerShip = flagship(player)
+      if (buyerShip.voyage) return reject(state, 'Auf See kauft man kein Schiff.')
+      const yard = portAt(ctx, buyerShip.nodeId)
+      if (!yard) return reject(state, 'Werften gibt es nur im Hafen.')
+
+      const kind = ctx.pack.vehicles.find((v) => v.id === action.kindId)
+      if (!kind) return reject(state, 'Dieses Schiff führt die Werft nicht.')
+      if (player.cash < kind.price) return reject(state, 'Die Barmittel reichen nicht.')
+      if (player.fleet.length >= draft.config.maxFleetSize) {
+        return reject(state, `Mehr als ${draft.config.maxFleetSize} Schiffe verwaltet kein Haus.`)
+      }
+
+      const identity = makeShipIdentity(`${player.id}:${player.fleet.length}:${ctx.pack.id}`)
+      const bought: VehicleInstance = {
+        id: `${player.id}-v${player.fleet.length + 1}`,
+        name: identity.name,
+        kind,
+        nodeId: buyerShip.nodeId,
+        cameFrom: null,
+        skipTurns: 0,
+        voyage: null,
+        cargo: [],
+        purchasesThisVisit: [],
+      }
+      patchPlayer(draft, index, {
+        cash: player.cash - kind.price,
+        fleet: [...player.fleet, bought],
+        knowledge: {
+          ...player.knowledge,
+          // You watched her handed over, so you know where she lies.
+          sightings: {
+            ...player.knowledge.sightings,
+            [bought.id]: {
+              vehicleId: bought.id,
+              nodeId: bought.nodeId,
+              asOf: draft.now,
+              place: yard,
+              bound: null,
+              cargo: [],
+              firsthand: true,
+            },
+          },
+        },
+      })
+      events.push({
+        type: 'vehicleBought',
+        playerId: player.id,
+        vehicleId: bought.id,
+        name: bought.name,
+        price: kind.price,
+      })
+      break
+    }
+
+    case 'sendPigeon': {
+      if (draft.config.sicht !== 'realistisch') {
+        return reject(state, 'Befehle wirken hier ohne Umweg über eine Taube.')
+      }
+      const sender = flagship(player)
+      if (sender.voyage) return reject(state, 'Tauben steigen nur an Land auf.')
+      const loft = portAt(ctx, sender.nodeId)
+      if (!loft) return reject(state, 'Hier gibt es keinen Taubenschlag.')
+
+      const target = player.fleet.find((v) => v.id === action.vehicleId)
+      if (!target) return reject(state, 'Dieses Schiff gehört nicht zu Ihrem Haus.')
+      if (target.id === sender.id) {
+        return reject(state, 'Sie stehen an Bord — sagen Sie es dem Kapitän selbst.')
+      }
+      if (player.cash < draft.config.pigeon.price) {
+        return reject(state, 'Der Taubenschlag will bezahlt werden.')
+      }
+
+      // The bird flies where you address it. Whether she is there is your
+      // problem, and you will not be told either way.
+      const toNode = action.toPort
+      if (!portAt(ctx, toNode)) {
+        return reject(state, 'Dorthin fliegt keine Taube.')
+      }
+
+      patchPlayer(draft, index, { cash: player.cash - draft.config.pigeon.price })
+      releasePigeon(ctx, draft, index, {
+        kind: 'befehl',
+        toNode,
+        fromNode: sender.nodeId,
+        order: {
+          vehicleId: target.id,
+          destination: action.destination,
+          replyTo: action.replyTo ?? null,
+        },
+      })
+      events.push({ type: 'pigeonSent', playerId: player.id, toNode, kind: 'befehl' })
+      break
+    }
+
+    case 'collectMail': {
+      const reader = flagship(player)
+      if (reader.voyage) return reject(state, 'Post gibt es nur an Land.')
+      const here = portAt(ctx, reader.nodeId)
+      if (!here) return reject(state, 'Post gibt es nur im Hafen.')
+
+      const waiting = player.knowledge.waiting[reader.nodeId] ?? []
+      if (waiting.length === 0) return reject(state, 'Es liegt nichts für Sie bereit.')
+
+      // A letter is news of a date, not of now: it updates the belief only if
+      // it is fresher than what is already known.
+      let sightings = player.knowledge.sightings
+      for (const letter of waiting) {
+        const known = sightings[letter.vehicleId]
+        if (!known || letter.sighting.asOf > known.asOf) {
+          sightings = { ...sightings, [letter.vehicleId]: letter.sighting }
+        }
+      }
+
+      const remaining = { ...player.knowledge.waiting }
+      delete remaining[reader.nodeId]
+
+      patchPlayer(draft, index, {
+        knowledge: {
+          ...player.knowledge,
+          sightings,
+          waiting: remaining,
+          read: [...player.knowledge.read, ...waiting],
+        },
+      })
+      events.push({ type: 'mailCollected', playerId: player.id, count: waiting.length })
+      break
+    }
+
+    case 'writeNote': {
+      patchPlayer(draft, index, {
+        knowledge: {
+          ...player.knowledge,
+          notebook: action.text.slice(0, draft.config.notebookLimit),
+        },
+      })
+      break
+    }
+
+    case 'boardVehicle': {
+      const current = flagship(player)
+      const target = player.fleet.find((v) => v.id === action.vehicleId)
+      if (!target) return reject(state, 'Dieses Schiff gehört nicht zu Ihrem Haus.')
+      if (target.id === current.id) break
+      if (current.voyage || target.voyage) {
+        return reject(state, 'Man wechselt das Schiff nur im Hafen.')
+      }
+      if (current.nodeId !== target.nodeId) {
+        return reject(state, 'Dieses Schiff liegt in einem anderen Hafen.')
+      }
+      patchPlayer(draft, index, { aboard: target.id })
+      events.push({ type: 'boarded', playerId: player.id, vehicleId: target.id })
       break
     }
 
@@ -612,6 +794,10 @@ function applyTick(ctx: EngineContext, state: GameState, at: number): ActionResu
   }
 
   advanceVoyages(ctx, draft, events)
+  if (draft.config.sicht === 'realistisch') {
+    resolvePigeons(ctx, draft, events)
+  }
+  refreshSightings(ctx, draft)
   turnMarket(ctx, draft, events)
 
   if (draft.endsAt > 0 && draft.now >= draft.endsAt) {
@@ -623,8 +809,6 @@ function applyTick(ctx: EngineContext, state: GameState, at: number): ActionResu
 
 /** Move every ship as far along its route as the clock allows. */
 function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): void {
-  const legMs = draft.config.realtime.minutesPerPip * 60_000
-
   for (let i = 0; i < draft.players.length; i++) {
     for (const start of draft.players[i]!.fleet) {
       let vehicle = start
@@ -632,6 +816,7 @@ function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
 
       while (vehicle.voyage && draft.now >= vehicle.voyage.legArrivesAt && guard++ < 5000) {
         const voyage = vehicle.voyage
+        const legMs = legMsFor(draft as GameState, vehicle)
         const next = voyage.route[0]!
         const rest = voyage.route.slice(1)
 
@@ -663,6 +848,160 @@ function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
       }
     }
   }
+}
+
+/**
+ * What a merchant can see with their own eyes: the deck under their feet and
+ * anything tied up in the same harbour. Recorded as first-hand news.
+ */
+function refreshSightings(ctx: EngineContext, draft: Draft): void {
+  if (draft.config.sicht !== 'realistisch') return
+
+  for (let i = 0; i < draft.players.length; i++) {
+    const player = draft.players[i]!
+    const eyes = flagship(player)
+    const here = eyes.voyage ? null : eyes.nodeId
+    const place = here ? portAt(ctx, here) : null
+
+    let sightings = player.knowledge.sightings
+    let changed = false
+    for (const vehicle of player.fleet) {
+      const alongside = vehicle.id === eyes.id || (here !== null && vehicle.nodeId === here)
+      if (!alongside) continue
+      sightings = { ...sightings, [vehicle.id]: seeVehicle(vehicle, draft.now, place) }
+      changed = true
+    }
+    if (changed) {
+      patchPlayer(draft, i, { knowledge: { ...player.knowledge, sightings } })
+    }
+  }
+}
+
+/**
+ * Birds land. An order only takes effect if the ship is actually where the
+ * sender believed it to be — and either way, nobody is told.
+ */
+function resolvePigeons(ctx: EngineContext, draft: Draft, events: GameEvent[]): void {
+  const landed = draft.pigeons.filter((p) => draft.now >= p.arrivesAt)
+  if (landed.length === 0) return
+  draft.pigeons = draft.pigeons.filter((p) => draft.now < p.arrivesAt)
+
+  for (const pigeon of landed) {
+    // A bird that was never going to make it simply does not.
+    if (pigeon.doomed) continue
+
+    const index = draft.players.findIndex((p) => p.id === pigeon.playerId)
+    if (index < 0) continue
+    const player = draft.players[index]!
+
+    if (pigeon.kind === 'befehl' && pigeon.order) {
+      const ship = player.fleet.find((v) => v.id === pigeon.order!.vehicleId)
+      // The captain must be where the letter was addressed, and free to sail.
+      if (!ship || ship.nodeId !== pigeon.toNode || ship.voyage) continue
+
+      const route = routeTo(ctx, ship.nodeId, ship.cameFrom, pigeon.order.destination)
+      if (route.length > 0) {
+        const legMs = legMsFor(draft as GameState, ship)
+        patchVehicle(draft, index, ship.id, {
+          voyage: {
+            route,
+            legStartedAt: draft.now,
+            legArrivesAt: draft.now + legMs,
+            destination: pigeon.order.destination,
+          },
+        })
+      }
+
+      // If an answer was asked for, the captain writes one before casting off.
+      if (pigeon.order.replyTo) {
+        const fresh = draft.players[index]!.fleet.find((v) => v.id === ship.id) ?? ship
+        releasePigeon(ctx, draft, index, {
+          kind: 'bericht',
+          toNode: pigeon.order.replyTo,
+          fromNode: ship.nodeId,
+          letter: writeLetter(ctx, draft, fresh, ship.nodeId),
+        })
+      }
+      continue
+    }
+
+    if (pigeon.kind === 'bericht' && pigeon.letter) {
+      // The letter waits at the harbour until it is fetched in person.
+      const waiting = player.knowledge.waiting[pigeon.toNode] ?? []
+      patchPlayer(draft, index, {
+        knowledge: {
+          ...player.knowledge,
+          waiting: { ...player.knowledge.waiting, [pigeon.toNode]: [...waiting, pigeon.letter] },
+        },
+      })
+    }
+  }
+  void events
+}
+
+function writeLetter(
+  ctx: EngineContext,
+  draft: Draft,
+  vehicle: VehicleInstance,
+  writtenIn: string,
+): Letter {
+  const identity = makeShipIdentity(`${vehicle.id}:${draft.packId}`)
+  const sighting: Sighting = {
+    vehicleId: vehicle.id,
+    nodeId: vehicle.nodeId,
+    asOf: draft.now,
+    place: portAt(ctx, writtenIn),
+    bound: vehicle.voyage?.destination ?? null,
+    cargo: vehicle.cargo,
+    firsthand: false,
+  }
+  return {
+    id: `brief-${draft.seq}-${vehicle.id}`,
+    vehicleId: vehicle.id,
+    vehicleName: vehicle.name,
+    captain: identity.captain,
+    writtenAt: draft.now,
+    writtenIn,
+    sighting,
+  }
+}
+
+/** Put a bird in the air, and decide there and then whether it will arrive. */
+function releasePigeon(
+  ctx: EngineContext,
+  draft: Draft,
+  playerIndex: number,
+  spec: {
+    kind: 'befehl' | 'bericht'
+    toNode: string
+    fromNode: string
+    order?: Pigeon['order']
+    letter?: Letter
+  },
+): void {
+  const distances = distancesFrom(ctx, spec.fromNode, null)
+  const pips = distances.get(spec.toNode) ?? 20
+  const flightMs = Math.max(1, pips) * draft.config.pigeon.minutesPerPip * 60_000
+
+  // The seeded generator decides now, so every device agrees about a bird
+  // that never arrives.
+  const [roll, rng] = nextInt(draft.rng, 100)
+  draft.rng = rng
+
+  draft.pigeons = [
+    ...draft.pigeons,
+    {
+      id: `taube-${draft.seq}-${draft.pigeons.length}`,
+      playerId: draft.players[playerIndex]!.id,
+      kind: spec.kind,
+      toNode: spec.toNode,
+      sentAt: draft.now,
+      arrivesAt: draft.now + flightMs,
+      doomed: roll < draft.config.pigeon.lossPercent,
+      ...(spec.order ? { order: spec.order } : {}),
+      ...(spec.letter ? { letter: spec.letter } : {}),
+    },
+  ]
 }
 
 /**
@@ -761,6 +1100,22 @@ function applyJoin(
     homePort,
     hasDeparted: false,
     levyPaidRound: { steuer: null, versicherung: null },
+    knowledge: {
+      sightings: {
+        [firstShip.id]: {
+          vehicleId: firstShip.id,
+          nodeId: homePort,
+          asOf: draft.now,
+          place: homePort,
+          bound: null,
+          cargo: [],
+          firsthand: true,
+        },
+      },
+      waiting: {},
+      read: [],
+      notebook: '',
+    },
   }
 
   draft.players = [...draft.players, player]

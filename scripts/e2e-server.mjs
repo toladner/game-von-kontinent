@@ -223,4 +223,98 @@ if (after.players[0].destination !== null) fail('the voyage did not close out')
 else ok('the voyage is complete and the ship lies in harbour')
 
 cap.close()
+
+// ---------------------------------------------------------------------------
+// Sicht "realistisch": does the wire itself keep the secret?
+// ---------------------------------------------------------------------------
+
+const fog = await (
+  await fetch(`${BASE}/api/games`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      travel: 'echtzeit',
+      sicht: 'realistisch',
+      minutesPerPip: 0.02,
+      durationHours: 2,
+    }),
+  })
+).json()
+ok(`fog table opened, code ${fog.code}`)
+
+const one = client(fog.code, 'Ada')
+await one.open()
+one.send({ t: 'hello', name: 'Ada' })
+const oneWelcome = await one.until('welcome')
+
+const two = client(fog.code, 'Bo')
+await two.open()
+two.send({ t: 'hello', name: 'Bo' })
+const twoWelcome = await two.until('welcome')
+
+// The log is the truth, so under fog it must not be handed out at all.
+if (oneWelcome.actions.length !== 0 || twoWelcome.actions.length !== 0) {
+  fail('the action log was sent to a seat under fog')
+} else {
+  ok('no action log is sent to a seat under fog')
+}
+
+const firstView = await two.until('view')
+if (!firstView.state) fail('no projected view was sent')
+else ok('each seat is sent a projected state instead')
+
+one.send({ t: 'action', action: { type: 'start' } })
+await one.until('view')
+
+const fogInfo = await (await fetch(`${BASE}/api/games/${fog.code}`)).json()
+if (fogInfo.players[0].at !== null) fail('/info leaks positions under fog')
+else ok('/info reports no positions under fog')
+
+// Ada sails. Bo must not be able to find out where she went.
+one.send({
+  t: 'action',
+  action: { type: 'setCourse', to: 'kapstadt', by: oneWelcome.playerId },
+})
+await one.until('view')
+await new Promise((r) => setTimeout(r, 4000))
+
+async function viewFor(token) {
+  const probe = client(fog.code, 'probe')
+  await probe.open()
+  probe.send({ t: 'hello', token })
+  await probe.until('welcome')
+  const v = await probe.until('view')
+  probe.close()
+  return v.state
+}
+
+const adaView = await viewFor(oneWelcome.token)
+const adaSelf = adaView.players.find((p) => p.id === oneWelcome.playerId)
+const adaShip = adaSelf.fleet.find((v) => v.id === adaSelf.aboard)
+const adaTruePosition = adaShip.nodeId
+ok(`Ada's own view puts her at ${adaTruePosition}`)
+
+const boView = await viewFor(twoWelcome.token)
+const boSeesAda = boView.players.find((p) => p.id === oneWelcome.playerId)
+
+if (!boSeesAda.fleet.every((v) => v.hidden)) fail("Bo can see Ada's ships")
+else ok("Ada's vessels are marked hidden in Bo's view")
+
+// The decisive check: her real position must not be in the bytes Bo receives.
+const boBytes = JSON.stringify(boView)
+const leaked =
+  boSeesAda.fleet.some((v) => v.nodeId === adaTruePosition) ||
+  (adaTruePosition.startsWith('sea:') && boBytes.includes(adaTruePosition))
+
+if (leaked) fail(`Ada's true position ${adaTruePosition} is present in Bo's payload`)
+else ok("Ada's true position is nowhere in the bytes sent to Bo")
+
+if (boSeesAda.knowledge.read.length === 0 && boSeesAda.knowledge.notebook === '') {
+  ok("Ada's letters and notebook are not in Bo's payload")
+} else {
+  fail("Ada's private papers reached Bo")
+}
+
+one.close()
+two.close()
 console.log(process.exitCode ? '\nSOME CHECKS FAILED' : '\nALL CHECKS PASSED')
