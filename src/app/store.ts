@@ -5,7 +5,7 @@ import { createGame, openingActions, type Seat } from '@engine/setup'
 import type { Gender } from '@engine/persona'
 import { applyAction, replay } from '@engine/reducer'
 import type { GameAction, GameEvent } from '@engine/actions'
-import type { GameState, JoinPolicy } from '@engine/state'
+import type { GameState, JoinPolicy, PlayerState } from '@engine/state'
 import { projectFor } from '@engine/fog'
 import {
   createOnlineGame,
@@ -527,5 +527,15 @@ export const PLAYER_COLORS = [
   { ink: '#5a3570', name: 'Violett' },
   { ink: '#1b1b1b', name: 'Schwarz' },
 ] as const
+
+/**
+ * How a seat is named where the player's own name is not the point.
+ *
+ * `colorIndex` is handed out in join order and never moves, so the number
+ * always matches the colour beside it.
+ */
+export function playerLabel(player: PlayerState): string {
+  return `Spieler ${player.colorIndex + 1}`
+}
 
 export const formatMoney = money

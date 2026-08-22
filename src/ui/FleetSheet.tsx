@@ -5,7 +5,7 @@ import { clockText, untilText } from './useNow'
 import { arrivalOf, fleetLimitNote, hasShipyard, portAt } from '@engine/selectors'
 import { flagship, type GameState, type PlayerState, type VehicleInstance } from '@engine/state'
 import type { EngineContext } from '@engine/context'
-import { PLAYER_COLORS } from '@app/store'
+import { PLAYER_COLORS, playerLabel } from '@app/store'
 
 type Tab = 'flotte' | 'post' | 'notizbuch'
 
@@ -57,8 +57,8 @@ export function FleetSheet({
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title={player.persona.house}
-      subtitle={`${player.fleet.length} ${player.fleet.length === 1 ? 'Schiff' : 'Schiffe'}${
+      title={player.name}
+      subtitle={`${playerLabel(player)} · ${player.fleet.length} ${player.fleet.length === 1 ? 'Schiff' : 'Schiffe'}${
         fog ? ` · ${unread} Brief${unread === 1 ? '' : 'e'} unterwegs zu Ihnen` : ''
       }`}
       accent={colour.ink}

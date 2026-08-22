@@ -34,8 +34,9 @@ describe('the front page', () => {
 
     fireEvent.change(input, { target: { value: 'Tobias' } })
 
-    // Typing a name conjures a trading house on the spot.
-    expect(screen.getByText(/Kontor|Reederei|Handelshaus|& Söhne|& Co\.|Compagnie|Überseehandel/)).toBeTruthy()
+    // Typing a name conjures a face and claims the seat.
+    expect(screen.getByText('Spieler 1')).toBeTruthy()
+    expect(document.querySelectorAll('svg').length).toBeGreaterThan(0)
     expect((screen.getByText('An Bord gehen') as HTMLButtonElement).disabled).toBe(false)
   })
 

@@ -1,5 +1,5 @@
 import { Portrait } from './Portrait'
-import { PLAYER_COLORS, useGame } from '@app/store'
+import { PLAYER_COLORS, playerLabel, useGame } from '@app/store'
 
 /**
  * The quayside before departure: who has arrived, and the code that brings
@@ -80,9 +80,7 @@ export function Lobby() {
                           </span>
                         )}
                       </p>
-                      <p className="text-ink-soft truncate text-[11px]">
-                        {p.persona.rank} · {p.persona.house}
-                      </p>
+                      <p className="text-ink-soft truncate text-[11px]">{playerLabel(p)}</p>
                     </div>
                     {net && (
                       <span

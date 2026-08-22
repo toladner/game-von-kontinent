@@ -240,12 +240,14 @@ export function PortSheet({
           {folk.map((person) => (
             <div key={person.name} className="flex items-start gap-2.5">
               <Portrait traits={person.portrait} size={40} />
-              <div className="min-w-0">
-                <p className="text-[11px] leading-tight">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11px] leading-tight">
                   <span className="smallcaps text-ink-soft">{person.role}</span>{' '}
                   <span className="font-semibold">{person.name}</span>
                 </p>
-                <p className="text-ink-soft text-[13px] leading-snug italic">„{person.line}“</p>
+                <p className="text-ink-soft text-[13px] leading-snug italic break-words">
+                  „{person.line}“
+                </p>
               </div>
             </div>
           ))}
@@ -278,9 +280,9 @@ function GuideNote({
         loud ? 'border-rot/40 bg-rot/5' : 'border-black/15 bg-black/[0.03]'
       }`}
     >
-      <Portrait traits={guide.portrait} size={40} className="shrink-0" />
+      <Portrait traits={guide.portrait} size={40} />
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] leading-tight">
+        <p className="truncate text-[10px] leading-tight">
           <span className="smallcaps text-ink-soft">{guide.role}</span>{' '}
           <span className="font-semibold">{guide.name}</span>
         </p>

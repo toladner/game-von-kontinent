@@ -9,7 +9,7 @@ import { CargoHold } from './Cargo'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
 import { FleetSheet } from './FleetSheet'
 import { PigeonSheet } from './PigeonSheet'
-import { formatMoney, PLAYER_COLORS, useGame, type LogLine } from '@app/store'
+import { formatMoney, PLAYER_COLORS, playerLabel, useGame, type LogLine } from '@app/store'
 import { arrivalAt, legalSteps, marketReport, portAt, standings } from '@engine/selectors'
 import {
   cargoValue,
@@ -623,8 +623,8 @@ function KontorSheet({
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title={player.persona.house}
-      subtitle={`${player.persona.rank} aus ${player.persona.origin}`}
+      title={player.name}
+      subtitle={playerLabel(player)}
       accent={color.ink}
     >
       <Tabs
@@ -827,7 +827,7 @@ function FinalSheet({
             <Portrait traits={row.player.persona.portrait} size={40} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{row.player.name}</p>
-              <p className="text-ink-soft truncate text-[11px]">{row.player.persona.house}</p>
+              <p className="text-ink-soft truncate text-[11px]">{playerLabel(row.player)}</p>
             </div>
             <span className="tnum text-sm font-bold">{formatMoney(row.worth)}</span>
           </li>

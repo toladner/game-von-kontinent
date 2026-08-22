@@ -270,7 +270,7 @@ export const Portrait = memo(function Portrait({
       width={size}
       height={size}
       viewBox="0 0 64 64"
-      className={className}
+      className={`shrink-0 ${className ?? ''}`}
       role={title ? 'img' : 'presentation'}
       aria-label={title}
     >

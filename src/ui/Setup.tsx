@@ -739,11 +739,7 @@ function TraderSlot({
         <div className="mt-1.5 flex items-center gap-2">
           <p className="min-w-0 flex-1 truncate text-[11px] leading-tight">
             {persona ? (
-              <>
-                <span className="smallcaps text-ink-soft">{persona.rank}</span>
-                <span className="text-ink-faint"> · </span>
-                <span className="text-ink-soft">{persona.house}</span>
-              </>
+              <span className="smallcaps text-ink-soft">Spieler {index + 1}</span>
             ) : (
               <span className="text-ink-faint italic">Tragen Sie sich ein.</span>
             )}
