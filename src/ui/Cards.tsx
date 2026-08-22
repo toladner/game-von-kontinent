@@ -44,12 +44,12 @@ export function Warenkarte({
         <span className="display press-green text-xl leading-none">{good.id}</span>
       </div>
 
-      <dl className="teletype mt-1.5 space-y-0.5 text-[11px]">
-        <div className="flex justify-between gap-2">
+      <dl className="teletype mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5 text-[11px]">
+        <div className="flex gap-1.5">
           <dt className="smallcaps text-ink-soft">Einkauf</dt>
           <dd className="tnum press-green">{fmt(good.buy)}</dd>
         </div>
-        <div className="flex justify-between gap-2">
+        <div className="flex gap-1.5">
           <dt className="smallcaps text-ink-soft">Verkauf</dt>
           <dd className={`tnum ${toneClass}`}>{fmt(price ?? good.sell)}</dd>
         </div>
@@ -69,7 +69,7 @@ export function Warenkarte({
 /** A Konjunkturkarte: pale green slip, typewriter face, scissor-cut edge. */
 export function KonjunkturSlip({ card }: { card: KonjunkturCard }) {
   return (
-    <div className="paper-slip coupon-edge mx-auto w-full max-w-xs rotate-[-1.2deg] px-4 py-5">
+    <div className="paper-slip coupon-edge w-full rotate-[-1.2deg] px-4 py-5">
       <p className="smallcaps text-center text-[10px] tracking-[0.3em] text-black/55">
         Konjunkturkarte
       </p>

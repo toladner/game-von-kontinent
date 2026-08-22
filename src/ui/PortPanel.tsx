@@ -188,7 +188,7 @@ export function PortSheet({
               Ladeschluß — in einem Hafen dürfen nur zwei Waren gekauft werden.
             </p>
           )}
-          <div className="stagger grid grid-cols-2 gap-2">
+          <div className="stagger space-y-2">
             {offers.map((offer) => {
               const good = goodOf(ctx, offer.goodId)
               return (
