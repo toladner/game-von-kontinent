@@ -163,13 +163,13 @@ export function GameScreen() {
           state={state}
           player={player}
           now={now}
-          hidden={kind !== null && snap === 'full'}
+          hidden={kind !== null}
           onOpenPort={() => open('port')}
         />
       ) : (
         <ActionBar
           state={state}
-          hidden={kind !== null && snap === 'full'}
+          hidden={kind !== null}
           onRoll={() => dispatch({ type: 'roll' })}
           onEnd={() => dispatch({ type: 'endTurn' })}
           onOpenPort={() => open('port')}
@@ -177,7 +177,7 @@ export function GameScreen() {
         />
       )}
 
-      {realtime && !net && state.players.length > 1 && (
+      {realtime && !net && kind === null && state.players.length > 1 && (
         <HelmSwitcher players={state.players} current={player.id} onPick={setActing} />
       )}
 

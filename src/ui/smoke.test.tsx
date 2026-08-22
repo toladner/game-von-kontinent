@@ -262,6 +262,37 @@ describe('the map on a touch screen', () => {
     expect(board()).toBeTruthy()
   })
 
+  it('never leaves an action button stranded behind the sheet', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'layer' }))
+
+    // While the harbour is open, the bar underneath it must not be mounted:
+    // it sits at bottom:0 under a sheet that covers the lower half, where it
+    // can be seen sliding past but never touched.
+    expect(screen.getByText('Ablegen')).toBeTruthy()
+    expect(screen.queryByText('Hafen öffnen')).toBeNull()
+  })
+
+  it('reopens the harbour after the sheet has been dismissed', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'reopen' }))
+
+    // The harbour opens itself on arrival.
+    expect(screen.getByText('Ablegen')).toBeTruthy()
+
+    // Drag it away.
+    const grip = screen.getAllByLabelText(/Vergrößern|Verkleinern/)[0]!
+    fireEvent.pointerDown(grip, { pointerId: 1, clientY: 100 })
+    fireEvent.pointerMove(grip, { pointerId: 1, clientY: 400 })
+    fireEvent.pointerUp(grip, { pointerId: 1, clientY: 400 })
+    expect(screen.queryByText('Ablegen')).toBeNull()
+
+    // The button that offers it back must actually bring it back.
+    const reopen = screen.getByText('Hafen öffnen')
+    fireEvent.click(reopen)
+    expect(screen.getByText('Ablegen')).toBeTruthy()
+  })
+
   it('puts no unstyled wrapper above the screen', () => {
     // The whole layout hangs off height:100%. A wrapper element with
     // height:auto anywhere in the chain collapses it, and the map falls back
