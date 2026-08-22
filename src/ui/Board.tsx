@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import type { GameState, PlayerState } from '@engine/state'
 import type { EngineContext } from '@engine/context'
 import { isPort } from '@engine/mapbuild'
+import { voyageProgress } from '@engine/state'
 import { project } from '@engine/geo'
 import land from '@content/geo/land.json'
 import { PLAYER_COLORS } from '@app/store'
@@ -29,6 +30,12 @@ export interface BoardProps {
   readonly focusNode?: string | null
   /** Harbours the Kontor suggests steering for; drawn with a green ring. */
   readonly highlightPorts?: readonly string[]
+  /** Wall-clock milliseconds, for interpolating ships between pips. */
+  readonly now?: number
+  /** Real-time play: tapping a harbour lays in a course for it. */
+  readonly onPickPort?: (portId: string) => void
+  /** The route the commanded ship is following, drawn as a dashed course. */
+  readonly course?: readonly string[]
 }
 
 export function Board({
@@ -38,6 +45,9 @@ export function Board({
   onPick,
   focusNode,
   highlightPorts = [],
+  now = 0,
+  onPickPort,
+  course = [],
 }: BoardProps) {
   const map = ctx.pack.map
   const { bounds } = map
@@ -175,11 +185,27 @@ export function Board({
   const hintSet = useMemo(() => new Set(highlightPorts), [highlightPorts])
   const showAllLabels = view.k >= 1.9
 
-  const ships = state.players.map((p) => ({
-    player: p,
-    pos: positions.get(p.ship.nodeId)!,
-    from: p.ship.cameFrom ? positions.get(p.ship.cameFrom) : undefined,
-  }))
+  const ships = state.players.map((p) => {
+    const at = positions.get(p.ship.nodeId)!
+    const voyage = p.ship.voyage
+    if (!voyage) {
+      return {
+        player: p,
+        pos: at,
+        from: p.ship.cameFrom ? positions.get(p.ship.cameFrom) : undefined,
+        sailing: false,
+      }
+    }
+    // Between two pips: draw the ship where the clock says it is.
+    const next = positions.get(voyage.route[0]!) ?? at
+    const t = voyageProgress(voyage, now || voyage.legStartedAt)
+    return {
+      player: p,
+      pos: { x: at.x + (next.x - at.x) * t, y: at.y + (next.y - at.y) * t },
+      from: at,
+      sailing: true,
+    }
+  })
 
   const occupied = useMemo(() => {
     const m = new Map<string, number>()
@@ -295,7 +321,14 @@ export function Board({
                 hintSet.has(port.id) ||
                 port.id === focusNode
               return (
-                <g key={port.id}>
+                <g
+                  key={port.id}
+                  onPointerUp={
+                    onPickPort ? () => !moved.current && onPickPort(port.id) : undefined
+                  }
+                  className={onPickPort ? 'cursor-pointer' : undefined}
+                >
+                  {onPickPort && <circle cx={x} cy={y} r={9} fill="transparent" />}
                   {hintSet.has(port.id) && (
                     <circle
                       cx={x}
@@ -323,9 +356,26 @@ export function Board({
             })}
           </g>
 
+          {/* Gesetzter Kurs */}
+          {course.length > 0 && (
+            <path
+              d={course
+                .map((id, i) => {
+                  const p = positions.get(id)
+                  return p ? `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}` : ''
+                })
+                .join('')}
+              fill="none"
+              stroke="#1c6b4d"
+              strokeWidth={1.6}
+              strokeDasharray="4 3"
+              opacity={0.85}
+            />
+          )}
+
           {/* Schiffe */}
           <g>
-            {ships.map(({ player, pos, from }, i) => (
+            {ships.map(({ player, pos, from, sailing }, i) => (
               <Ship
                 key={player.id}
                 player={player}
@@ -335,6 +385,7 @@ export function Board({
                 active={state.players[state.activeIndex]?.id === player.id}
                 laden={player.cargo.length}
                 nudge={(occupied.get(player.ship.nodeId) ?? 1) > 1 ? i * 5 - 2 : 0}
+                sailing={sailing}
               />
             ))}
           </g>
@@ -381,6 +432,7 @@ const Ship = memo(function Ship({
   active,
   nudge,
   laden,
+  sailing = false,
 }: {
   player: PlayerState
   x: number
@@ -389,6 +441,7 @@ const Ship = memo(function Ship({
   active: boolean
   nudge: number
   laden: number
+  sailing?: boolean
 }) {
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!.ink
   const deg = (heading * 180) / Math.PI
@@ -399,6 +452,13 @@ const Ship = memo(function Ship({
       style={{ transition: 'transform 260ms ease-out' }}
     >
       {active && <circle cx={0} cy={3} r={11} fill="#fff8e0" opacity={0.55} />}
+      {sailing && (
+        <path
+          d="M-16 5 q6 -2 12 0 q-6 2 -12 0"
+          fill="#ffffff"
+          opacity={0.5}
+        />
+      )}
       <g transform="translate(-8 -6) scale(0.5)">
         <path d="M2 22h30l-5 8H7z" fill={color} />
         <path d="M8 21V8h14l7 7v6z" fill={color} opacity={0.85} />

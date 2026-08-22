@@ -158,4 +158,69 @@ if (seen.playerId !== null) fail('spectator was given a seat')
 else ok(`a spectator replays ${seen.actions.length} actions with no seat`)
 
 for (const c of [ada, bo, zoe, again, watcher]) c.close()
+
+// ---------------------------------------------------------------------------
+// Real time: does the world turn without being asked?
+// ---------------------------------------------------------------------------
+
+const rt = await (
+  await fetch(`${BASE}/api/games`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      travel: 'echtzeit',
+      minutesPerPip: 0.02, // ~1.2 s a pip, so a test can watch a whole voyage
+      durationHours: 1,
+      joinPolicy: 'jederzeit',
+    }),
+  })
+).json()
+ok(`real-time table opened, code ${rt.code}`)
+
+const cap = client(rt.code, 'Kapitän')
+await cap.open()
+cap.send({ t: 'hello', name: 'Kapitän' })
+const capWelcome = await cap.until('welcome')
+if (capWelcome.meta.travel !== 'echtzeit') fail('table is not real-time')
+else ok('the table runs on a clock, not a round track')
+
+cap.send({ t: 'action', action: { type: 'start' } })
+await cap.untilAction('start')
+
+const before = await (await fetch(`${BASE}/api/games/${rt.code}`)).json()
+const homePort = before.players[0].at
+ok(`season opened, ship lying at ${homePort}`)
+
+const CANDIDATES = [
+  'hamburg', 'london', 'lissabon', 'newyork', 'habana', 'dakar',
+  'kapstadt', 'buenosaires', 'riodejaneiro', 'valparaiso', 'sanfrancisco', 'daressalam',
+]
+const destination = CANDIDATES.find((c) => c !== homePort)
+cap.send({ t: 'action', action: { type: 'setCourse', to: destination, by: capWelcome.playerId } })
+await cap.untilAction('setCourse')
+ok(`course laid in for ${destination}`)
+
+// Trading is refused while the ship is at sea.
+cap.send({ t: 'action', action: { type: 'buy', goodId: 4, by: capWelcome.playerId } })
+const atSea = await cap.until('error')
+if (!/See|Hafen/i.test(atSea.reason)) fail(`unexpected sea error: ${atSea.reason}`)
+else ok('no trading from the open sea: ' + atSea.reason)
+
+// Now sit in silence. Nothing is sent; the arrival has to come to us, which
+// only happens if the server woke itself up.
+ok('going quiet — the client sends nothing from here on')
+const arrival = await cap.untilAction('tick', 90_000)
+if (!arrival) fail('no unsolicited tick ever arrived')
+else ok('the server woke by itself and pushed the clock forward')
+
+const after = await (await fetch(`${BASE}/api/games/${rt.code}`)).json()
+if (after.players[0].at !== destination) {
+  fail(`ship did not arrive: still at ${after.players[0].at}`)
+} else {
+  ok(`the ship made ${destination} without anyone asking it to`)
+}
+if (after.players[0].destination !== null) fail('the voyage did not close out')
+else ok('the voyage is complete and the ship lies in harbour')
+
+cap.close()
 console.log(process.exitCode ? '\nSOME CHECKS FAILED' : '\nALL CHECKS PASSED')

@@ -3,7 +3,7 @@ import { CLASSIC_PACK } from '@content/maps/classic'
 import { createContext } from './context'
 import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
-import { buyOffers, legalSteps, portAt, standings } from './selectors'
+import { buyOffers, legalSteps, portAt, routeTo, standings } from './selectors'
 import { isPort } from './mapbuild'
 import { netWorth } from './state'
 import type { GameAction } from './actions'
@@ -148,6 +148,109 @@ describe('determinism', () => {
     const a = seated(['Tobias'], { seed: 'x' })
     const b = seated(['Tobias'], { seed: 'y' })
     expect(a.players[0]!.persona).toEqual(b.players[0]!.persona)
+  })
+})
+
+describe('real-time sailing', () => {
+  const T0 = 1_800_000_000_000
+  const MIN = 60_000
+
+  /** A running real-time table with one trader aboard. */
+  const afloat = () =>
+    replay(ctx, createGame(ctx, { seed: 'rt', travel: 'echtzeit', minutesPerPip: 1, durationHours: 2 }), [
+      { type: 'tick', at: T0 },
+      { type: 'join', playerId: 'a', name: 'Ada' },
+      { type: 'join', playerId: 'b', name: 'Bo' },
+      { type: 'start' },
+    ])
+
+  it('runs on a clock, not a round track', () => {
+    const s = afloat()
+    expect(s.phase).toBe('laufend')
+    expect(s.now).toBe(T0)
+    expect(s.endsAt).toBe(T0 + 2 * 3_600_000)
+  })
+
+  it('never reads the wall clock: the same ticks give the same game', () => {
+    const script: GameAction[] = [{ type: 'tick', at: T0 + 30 * MIN }]
+    const a = replay(ctx, afloat(), script)
+    const b = replay(ctx, afloat(), script)
+    expect(JSON.stringify(a)).toEqual(JSON.stringify(b))
+  })
+
+  it('sails a course over real time and arrives by itself', () => {
+    let s = afloat()
+    const from = s.players[0]!.ship.nodeId
+    const target = [...ctx.portsById.keys()].find((id) => {
+      if (id === from) return false
+      const r = routeTo(ctx, from, null, id)
+      return r.length >= 2 && r.length <= 6
+    })!
+    const pips = routeTo(ctx, from, null, target).length
+
+    s = applyAction(ctx, s, { type: 'setCourse', to: target, by: 'a' }).state
+    expect(s.players[0]!.ship.voyage!.destination).toBe(target)
+
+    // Halfway there, still at sea.
+    s = applyAction(ctx, s, { type: 'tick', at: T0 + Math.floor(pips / 2) * MIN }).state
+    expect(s.players[0]!.ship.voyage).not.toBeNull()
+    expect(portAt(ctx, s.players[0]!.ship.nodeId)).not.toBe(target)
+
+    // Come back later: the ship is in harbour without anyone watching.
+    const arrived = applyAction(ctx, s, { type: 'tick', at: T0 + (pips + 1) * MIN })
+    expect(arrived.state.players[0]!.ship.nodeId).toBe(target)
+    expect(arrived.state.players[0]!.ship.voyage ?? null).toBeNull()
+    expect(arrived.events.some((e) => e.type === 'arrived')).toBe(true)
+  })
+
+  it('will not trade from the open sea', () => {
+    let s = afloat()
+    const from = s.players[0]!.ship.nodeId
+    const target = [...ctx.portsById.keys()].find(
+      (id) => id !== from && routeTo(ctx, from, null, id).length >= 3,
+    )!
+    s = applyAction(ctx, s, { type: 'setCourse', to: target, by: 'a' }).state
+    s = applyAction(ctx, s, { type: 'tick', at: T0 + MIN }).state
+
+    const goodId = ctx.exportsOf(portAt(ctx, from)!)[0]!
+    const refused = applyAction(ctx, s, { type: 'buy', goodId, by: 'a' })
+    expect(refused.events[0]).toMatchObject({ type: 'rejected' })
+  })
+
+  it('lets both traders act without waiting for a turn', () => {
+    const s = afloat()
+    const portOfA = portAt(ctx, s.players[0]!.ship.nodeId)!
+    const portOfB = portAt(ctx, s.players[1]!.ship.nodeId)!
+
+    const afterA = applyAction(ctx, s, { type: 'buy', goodId: ctx.exportsOf(portOfA)[0]!, by: 'a' })
+    expect(afterA.state.players[0]!.cargo).toHaveLength(1)
+
+    // Bo does not have to wait for Ada to finish.
+    const afterB = applyAction(ctx, afterA.state, {
+      type: 'buy',
+      goodId: ctx.exportsOf(portOfB)[0]!,
+      by: 'b',
+    })
+    expect(afterB.state.players[1]!.cargo).toHaveLength(1)
+  })
+
+  it('turns the world market on its own schedule', () => {
+    const s = afloat()
+    expect(s.marketCardId).toBeNull()
+    const later = applyAction(ctx, s, {
+      type: 'tick',
+      at: T0 + s.config.realtime.marketIntervalMinutes * MIN,
+    })
+    expect(later.state.marketCardId).not.toBeNull()
+    expect(later.events.some((e) => e.type === 'marketTurned')).toBe(true)
+  })
+
+  it('closes the season on time and settles every hold', () => {
+    const s = afloat()
+    const done = applyAction(ctx, s, { type: 'tick', at: T0 + 3 * 3_600_000 })
+    expect(done.state.phase).toBe('over')
+    for (const p of done.state.players) expect(p.cargo).toHaveLength(0)
+    expect(standings(done.state)).toHaveLength(2)
   })
 })
 

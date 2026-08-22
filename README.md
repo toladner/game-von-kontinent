@@ -49,6 +49,17 @@ Eine Partie bleibt liegen: wer das Fenster schließt und später zurückkommt,
 sitzt wieder auf demselben Platz. Wird beim Eröffnen „jederzeit" gewählt,
 dürfen auch Nachzügler noch ein Schiff nehmen.
 
+## Echtzeitfahrt
+
+Statt zu würfeln kann man Kurs setzen und das Schiff fahren lassen. Eine
+Überfahrt dauert echte Zeit — wie lange, bestimmt der Regler „Fahrzeit je
+Punkt" beim Einrichten. Man setzt Kurs, geht weg, und sieht später nach.
+
+Die Schiffe fahren auch dann weiter, wenn niemand zusieht: der Partieserver
+weckt sich selbst zum nächsten Ereignis. Es gibt keine Reihenfolge mehr, jeder
+handelt, wann er mag. Der Weltmarkt dreht in festem Takt eine Konjunkturkarte,
+die für alle gilt, bis die nächste fällt.
+
 ## Spielen
 
 Name eintragen, „An Bord gehen“ — mehr nicht. Aus dem Namen entsteht ein

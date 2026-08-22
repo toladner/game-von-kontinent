@@ -167,6 +167,50 @@ export function distancesFrom(
 }
 
 /**
+ * The sea road from here to a named harbour, without turning on the spot.
+ * Returns the nodes to be passed, destination last, or [] if unreachable.
+ */
+export function routeTo(
+  ctx: EngineContext,
+  from: NodeId,
+  cameFrom: NodeId | null,
+  target: PortId,
+): NodeId[] {
+  if (from === target) return []
+  const all = ctx.graph.neighbours.get(from) ?? []
+  const forward = all.filter((n) => n !== cameFrom)
+  const seeds = forward.length > 0 ? forward : all
+
+  const previous = new Map<NodeId, NodeId>()
+  const seen = new Set<NodeId>([from, ...seeds])
+  let frontier = [...seeds]
+  if (seeds.includes(target)) return [target]
+
+  while (frontier.length > 0) {
+    const next: NodeId[] = []
+    for (const node of frontier) {
+      for (const neighbour of ctx.graph.neighbours.get(node) ?? []) {
+        if (seen.has(neighbour)) continue
+        seen.add(neighbour)
+        previous.set(neighbour, node)
+        if (neighbour === target) {
+          const path: NodeId[] = [target]
+          let at = target
+          while (previous.has(at)) {
+            at = previous.get(at)!
+            path.unshift(at)
+          }
+          return path
+        }
+        next.push(neighbour)
+      }
+    }
+    frontier = next
+  }
+  return []
+}
+
+/**
  * The Kontor's advice: which harbours are worth steering for, given what is
  * in the hold right now. Sorted by yield per point of sailing, because a fat
  * profit twenty pips away is worth less than a fair one next door.
@@ -227,6 +271,41 @@ export function standings(state: GameState): readonly Standing[] {
     .map((player) => ({ player, worth: netWorth(player) }))
     .sort((a, b) => b.worth - a.worth)
     .map((row, i) => ({ ...row, rank: i + 1 }))
+}
+
+/**
+ * The next instant at which the world changes by itself: a ship makes port,
+ * the market turns, or the season closes.
+ *
+ * The server sleeps until then instead of ticking on a timer, so a game that
+ * nobody is watching costs nothing and the action log stays short.
+ */
+export function nextEventAt(state: GameState): number | null {
+  if (state.config.travel !== 'echtzeit' || state.phase !== 'laufend') return null
+
+  const legMs = state.config.realtime.minutesPerPip * 60_000
+  const times: number[] = []
+
+  for (const p of state.players) {
+    const voyage = p.ship.voyage
+    // One tick at the final arrival walks the ship through every leg at once.
+    if (voyage) times.push(voyage.legArrivesAt + legMs * (voyage.route.length - 1))
+  }
+  if (state.config.realtime.marketIntervalMinutes > 0) {
+    times.push(state.marketSince + state.config.realtime.marketIntervalMinutes * 60_000)
+  }
+  if (state.endsAt > 0) times.push(state.endsAt)
+
+  const future = times.filter((t) => t > state.now)
+  return future.length > 0 ? Math.min(...future) : null
+}
+
+/** Arrival time of the whole voyage, not just the current leg. */
+export function arrivalAt(state: GameState, player: PlayerState): number | null {
+  const voyage = player.ship.voyage
+  if (!voyage) return null
+  const legMs = state.config.realtime.minutesPerPip * 60_000
+  return voyage.legArrivesAt + legMs * (voyage.route.length - 1)
 }
 
 export function isRedField(state: GameState): boolean {

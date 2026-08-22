@@ -8,9 +8,11 @@ import { Die } from './Dice'
 import { CargoHold } from './Cargo'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
 import { formatMoney, PLAYER_COLORS, useGame, type LogLine } from '@app/store'
-import { legalSteps, marketReport, portAt, standings } from '@engine/selectors'
+import { arrivalAt, legalSteps, marketReport, portAt, standings } from '@engine/selectors'
 import { cargoValue, netWorth, type GameState, type PlayerState } from '@engine/state'
 import type { EngineContext } from '@engine/context'
+import { clockText, durationText, untilText, useNow } from './useNow'
+import { PLAYER_COLORS as COLORS } from '@app/store'
 
 type SheetKind = 'port' | 'kontor' | 'runde' | 'konjunktur' | 'ende' | null
 
@@ -23,8 +25,18 @@ export function GameScreen() {
   const log = useGame((s) => s.log)
   const abandon = useGame((s) => s.abandon)
 
-  const player = state.players[state.activeIndex]!
-  const portId = portAt(ctx, player.ship.nodeId)
+  const acting = useGame((s) => s.acting())
+  const setActing = useGame((s) => s.setActing)
+  const net = useGame((s) => s.net)
+
+  const realtime = state.config.travel === 'echtzeit'
+  const now = useNow(1000, realtime)
+
+  // Round play follows the turn; real-time play follows whoever this device
+  // is commanding.
+  const player = (realtime ? acting : state.players[state.activeIndex]) ?? state.players[0]!
+  const voyage = player.ship.voyage ?? null
+  const portId = voyage ? null : portAt(ctx, player.ship.nodeId)
   const targets = state.phase === 'move' ? legalSteps(ctx, player) : []
 
   const [kind, setKind] = useState<SheetKind>(null)
@@ -32,6 +44,17 @@ export function GameScreen() {
 
   // The harbour opens itself; everything else waits to be asked for.
   useEffect(() => {
+    if (realtime) {
+      if (state.phase === 'over') {
+        setKind('ende')
+        setSnap('full')
+      } else if (portId) {
+        setKind((k) => (k === null ? 'port' : k))
+      } else {
+        setKind((k) => (k === 'port' ? null : k))
+      }
+      return
+    }
     if (state.phase === 'port') {
       setKind('port')
       setSnap('peek')
@@ -44,7 +67,7 @@ export function GameScreen() {
     } else {
       setKind(null)
     }
-  }, [state.phase, state.activeIndex])
+  }, [state.phase, state.activeIndex, realtime, portId])
 
   useEffect(() => {
     if (!notice) return
@@ -75,6 +98,11 @@ export function GameScreen() {
         onPick={(to) => dispatch({ type: 'step', to })}
         focusNode={player.ship.nodeId}
         highlightPorts={state.phase === 'move' ? [] : highlights}
+        now={now}
+        course={voyage ? [player.ship.nodeId, ...voyage.route] : []}
+        {...(realtime && portId
+          ? { onPickPort: (to: string) => to !== portId && dispatch({ type: 'setCourse', to }) }
+          : {})}
       />
 
       {/* Kopfzeile */}
@@ -93,22 +121,41 @@ export function GameScreen() {
           }
           onOpen={() => open('kontor')}
         />
-        <RoundPill
-          round={state.round}
-          total={state.config.totalRounds}
-          red={state.config.redFields.includes(state.round)}
-          onOpen={() => open('runde')}
-        />
+        {realtime ? (
+          <ClockPill state={state} now={now} onOpen={() => open('runde')} />
+        ) : (
+          <RoundPill
+            round={state.round}
+            total={state.config.totalRounds}
+            red={state.config.redFields.includes(state.round)}
+            onOpen={() => open('runde')}
+          />
+        )}
       </div>
 
-      <ActionBar
-        state={state}
-        hidden={kind !== null && snap === 'full'}
-        onRoll={() => dispatch({ type: 'roll' })}
-        onEnd={() => dispatch({ type: 'endTurn' })}
-        onOpenPort={() => open('port')}
-        onDraw={() => dispatch({ type: 'drawKonjunktur' })}
-      />
+      {realtime ? (
+        <RealtimeBar
+          ctx={ctx}
+          state={state}
+          player={player}
+          now={now}
+          hidden={kind !== null && snap === 'full'}
+          onOpenPort={() => open('port')}
+        />
+      ) : (
+        <ActionBar
+          state={state}
+          hidden={kind !== null && snap === 'full'}
+          onRoll={() => dispatch({ type: 'roll' })}
+          onEnd={() => dispatch({ type: 'endTurn' })}
+          onOpenPort={() => open('port')}
+          onDraw={() => dispatch({ type: 'drawKonjunktur' })}
+        />
+      )}
+
+      {realtime && !net && state.players.length > 1 && (
+        <HelmSwitcher players={state.players} current={player.id} onPick={setActing} />
+      )}
 
       {notice && (
         <div className="pointer-events-none absolute inset-x-0 bottom-32 z-40 flex justify-center px-4">
@@ -143,9 +190,19 @@ export function GameScreen() {
         />
       )}
 
-      {kind === 'runde' && (
-        <RoundSheet state={state} snap={snap} onSnap={close} onAbandon={abandon} />
-      )}
+      {kind === 'runde' &&
+        (realtime ? (
+          <SeasonSheet
+            ctx={ctx}
+            state={state}
+            now={now}
+            snap={snap}
+            onSnap={close}
+            onAbandon={abandon}
+          />
+        ) : (
+          <RoundSheet state={state} snap={snap} onSnap={close} onAbandon={abandon} />
+        ))}
 
       {kind === 'konjunktur' && (
         <KonjunkturSheet
@@ -237,6 +294,205 @@ function ActionBar({
     default:
       return null
   }
+}
+
+/** Time left in the season, and what the world market is doing. */
+function ClockPill({
+  state,
+  now,
+  onOpen,
+}: {
+  state: GameState
+  now: number
+  onOpen: () => void
+}) {
+  const left = state.endsAt - now
+  const closing = left < 15 * 60_000
+  return (
+    <button
+      onClick={onOpen}
+      className={`paper anim-rise pointer-events-auto flex items-center gap-2 rounded-lg px-3 py-1.5 shadow-lg ${
+        closing ? 'text-rot' : ''
+      }`}
+      aria-label={`Noch ${durationText(left)} Saison`}
+    >
+      <span className="smallcaps text-[10px]">Saison</span>
+      <span className="tnum text-base leading-none font-bold">{durationText(left)}</span>
+      {state.saleModifierPercent !== 0 && (
+        <span
+          className={`tnum text-[11px] font-bold ${
+            state.saleModifierPercent > 0 ? 'text-press' : 'text-rot'
+          }`}
+        >
+          {state.saleModifierPercent > 0 ? '+' : '−'}
+          {Math.abs(state.saleModifierPercent)}%
+        </span>
+      )}
+    </button>
+  )
+}
+
+/** What the commanded ship is doing right now, and the one thing to do next. */
+function RealtimeBar({
+  ctx,
+  state,
+  player,
+  now,
+  hidden,
+  onOpenPort,
+}: {
+  ctx: EngineContext
+  state: GameState
+  player: PlayerState
+  now: number
+  hidden: boolean
+  onOpenPort: () => void
+}) {
+  if (hidden || state.phase === 'over') return null
+
+  const voyage = player.ship.voyage ?? null
+  const wrap = (children: React.ReactNode) => (
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 lg:right-[400px]"
+      style={{ paddingBottom: 'calc(var(--safe-b) + 1rem)' }}
+    >
+      <div className="pointer-events-auto anim-rise">{children}</div>
+    </div>
+  )
+
+  if (voyage) {
+    const eta = arrivalAt(state, player) ?? now
+    const destination = ctx.portsById.get(voyage.destination)?.name ?? voyage.destination
+    return wrap(
+      <div className="paper flex items-center gap-3 rounded-xl px-4 py-2.5 shadow-xl">
+        <span className="text-2xl" aria-hidden>
+          ⛴
+        </span>
+        <div>
+          <p className="text-sm leading-tight font-semibold">Kurs auf {destination}</p>
+          <p className="text-ink-soft text-[11px]">
+            Ankunft {untilText(eta, now)} · {clockText(eta)} Uhr
+          </p>
+        </div>
+      </div>,
+    )
+  }
+
+  return wrap(
+    <div className="paper flex items-center gap-3 rounded-xl px-3 py-2 shadow-xl">
+      <button className="btn btn-primary" onClick={onOpenPort}>
+        Hafen
+      </button>
+      <p className="text-ink-soft max-w-[10rem] text-[11px] leading-snug">
+        Einen Hafen auf dem Plan antippen, um Kurs zu setzen.
+      </p>
+    </div>,
+  )
+}
+
+/** Local real-time games command several ships from one device. */
+function HelmSwitcher({
+  players,
+  current,
+  onPick,
+}: {
+  players: readonly PlayerState[]
+  current: string
+  onPick: (id: string) => void
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 z-20 flex justify-center px-4"
+      style={{ bottom: 'calc(var(--safe-b) + 5.5rem)' }}
+    >
+      <div className="paper pointer-events-auto flex gap-1 rounded-full px-1.5 py-1 shadow-lg">
+        {players.map((p) => {
+          const color = COLORS[p.colorIndex % COLORS.length]!
+          const active = p.id === current
+          return (
+            <button
+              key={p.id}
+              onClick={() => onPick(p.id)}
+              className={`btn-sm rounded-full px-2.5 text-[11px] ${
+                active ? 'text-white' : 'text-ink-soft'
+              }`}
+              style={active ? { background: color.ink } : undefined}
+              aria-pressed={active}
+            >
+              {p.name}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function SeasonSheet({
+  ctx,
+  state,
+  now,
+  snap,
+  onSnap,
+  onAbandon,
+}: {
+  ctx: EngineContext
+  state: GameState
+  now: number
+  snap: SheetSnap
+  onSnap: (s: SheetSnap) => void
+  onAbandon: () => void
+}) {
+  const card = state.marketCardId ? ctx.cardsById.get(state.marketCardId) : null
+  const nextTurn = state.marketSince + state.config.realtime.marketIntervalMinutes * 60_000
+
+  return (
+    <Sheet
+      snap={snap}
+      onSnap={onSnap}
+      title="Die Saison"
+      subtitle={`Schluß ${clockText(state.endsAt)} Uhr · noch ${durationText(state.endsAt - now)}`}
+    >
+      <h3 className="smallcaps text-ink-soft mb-2 text-[11px]">Weltmarkt</h3>
+      {card ? (
+        <KonjunkturSlip card={card} />
+      ) : (
+        <p className="text-ink-faint text-xs italic">
+          Noch keine Notierung. Die erste Karte fällt {untilText(nextTurn, now)}.
+        </p>
+      )}
+      <p className="text-ink-soft mt-3 text-center text-[11px]">
+        Nächste Notierung {untilText(nextTurn, now)}
+      </p>
+
+      <h3 className="smallcaps text-ink-soft mt-5 mb-2 text-[11px]">Die Flotte</h3>
+      <ul className="space-y-1.5 text-[12px]">
+        {state.players.map((p) => {
+          const color = COLORS[p.colorIndex % COLORS.length]!
+          const eta = arrivalAt(state, p)
+          const where = p.ship.voyage
+            ? `unterwegs nach ${ctx.portsById.get(p.ship.voyage.destination)?.name ?? ''}`
+            : `liegt in ${ctx.portsById.get(p.ship.nodeId)?.name ?? 'See'}`
+          return (
+            <li key={p.id} className="flex items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/30"
+                style={{ background: color.ink }}
+              />
+              <span className="min-w-0 flex-1 truncate">
+                {p.name} — <span className="text-ink-soft">{where}</span>
+              </span>
+              {eta && <span className="tnum text-ink-faint">{untilText(eta, now)}</span>}
+            </li>
+          )
+        })}
+      </ul>
+
+      <button className="btn btn-danger mt-6 w-full" onClick={onAbandon}>
+        Partie verlassen
+      </button>
+    </Sheet>
+  )
 }
 
 function KontorSheet({

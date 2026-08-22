@@ -179,7 +179,27 @@ export interface KonjunkturCard {
 // Rule configuration - every tunable number from the Anleitung
 // ---------------------------------------------------------------------------
 
+/**
+ * How ships move.
+ *
+ * 'runde'   - the printed game: throw, count off the pips, hand over.
+ * 'echtzeit' - ships sail continuously; a voyage takes real minutes and the
+ *              players come and go as they please.
+ */
+export type TravelMode = 'runde' | 'echtzeit'
+
+export interface RealtimeConfig {
+  /** Real minutes a ship needs for one pip of sea lane. */
+  readonly minutesPerPip: number
+  /** How often the world market turns a new Konjunktur card. */
+  readonly marketIntervalMinutes: number
+  /** The season closes this many real hours after departure. */
+  readonly durationHours: number
+}
+
 export interface RuleConfig {
+  readonly travel: TravelMode
+  readonly realtime: RealtimeConfig
   readonly startingCapital: Money
   /** Denominations dealt out, purely for the cash drawer visualisation. */
   readonly startingNotes: readonly { readonly value: Money; readonly count: number }[]

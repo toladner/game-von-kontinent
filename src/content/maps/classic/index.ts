@@ -11,6 +11,13 @@ import { LEGS } from './legs'
  * A variant ruleset is a copy of this object with different values.
  */
 export const CLASSIC_CONFIG: RuleConfig = {
+  travel: 'runde',
+  realtime: {
+    // A ten-pip Atlantic crossing takes about an hour at this pace.
+    minutesPerPip: 6,
+    marketIntervalMinutes: 20,
+    durationHours: 24,
+  },
   startingCapital: 500_000,
   startingNotes: [
     { value: 100_000, count: 3 },

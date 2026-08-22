@@ -57,6 +57,9 @@ export function Setup() {
           totalRounds: options.totalRounds,
           startingCapital: options.startingCapital,
           joinPolicy: options.joinPolicy,
+          travel: options.travel === 'echtzeit' ? 'echtzeit' : 'runde',
+          minutesPerPip: options.minutesPerPip,
+          durationHours: options.durationHours,
         })
       } catch (error) {
         setProblem(
@@ -70,6 +73,9 @@ export function Setup() {
     begin(filled, {
       totalRounds: options.totalRounds,
       startingCapital: options.startingCapital,
+      travel: options.travel === 'echtzeit' ? 'echtzeit' : 'runde',
+      minutesPerPip: options.minutesPerPip,
+      durationHours: options.durationHours,
     })
   }
 
@@ -263,6 +269,15 @@ function Nav({
   )
 }
 
+/** Turns a pace in minutes into something a person can picture. */
+function paceHint(minutesPerPip: number): string {
+  // The Atlantic runs to roughly a dozen pips on the classic plan.
+  const crossing = minutesPerPip * 12
+  if (crossing < 60) return `Atlantik in ${crossing} Min`
+  const hours = Math.round((crossing / 60) * 10) / 10
+  return `Atlantik in ${hours} Std`
+}
+
 function Legend({ children }: { children: React.ReactNode }) {
   return <h2 className="smallcaps text-ink-soft mt-6 mb-2 text-[11px]">{children}</h2>
 }
@@ -354,25 +369,57 @@ function StepOptionen({
         />
         <Choice
           title="In Echtzeit"
-          blurb="Schiffe brauchen echte Zeit von Hafen zu Hafen — man schaut zwischendurch vorbei."
+          blurb="Schiffe brauchen echte Zeit von Hafen zu Hafen. Kurs setzen, weggehen, später nachsehen — auch wenn niemand zuschaut, fahren die Schiffe weiter."
           selected={options.travel === 'echtzeit'}
           disabled={!CAPABILITIES['travel:echtzeit']!.ready}
           note={CAPABILITIES['travel:echtzeit']!.note}
+          onClick={() => set('travel', 'echtzeit' as Travel)}
         />
       </div>
 
       <Legend>Dauer und Kapital</Legend>
       <div className="space-y-2.5">
-        <Slider
-          label="Runden"
-          value={options.totalRounds}
-          min={10}
-          max={80}
-          step={5}
-          hint={options.totalRounds === 50 ? 'wie im Original' : undefined}
-          format={(v) => String(v)}
-          onChange={(v) => set('totalRounds', v)}
-        />
+        {options.travel === 'echtzeit' ? (
+          <>
+            <Slider
+              label="Fahrzeit je Punkt"
+              value={options.minutesPerPip}
+              min={1}
+              max={60}
+              step={1}
+              hint={paceHint(options.minutesPerPip)}
+              format={(v) => `${v} Min`}
+              onChange={(v) => set('minutesPerPip', v)}
+            />
+            <Slider
+              label="Länge der Saison"
+              value={options.durationHours}
+              min={1}
+              max={168}
+              step={1}
+              hint={
+                options.durationHours >= 168
+                  ? 'eine Woche'
+                  : options.durationHours >= 24
+                    ? `${Math.round(options.durationHours / 24)} Tage`
+                    : undefined
+              }
+              format={(v) => `${v} Std`}
+              onChange={(v) => set('durationHours', v)}
+            />
+          </>
+        ) : (
+          <Slider
+            label="Runden"
+            value={options.totalRounds}
+            min={10}
+            max={80}
+            step={5}
+            hint={options.totalRounds === 50 ? 'wie im Original' : undefined}
+            format={(v) => String(v)}
+            onChange={(v) => set('totalRounds', v)}
+          />
+        )}
         <Slider
           label="Betriebskapital"
           value={options.startingCapital}
@@ -507,9 +554,13 @@ function StepNamen({
       <p className="text-ink-faint mt-5 text-center text-[11px]">
         {options.mode === 'klassisch'
           ? 'Originalregeln · 50 Runden · an einem Gerät'
-          : `${options.totalRounds} Runden · ${options.startingCapital.toLocaleString('de-DE')} Kapital · ${
-              online ? 'eigene Geräte' : 'ein Gerät'
-            }`}
+          : [
+              options.travel === 'echtzeit'
+                ? `Echtzeit · ${options.minutesPerPip} Min je Punkt · ${options.durationHours} Std Saison`
+                : `${options.totalRounds} Runden`,
+              `${options.startingCapital.toLocaleString('de-DE')} Kapital`,
+              online ? 'eigene Geräte' : 'ein Gerät',
+            ].join(' · ')}
       </p>
 
       {problem && <p className="text-rot mt-3 text-center text-sm">{problem}</p>}

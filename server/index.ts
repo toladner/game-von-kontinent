@@ -15,6 +15,8 @@ import { createGame } from '../src/engine/setup'
 import { applyAction } from '../src/engine/reducer'
 import type { GameAction } from '../src/engine/actions'
 import type { GameState, JoinPolicy } from '../src/engine/state'
+import { nextEventAt } from '../src/engine/selectors'
+import type { TravelMode } from '../src/engine/types'
 
 export interface Env {
   GAMES: DurableObjectNamespace
@@ -26,6 +28,9 @@ export interface GameMeta {
   readonly totalRounds: number
   readonly startingCapital: number
   readonly joinPolicy: JoinPolicy
+  readonly travel: TravelMode
+  readonly minutesPerPip: number
+  readonly durationHours: number
   readonly packId: string
   readonly createdAt: number
 }
@@ -85,6 +90,11 @@ export default {
         totalRounds: clamp(body.totalRounds ?? 30, 1, 200),
         startingCapital: clamp(body.startingCapital ?? 500_000, 50_000, 5_000_000),
         joinPolicy: body.joinPolicy === 'jederzeit' ? 'jederzeit' : 'nur-zu-beginn',
+        travel: body.travel === 'echtzeit' ? 'echtzeit' : 'runde',
+        // Fractional minutes are allowed: handy for a blitz table, and the
+        // only way an automated test can watch a voyage finish.
+        minutesPerPip: clampF(body.minutesPerPip ?? 6, 0.02, 240),
+        durationHours: clamp(body.durationHours ?? 24, 1, 720),
         packId: 'classic',
         createdAt: Date.now(),
       }
@@ -115,6 +125,7 @@ export default {
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(n)))
+const clampF = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
 
 // ---------------------------------------------------------------------------
 // Durable Object: one table
@@ -159,6 +170,9 @@ export class GameRoom {
       totalRounds: this.meta.totalRounds,
       startingCapital: this.meta.startingCapital,
       joinPolicy: this.meta.joinPolicy,
+      travel: this.meta.travel,
+      minutesPerPip: this.meta.minutesPerPip,
+      durationHours: this.meta.durationHours,
     })
     for (const a of this.actions) s = applyAction(ctx, s, a).state
     this.state = s
@@ -182,15 +196,27 @@ export class GameRoom {
       this.actions = []
       this.rebuild()
       await this.persist()
+      // A real-time table needs a first stroke of the clock to reckon from.
+      await this.catchUp()
       return json({ ok: true })
     }
 
     if (url.pathname === '/info') {
       if (!this.meta) return json({ error: 'Unbekannte Partie.' }, 404)
+      // Reading the state is enough to bring the clock up to date.
+      await this.catchUp()
       return json({
         meta: this.meta,
-        players: this.state?.players.map((p) => ({ id: p.id, name: p.name })) ?? [],
         phase: this.state?.phase ?? 'lobby',
+        now: this.state?.now ?? 0,
+        players:
+          this.state?.players.map((p) => ({
+            id: p.id,
+            name: p.name,
+            at: p.ship.nodeId,
+            cash: p.cash,
+            destination: p.ship.voyage?.destination ?? null,
+          })) ?? [],
       })
     }
 
@@ -250,6 +276,9 @@ export class GameRoom {
     if (!this.meta || !this.state) {
       return this.send(socket, { t: 'error', reason: 'Diese Partie gibt es nicht.' })
     }
+
+    // Whatever the message, the world has moved on since the last one.
+    await this.catchUp()
 
     switch (message.t) {
       case 'ping':
@@ -351,6 +380,41 @@ export class GameRoom {
     this.actions.push(action)
     await this.persist()
     this.broadcast({ t: 'append', actions: [action], from })
+    await this.scheduleWake()
     return { ok: true }
+  }
+
+  /**
+   * Bring the world clock up to now.
+   *
+   * The server is the only authority on time: clients never stamp their own,
+   * so nobody can make their ship arrive early by lying about the hour.
+   */
+  private async catchUp(): Promise<void> {
+    if (this.meta?.travel !== 'echtzeit') return
+    const now = Date.now()
+    if (this.state && now > this.state.now) await this.commit({ type: 'tick', at: now })
+  }
+
+  /**
+   * Sleep until the next thing that happens on its own. This is what lets a
+   * ship make port at three in the morning with nobody connected.
+   */
+  private async scheduleWake(): Promise<void> {
+    if (!this.state) return
+    const at = nextEventAt(this.state)
+    if (at === null) {
+      await this.storage.storage.deleteAlarm()
+      return
+    }
+    // A small margin so the tick lands after the moment, never just before.
+    await this.storage.storage.setAlarm(Math.max(Date.now() + 1000, at + 250))
+  }
+
+  /** Durable Object alarm: the world moving while nobody watches. */
+  async alarm(): Promise<void> {
+    await this.load()
+    await this.catchUp()
+    await this.scheduleWake()
   }
 }

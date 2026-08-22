@@ -63,20 +63,45 @@ Changing balance is editing that object, not hunting through code.
 
 ## The three extensions you named
 
-### 1. Time-based travel instead of dice
+### 1. Time-based travel instead of dice — built
 
-Movement is already isolated: the reducer only knows `roll` and `step`, and
-the ship carries `{nodeId, cameFrom}`. To go real-time:
+`RuleConfig.travel` is `'runde' | 'echtzeit'`. Both live in the same reducer.
 
-- Add `etaMs` / `progress` to `ShipState`, and a `tick` action carrying elapsed
-  time. `tick` stays deterministic because time arrives *as data*, so replays
-  still work.
-- Swap `RuleConfig.diceSides` for a `speedKmPerHour`; lanes already know their
-  real distance (see `kmPerPip` in `mapbuild.ts`), so an ETA is a division.
-- The round track becomes a calendar. `advanceTurn` is the only place that
-  knows about turn order — it is ~30 lines.
+**Time arrives as data.** The reducer never calls `Date.now()`; the only thing
+that moves the clock is a `tick` action carrying an absolute timestamp:
 
-Nothing in the UI reads dice directly except `AtSeaPanel`.
+```
+{ type: 'tick', at: 1787400342127 }
+```
+
+That single rule preserves everything the log-shaped design gives us. A replay
+of the same ticks produces the same game, byte for byte — there is a test that
+asserts exactly this. It also means a client that was asleep for six hours
+folds the same handful of actions and lands where the server already is.
+
+What changes in real-time play:
+
+| Round play | Real-time |
+| --- | --- |
+| `roll` then `step` × n | `setCourse{to}` — the ship sails itself |
+| Turn order, one player at a time | No turns; every action names its actor (`by`) |
+| Round track, red fields | A season clock; the world market turns on a timer |
+| Konjunktur drawn per arrival | One card stands for everyone until the next turns |
+
+`ShipState.voyage` holds `{route, legStartedAt, legArrivesAt, destination}`.
+`advanceVoyages` walks a ship through as many legs as the clock allows, so
+one tick after a long absence is enough.
+
+**Nobody has to be watching.** The Durable Object sets an alarm for
+`nextEventAt(state)` — the earliest of the next arrival, the next market turn,
+or the end of the season — rather than polling. It sleeps until then, wakes,
+appends a tick and broadcasts. A game nobody is looking at costs nothing and
+keeps its log short. `npm run test:server` proves it: a client goes silent and
+receives the arrival unasked.
+
+Because arrivals are also derived by catching the clock up on any request, a
+returning player sees the correct world even if every alarm had been missed;
+the alarm is what pushes it to people already watching.
 
 ### 2. Other maps
 

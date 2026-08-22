@@ -19,9 +19,19 @@ export type GameAction =
   | { readonly type: 'roll' }
   | { readonly type: 'step'; readonly to: NodeId }
   | { readonly type: 'drawKonjunktur' }
-  | { readonly type: 'buy'; readonly goodId: GoodId }
-  | { readonly type: 'sell'; readonly uid: string }
+  | { readonly type: 'buy'; readonly goodId: GoodId; readonly by?: string }
+  | { readonly type: 'sell'; readonly uid: string; readonly by?: string }
   | { readonly type: 'endTurn' }
+  /**
+   * Real-time play: lay in a course for a harbour and let the ship run.
+   * The voyage takes real minutes; nobody has to sit and watch it.
+   */
+  | { readonly type: 'setCourse'; readonly to: PortId; readonly by?: string }
+  /**
+   * The world clock, carried as data so the reducer never reads it itself.
+   * Only this action moves time, which is what keeps replays exact.
+   */
+  | { readonly type: 'tick'; readonly at: number }
 
 /**
  * What happened, for the log, the animations and the harbour chatter.
@@ -36,6 +46,13 @@ export type GameEvent =
       readonly midGame: boolean
     }
   | { readonly type: 'gameStarted' }
+  | {
+      readonly type: 'setSail'
+      readonly playerId: string
+      readonly to: PortId
+      readonly arrivesAt: number
+    }
+  | { readonly type: 'marketTurned'; readonly cardId: string }
   | { readonly type: 'rolled'; readonly playerId: string; readonly value: number }
   | { readonly type: 'moved'; readonly playerId: string; readonly to: NodeId }
   | { readonly type: 'arrived'; readonly playerId: string; readonly portId: PortId }

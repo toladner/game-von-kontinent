@@ -1,11 +1,10 @@
 import type { ActionResult, GameAction, GameEvent } from './actions'
 import type { CargoItem, GameState, PlayerState } from './state'
-import { activePlayer } from './state'
 import { makePersona } from './persona'
 import { goodOf, type EngineContext } from './context'
 import { isPort } from './mapbuild'
 import { rollDie } from './rng'
-import { legalSteps, portAt, quoteSale, verkaufszwangOpen } from './selectors'
+import { legalSteps, portAt, quoteSale, routeTo, verkaufszwangOpen } from './selectors'
 import type { KonjunkturEffect, Money, NodeId } from './types'
 
 type Draft = { -readonly [K in keyof GameState]: GameState[K] } & {
@@ -336,6 +335,10 @@ export function applyAction(
   state: GameState,
   action: GameAction,
 ): ActionResult {
+  // The clock comes first, and keeps running in the lobby so that a
+  // real-time game has a starting instant to reckon from.
+  if (action.type === 'tick') return applyTick(ctx, state, action.at)
+
   if (state.phase === 'over') return reject(state, 'Das Spiel ist beendet.')
 
   // Joining and starting stand apart: they are the only actions that do not
@@ -347,10 +350,31 @@ export function applyAction(
     return reject(state, 'Die Partie hat noch nicht begonnen.')
   }
 
+  const realtime = state.config.travel === 'echtzeit'
+
+  if (realtime) {
+    if (action.type === 'roll' || action.type === 'step' || action.type === 'endTurn') {
+      return reject(state, 'In der Echtzeitfahrt wird nicht gewürfelt.')
+    }
+    if (action.type === 'drawKonjunktur') {
+      return reject(state, 'Der Weltmarkt dreht die Karten von selbst.')
+    }
+  } else if (action.type === 'setCourse') {
+    return reject(state, 'Kurse werden nur in der Echtzeitfahrt gesetzt.')
+  }
+
+  // In real-time play there is no "whose turn"; every action names its actor.
+  const by = 'by' in action ? action.by : undefined
+  const index = by ? state.players.findIndex((p) => p.id === by) : state.activeIndex
+  if (index < 0) return reject(state, 'Unbekannter Kaufmann.')
+  if (realtime && !by) return reject(state, 'Es fehlt die Angabe, wer handelt.')
+  if (!realtime && by && index !== state.activeIndex) {
+    return reject(state, 'Sie sind nicht am Zug.')
+  }
+
   const draft = draftOf(state)
   const events: GameEvent[] = []
-  const index = draft.activeIndex
-  const player = activePlayer(state)
+  const player = state.players[index]!
 
   switch (action.type) {
     case 'roll': {
@@ -401,7 +425,11 @@ export function applyAction(
     }
 
     case 'buy': {
-      if (draft.phase !== 'port') return reject(state, 'Das Kontor ist geschlossen.')
+      if (realtime) {
+        if (player.ship.voyage) return reject(state, 'Auf See wird nicht gehandelt.')
+      } else if (draft.phase !== 'port') {
+        return reject(state, 'Das Kontor ist geschlossen.')
+      }
       const portId = portAt(ctx, player.ship.nodeId)
       if (!portId) return reject(state, 'Ihr Schiff liegt nicht im Hafen.')
       if (!ctx.exportsOf(portId).includes(action.goodId)) {
@@ -441,7 +469,11 @@ export function applyAction(
     }
 
     case 'sell': {
-      if (draft.phase !== 'port') return reject(state, 'Das Kontor ist geschlossen.')
+      if (realtime) {
+        if (player.ship.voyage) return reject(state, 'Auf See wird nicht gehandelt.')
+      } else if (draft.phase !== 'port') {
+        return reject(state, 'Das Kontor ist geschlossen.')
+      }
       const portId = portAt(ctx, player.ship.nodeId)
       if (!portId) return reject(state, 'Ihr Schiff liegt nicht im Hafen.')
       const item = player.cargo.find((c) => c.uid === action.uid)
@@ -465,6 +497,37 @@ export function applyAction(
       break
     }
 
+    case 'setCourse': {
+      if (draft.phase !== 'laufend') return reject(state, 'Die Partie fährt nicht.')
+      if (player.ship.voyage) return reject(state, 'Das Schiff ist bereits unterwegs.')
+      const here = portAt(ctx, player.ship.nodeId)
+      if (!here) return reject(state, 'Das Schiff liegt nicht im Hafen.')
+      if (action.to === here) return reject(state, 'Sie liegen bereits dort.')
+
+      const route = routeTo(ctx, player.ship.nodeId, player.ship.cameFrom, action.to)
+      if (route.length === 0) return reject(state, 'Dorthin führt keine Linie.')
+
+      const legMs = draft.config.realtime.minutesPerPip * 60_000
+      patchPlayer(draft, index, {
+        ship: {
+          ...player.ship,
+          voyage: {
+            route,
+            legStartedAt: draft.now,
+            legArrivesAt: draft.now + legMs,
+            destination: action.to,
+          },
+        },
+      })
+      events.push({
+        type: 'setSail',
+        playerId: player.id,
+        to: action.to,
+        arrivesAt: draft.now + legMs * route.length,
+      })
+      break
+    }
+
     case 'endTurn': {
       if (draft.phase !== 'port' && draft.phase !== 'endOfTurn') {
         return reject(state, 'Der Zug ist noch nicht zu Ende.')
@@ -483,6 +546,121 @@ export function applyAction(
 
   draft.seq += 1
   return { state: draft as GameState, events }
+}
+
+/**
+ * The world clock.
+ *
+ * Everything that happens by itself — ships arriving, the market turning, the
+ * season closing — happens here, driven by an absolute timestamp carried in
+ * the action. A client that has been asleep for six hours folds the same
+ * ticks and lands on exactly the same state as one that watched throughout.
+ */
+function applyTick(ctx: EngineContext, state: GameState, at: number): ActionResult {
+  if (at <= state.now) return { state, events: [] }
+
+  const draft = draftOf(state)
+  const events: GameEvent[] = []
+  draft.now = at
+  draft.seq += 1
+
+  if (draft.config.travel !== 'echtzeit' || draft.phase !== 'laufend') {
+    return { state: draft as GameState, events }
+  }
+
+  advanceVoyages(ctx, draft, events)
+  turnMarket(ctx, draft, events)
+
+  if (draft.endsAt > 0 && draft.now >= draft.endsAt) {
+    resolveFinalRun(ctx, draft, events)
+  }
+
+  return { state: draft as GameState, events }
+}
+
+/** Move every ship as far along its route as the clock allows. */
+function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): void {
+  const legMs = draft.config.realtime.minutesPerPip * 60_000
+
+  for (let i = 0; i < draft.players.length; i++) {
+    let player = draft.players[i]!
+    let voyage = player.ship.voyage
+    let guard = 0
+
+    while (voyage && draft.now >= voyage.legArrivesAt && guard++ < 5000) {
+      const next = voyage.route[0]!
+      const rest = voyage.route.slice(1)
+
+      const ship = {
+        nodeId: next,
+        cameFrom: player.ship.nodeId,
+        skipTurns: player.ship.skipTurns,
+        voyage:
+          rest.length === 0
+            ? null
+            : {
+                route: rest,
+                legStartedAt: voyage.legArrivesAt,
+                legArrivesAt: voyage.legArrivesAt + legMs,
+                destination: voyage.destination,
+              },
+      }
+      patchPlayer(draft, i, { ship, purchasesThisVisit: rest.length === 0 ? [] : player.purchasesThisVisit })
+
+      if (rest.length === 0) {
+        const portId = portAt(ctx, next)
+        if (portId) events.push({ type: 'arrived', playerId: player.id, portId })
+      }
+
+      player = draft.players[i]!
+      voyage = player.ship.voyage
+    }
+  }
+}
+
+/**
+ * The world market. Instead of red fields on a round track, a Konjunktur card
+ * is turned every so often and stands for everyone until the next one — which
+ * is what makes looking in on a running game worth doing.
+ */
+function turnMarket(ctx: EngineContext, draft: Draft, events: GameEvent[]): void {
+  const intervalMs = draft.config.realtime.marketIntervalMinutes * 60_000
+  if (intervalMs <= 0) return
+
+  let guard = 0
+  while (draft.now - draft.marketSince >= intervalMs && guard++ < 200) {
+    const cardId = draft.deck[0]
+    if (!cardId) return
+    draft.deck = [...draft.deck.slice(1), cardId]
+    const card = ctx.cardsById.get(cardId)
+    draft.marketSince += intervalMs
+    draft.marketCardId = cardId
+    if (!card) continue
+
+    // A world card has no single drawer, so what the printed rules charge one
+    // player is charged to the whole fleet.
+    draft.saleModifierPercent = 0
+    for (const effect of card.effects) {
+      switch (effect.kind) {
+        case 'salePriceDelta':
+          draft.saleModifierPercent += effect.percent
+          break
+        case 'payoutToDrawer':
+          for (let i = 0; i < draft.players.length; i++) {
+            payPlayer(draft, i, effect.amount, 'telegramm', events)
+          }
+          break
+        case 'feeForDrawer':
+          for (let i = 0; i < draft.players.length; i++) {
+            chargePlayer(draft, i, effect.amount, 'entladegeld', events)
+          }
+          break
+        default:
+          applyEffect(ctx, draft, effect, 0, events)
+      }
+    }
+    events.push({ type: 'marketTurned', cardId })
+  }
 }
 
 /**
@@ -549,12 +727,25 @@ function applyStart(state: GameState): ActionResult {
   if (state.phase !== 'lobby') return reject(state, 'Die Partie läuft bereits.')
   if (state.players.length < 1) return reject(state, 'Es braucht mindestens einen Kaufmann.')
 
+  const realtime = state.config.travel === 'echtzeit'
+  if (realtime && state.now === 0) {
+    return reject(state, 'Der Weltuhr fehlt der Anschlag.')
+  }
+
   const draft = draftOf(state)
-  draft.phase = 'port' // everyone provisions in their Ausgangshafen first
   draft.activeIndex = 0
   draft.startPlayerIndex = 0
   draft.round = 1
   draft.seq += 1
+
+  if (realtime) {
+    draft.phase = 'laufend'
+    draft.startedAt = draft.now
+    draft.marketSince = draft.now
+    draft.endsAt = draft.now + draft.config.realtime.durationHours * 3_600_000
+  } else {
+    draft.phase = 'port' // everyone provisions in their Ausgangshafen first
+  }
 
   return { state: draft as GameState, events: [{ type: 'gameStarted' }] }
 }

@@ -15,6 +15,9 @@ export interface GameMeta {
   readonly totalRounds: number
   readonly startingCapital: number
   readonly joinPolicy: JoinPolicy
+  readonly travel: 'runde' | 'echtzeit'
+  readonly minutesPerPip: number
+  readonly durationHours: number
   readonly packId: string
   readonly createdAt: number
 }
@@ -58,6 +61,9 @@ export async function createOnlineGame(options: {
   totalRounds: number
   startingCapital: number
   joinPolicy: JoinPolicy
+  travel: 'runde' | 'echtzeit'
+  minutesPerPip: number
+  durationHours: number
 }): Promise<{ code: string; meta: GameMeta }> {
   const res = await fetch('/api/games', {
     method: 'POST',

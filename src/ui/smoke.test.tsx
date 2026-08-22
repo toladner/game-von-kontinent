@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from '@app/App'
 import { useGame } from '@app/store'
-import { legalSteps, portAt } from '@engine/selectors'
+import { legalSteps, portAt, routeTo } from '@engine/selectors'
 import { createGame } from '@engine/setup'
 import { applyAction, replay } from '@engine/reducer'
 
@@ -44,12 +44,22 @@ describe('the front page', () => {
     expect(screen.getByText('Spielplan')).toBeTruthy()
     expect(screen.getByText('Originalplan')).toBeTruthy()
     // Unbuilt features are shown, but never offered as working buttons.
-    expect((screen.getByText('In Echtzeit').closest('button') as HTMLButtonElement).disabled).toBe(
+    expect((screen.getByText('Ganze Welt').closest('button') as HTMLButtonElement).disabled).toBe(
       true,
+    )
+    expect((screen.getByText('In Echtzeit').closest('button') as HTMLButtonElement).disabled).toBe(
+      false,
     )
     // Dauer and Kapital are sliders, not fixed buttons.
     expect((screen.getByLabelText('Runden') as HTMLInputElement).type).toBe('range')
     expect((screen.getByLabelText('Betriebskapital') as HTMLInputElement).type).toBe('range')
+
+    // Choosing real time swaps the round count for a pace and a season.
+    fireEvent.click(screen.getByText('In Echtzeit'))
+    expect(screen.queryByLabelText('Runden')).toBeNull()
+    expect((screen.getByLabelText('Fahrzeit je Punkt') as HTMLInputElement).type).toBe('range')
+    expect((screen.getByLabelText('Länge der Saison') as HTMLInputElement).type).toBe('range')
+    fireEvent.click(screen.getByText('Mit Würfel'))
 
     fireEvent.click(screen.getByText('Weiter'))
     expect(
@@ -177,6 +187,38 @@ describe('the lobby', () => {
     // A latecomer provisions in harbour on their first turn, like everyone.
     expect(late.state.players[1]!.hasDeparted).toBe(false)
     expect(late.state.players[1]!.cash).toBe(late.state.config.startingCapital)
+  })
+})
+
+describe('real-time play in the interface', () => {
+  it('shows a season clock, sails on a tap and reports the voyage', () => {
+    render(<App />)
+    const ctx = useGame.getState().ctx
+
+    act(() => {
+      useGame
+        .getState()
+        .begin(['Ada'], { travel: 'echtzeit', minutesPerPip: 1, durationHours: 4, seed: 'ui-rt' })
+    })
+
+    const state = useGame.getState().state!
+    expect(state.phase).toBe('laufend')
+    // A clock, not a round track.
+    expect(screen.getAllByText('Saison').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Kurs zu setzen/)).toBeTruthy()
+
+    const from = state.players[0]!.ship.nodeId
+    const target = [...ctx.portsById.keys()].find(
+      (id) => id !== from && routeTo(ctx, from, null, id).length >= 2,
+    )!
+
+    act(() => useGame.getState().dispatch({ type: 'setCourse', to: target }))
+
+    const sailing = useGame.getState().state!.players[0]!
+    expect(sailing.ship.voyage).not.toBeNull()
+    expect(sailing.ship.voyage!.destination).toBe(target)
+    expect(screen.getByText(new RegExp('Kurs auf'))).toBeTruthy()
+    expect(screen.getByText(/Ankunft/)).toBeTruthy()
   })
 })
 

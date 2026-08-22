@@ -19,6 +19,10 @@ export interface GameOptions {
   readonly packId: string
   readonly travel: Travel
   readonly totalRounds: number
+  /** Real-time only: minutes of real time per pip of sea lane. */
+  readonly minutesPerPip: number
+  /** Real-time only: how many real hours the season lasts. */
+  readonly durationHours: number
   readonly startingCapital: number
   readonly table: Table
   readonly joinPolicy: JoinPolicy
@@ -31,6 +35,8 @@ export const DEFAULT_OPTIONS: GameOptions = {
   packId: 'classic',
   travel: 'wuerfel',
   totalRounds: 30,
+  minutesPerPip: 6,
+  durationHours: 24,
   startingCapital: 500_000,
   table: 'lokal',
   joinPolicy: 'nur-zu-beginn',
@@ -79,10 +85,7 @@ export interface Capability {
 /** What is actually built today. The setup screen reads this, not a guess. */
 export const CAPABILITIES: Record<string, Capability> = {
   'travel:wuerfel': { ready: true, note: '' },
-  'travel:echtzeit': {
-    ready: false,
-    note: 'Schiffe fahren in Echtzeit — die Seekarte kennt bereits die echten Entfernungen, die Zugsteuerung fehlt noch.',
-  },
+  'travel:echtzeit': { ready: true, note: '' },
   'table:lokal': { ready: true, note: '' },
   'table:online-eroeffnen': { ready: true, note: '' },
   'table:online-beitreten': { ready: true, note: '' },

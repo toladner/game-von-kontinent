@@ -11,6 +11,20 @@ export interface CargoItem {
   readonly boughtRound: number
 }
 
+/**
+ * A voyage under way. The ship is between `nodeId` and `route[0]`, and will
+ * be there at `legArrivesAt`. Everything is absolute epoch milliseconds, so a
+ * client that was asleep for six hours works out the same answer as one that
+ * watched the whole way.
+ */
+export interface Voyage {
+  /** Nodes still to be reached, in order. The last one is the destination. */
+  readonly route: readonly NodeId[]
+  readonly legStartedAt: number
+  readonly legArrivesAt: number
+  readonly destination: PortId
+}
+
 export interface ShipState {
   readonly nodeId: NodeId
   /**
@@ -20,6 +34,8 @@ export interface ShipState {
   readonly cameFrom: NodeId | null
   /** Turns still to be sat out, e.g. after ramming another ship. */
   readonly skipTurns: number
+  /** Null when lying still. Only used in real-time play. */
+  readonly voyage?: Voyage | null
 }
 
 export interface PlayerState {
@@ -48,6 +64,8 @@ export type JoinPolicy = 'nur-zu-beginn' | 'jederzeit'
 export type Phase =
   /** Players are gathering; nobody has sailed yet. */
   | 'lobby'
+  /** Real-time play: everyone acts when they like, there is no turn. */
+  | 'laufend'
   /** Waiting for the active player to throw. */
   | 'roll'
   /** Dice thrown; player is picking their way along the sea lanes. */
@@ -107,7 +125,31 @@ export interface GameState {
    */
   readonly mustSellForeign: boolean
   readonly movement: MovementState | null
+  /**
+   * World clock in epoch milliseconds, advanced only by `tick` actions.
+   * The reducer never reads the wall clock itself — that is what keeps a
+   * replay of the log identical to the game that was played.
+   */
+  readonly now: number
+  readonly startedAt: number
+  /** When the season closes. Zero in round-based play. */
+  readonly endsAt: number
+  /** The Konjunktur card the world market is currently under, if any. */
+  readonly marketCardId: string | null
+  readonly marketSince: number
   readonly seq: number
+}
+
+/** True when this ship is lying in a harbour and free to trade. */
+export function inPort(player: PlayerState, portIds: ReadonlySet<string>): boolean {
+  return !player.ship.voyage && portIds.has(player.ship.nodeId)
+}
+
+/** How far along the current leg, 0..1. For drawing only. */
+export function voyageProgress(voyage: Voyage, now: number): number {
+  const span = voyage.legArrivesAt - voyage.legStartedAt
+  if (span <= 0) return 1
+  return Math.min(1, Math.max(0, (now - voyage.legStartedAt) / span))
 }
 
 export function activePlayer(state: GameState): PlayerState {

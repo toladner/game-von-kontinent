@@ -1,6 +1,7 @@
 import type { EngineContext } from './context'
 import type { GameAction } from './actions'
 import type { GameState, JoinPolicy } from './state'
+import type { TravelMode } from './types'
 import { seedFrom, shuffle, type RngState } from './rng'
 
 export interface NewGameOptions {
@@ -12,6 +13,11 @@ export interface NewGameOptions {
   readonly startingCapital?: number
   /** Whether latecomers may still take a ship out once play has begun. */
   readonly joinPolicy?: JoinPolicy
+  readonly travel?: TravelMode
+  /** Real minutes per pip of sea lane; only meaningful in real-time play. */
+  readonly minutesPerPip?: number
+  /** Real hours the season lasts; only meaningful in real-time play. */
+  readonly durationHours?: number
 }
 
 /**
@@ -27,6 +33,12 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     ...ctx.pack.config,
     ...(options.totalRounds ? { totalRounds: options.totalRounds } : {}),
     ...(options.startingCapital ? { startingCapital: options.startingCapital } : {}),
+    ...(options.travel ? { travel: options.travel } : {}),
+    realtime: {
+      ...ctx.pack.config.realtime,
+      ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),
+      ...(options.durationHours ? { durationHours: options.durationHours } : {}),
+    },
   }
 
   let rng: RngState = seedFrom(options.seed ?? `partie:${Date.now()}`)
@@ -60,6 +72,11 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     saleModifierPercent: 0,
     mustSellForeign: false,
     movement: null,
+    now: 0,
+    startedAt: 0,
+    endsAt: 0,
+    marketCardId: null,
+    marketSince: 0,
     seq: 0,
   }
 }

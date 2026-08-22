@@ -18,7 +18,10 @@ interface SaveFile {
   readonly names: string[]
   readonly seed: string
   readonly totalRounds: number
-  readonly startingCapital?: number
+  startingCapital?: number
+  travel?: 'runde' | 'echtzeit'
+  minutesPerPip?: number
+  durationHours?: number
   readonly actions: GameAction[]
 }
 
@@ -26,6 +29,9 @@ export interface BeginOptions {
   readonly totalRounds?: number
   readonly startingCapital?: number
   readonly seed?: string
+  readonly travel?: 'runde' | 'echtzeit'
+  readonly minutesPerPip?: number
+  readonly durationHours?: number
 }
 
 export interface LogLine {
@@ -53,6 +59,12 @@ interface Store {
   /** Null for a local game at one device. */
   net: NetState | null
 
+  /**
+   * Whose hands are on the wheel. Online this is our seat; in a local
+   * real-time game the player picks a ship, since there is no turn.
+   */
+  localActing: string | null
+
   begin: (names: string[], options?: BeginOptions) => void
   host: (name: string, options: BeginOptions & { joinPolicy: JoinPolicy }) => Promise<string>
   join: (code: string, name: string) => void
@@ -60,8 +72,11 @@ interface Store {
   resume: () => boolean
   abandon: () => void
   dismissNotice: () => void
+  setActing: (playerId: string) => void
   /** True when this device may act right now. */
   myTurn: () => boolean
+  /** The player this device is currently acting for, if any. */
+  acting: () => GameState['players'][number] | null
 }
 
 const ctx = createContext(CLASSIC_PACK)
@@ -159,6 +174,7 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
 }
 
 let session: Session | null = null
+let ticker: ReturnType<typeof setInterval> | null = null
 
 export const useGame = create<Store>((set, get) => ({
   ctx,
@@ -167,6 +183,7 @@ export const useGame = create<Store>((set, get) => ({
   lastEvents: [],
   notice: null,
   net: null,
+  localActing: null,
 
   begin(names, options = {}) {
     const totalRounds = options.totalRounds ?? 30
@@ -174,15 +191,36 @@ export const useGame = create<Store>((set, get) => ({
     const realSeed = options.seed ?? `${Date.now().toString(36)}-${names.join('|')}`
     saved = { names, seed: realSeed, totalRounds, startingCapital, actions: [] }
     persist()
-    const opening = openingActions(names)
-    const state = replay(ctx, createGame(ctx, { seed: realSeed, totalRounds, startingCapital }), opening)
+    const travel = options.travel ?? 'runde'
+    const realtime = travel === 'echtzeit'
+    // A real-time table needs a first stroke of the clock to reckon from.
+    const opening: GameAction[] = realtime
+      ? [{ type: 'tick', at: Date.now() }, ...openingActions(names)]
+      : openingActions(names)
+
+    const state = replay(
+      ctx,
+      createGame(ctx, {
+        seed: realSeed,
+        totalRounds,
+        startingCapital,
+        travel,
+        ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),
+        ...(options.durationHours ? { durationHours: options.durationHours } : {}),
+      }),
+      opening,
+    )
     saved.actions.push(...opening)
+    saved.travel = travel
+    if (options.minutesPerPip) saved.minutesPerPip = options.minutesPerPip
+    if (options.durationHours) saved.durationHours = options.durationHours
     persist()
     session?.close()
     session = null
     set({
       state,
       net: null,
+      localActing: state.players[0]?.id ?? null,
       log: [
         {
           id: ++logId,
@@ -193,6 +231,7 @@ export const useGame = create<Store>((set, get) => ({
       lastEvents: [],
       notice: null,
     })
+    if (realtime) startLocalClock(get)
   },
 
   async host(name, options) {
@@ -200,6 +239,9 @@ export const useGame = create<Store>((set, get) => ({
       totalRounds: options.totalRounds ?? 30,
       startingCapital: options.startingCapital ?? ctx.pack.config.startingCapital,
       joinPolicy: options.joinPolicy,
+      travel: options.travel ?? 'runde',
+      minutesPerPip: options.minutesPerPip ?? 6,
+      durationHours: options.durationHours ?? 24,
     })
     get().join(code, name)
     return code
@@ -221,6 +263,9 @@ export const useGame = create<Store>((set, get) => ({
           totalRounds: meta.totalRounds,
           startingCapital: meta.startingCapital,
           joinPolicy: meta.joinPolicy,
+          travel: meta.travel,
+          minutesPerPip: meta.minutesPerPip,
+          durationHours: meta.durationHours,
         })
         set((s) => ({
           state: replay(ctx, initial, actions),
@@ -255,9 +300,25 @@ export const useGame = create<Store>((set, get) => ({
     session.connect()
   },
 
+  setActing(playerId) {
+    set({ localActing: playerId })
+  },
+
+  acting() {
+    const { state, net, localActing } = get()
+    if (!state) return null
+    if (net) return state.players.find((p) => p.id === net.playerId) ?? null
+    if (state.config.travel === 'echtzeit') {
+      return state.players.find((p) => p.id === localActing) ?? state.players[0] ?? null
+    }
+    return state.players[state.activeIndex] ?? null
+  },
+
   myTurn() {
     const { state, net } = get()
     if (!state) return false
+    // Real-time play has no turn: anyone may act whenever they like.
+    if (state.config.travel === 'echtzeit') return true
     if (!net) return true // one device, one pair of hands
     if (state.phase === 'lobby') return true
     return state.players[state.activeIndex]?.id === net.playerId
@@ -266,6 +327,18 @@ export const useGame = create<Store>((set, get) => ({
   dispatch(action) {
     const { state, net } = get()
     if (!state) return
+
+    // Real-time actions name their actor, because there is no turn to infer
+    // it from.
+    if (
+      state.config.travel === 'echtzeit' &&
+      (action.type === 'buy' || action.type === 'sell' || action.type === 'setCourse') &&
+      !action.by
+    ) {
+      const me = get().acting()
+      if (!me) return
+      action = { ...action, by: me.id }
+    }
 
     if (net) {
       // The server is the referee. We apply nothing until it echoes back,
@@ -311,10 +384,21 @@ export const useGame = create<Store>((set, get) => ({
         seed: file.seed,
         totalRounds: file.totalRounds,
         ...(file.startingCapital ? { startingCapital: file.startingCapital } : {}),
+        ...(file.travel ? { travel: file.travel } : {}),
+        ...(file.minutesPerPip ? { minutesPerPip: file.minutesPerPip } : {}),
+        ...(file.durationHours ? { durationHours: file.durationHours } : {}),
       })
       const state = replay(ctx, initial, file.actions ?? [])
       saved = file
-      set({ state, log: [], lastEvents: [], notice: null, net: null })
+      set({
+        state,
+        log: [],
+        lastEvents: [],
+        notice: null,
+        net: null,
+        localActing: state.players[0]?.id ?? null,
+      })
+      if (state.config.travel === 'echtzeit') startLocalClock(get)
       return true
     } catch {
       return false
@@ -324,19 +408,41 @@ export const useGame = create<Store>((set, get) => ({
   abandon() {
     session?.close()
     session = null
+    if (ticker) clearInterval(ticker)
+    ticker = null
     saved = null
     try {
       localStorage.removeItem(SAVE_KEY)
     } catch {
       /* nothing to clean up */
     }
-    set({ state: null, log: [], lastEvents: [], notice: null, net: null })
+    set({ state: null, log: [], lastEvents: [], notice: null, net: null, localActing: null })
   },
 
   dismissNotice() {
     set({ notice: null })
   },
 }))
+
+/**
+ * A local real-time game has no server, so this device keeps the clock.
+ * Online this never runs: the server is the sole authority on time, and the
+ * interface reads the wall clock only to draw countdowns.
+ */
+function startLocalClock(get: () => Store): void {
+  if (ticker) clearInterval(ticker)
+  ticker = setInterval(() => {
+    const store = get()
+    if (store.net) return
+    const state = store.state
+    if (!state || state.config.travel !== 'echtzeit' || state.phase === 'over') {
+      if (ticker) clearInterval(ticker)
+      ticker = null
+      return
+    }
+    store.dispatch({ type: 'tick', at: Date.now() })
+  }, 1000)
+}
 
 export type { GameMeta }
 
