@@ -10,7 +10,7 @@ import { Fragment } from 'react'
  * and it is the same convention everywhere the game speaks, so a reader
  * learns very quickly that the heavy words are the actionable ones.
  */
-export function Emph({ text }: { text: string }) {
+export function Emph({ text, strong = 'text-ink font-bold' }: { text: string; strong?: string }) {
   return (
     <>
       {text
@@ -18,7 +18,7 @@ export function Emph({ text }: { text: string }) {
         .filter(Boolean)
         .map((part, i) =>
           part.length > 2 && part.startsWith('*') && part.endsWith('*') ? (
-            <strong key={i} className="text-ink font-bold">
+            <strong key={i} className={strong}>
               {part.slice(1, -1)}
             </strong>
           ) : (

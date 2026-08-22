@@ -337,6 +337,12 @@ body {
   color: var(--color-press);
 }
 
+/* The Makler's slip is pale green; the words that matter go a shade deeper
+   still, so emphasis reads as weight rather than as a change of subject. */
+.press-dark {
+  color: #12452f;
+}
+
 .rule {
   border: 0;
   border-top: 1px solid rgb(90 70 40 / 0.32);

@@ -5,7 +5,7 @@ import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
 import { buyOffers, portAt } from './selectors'
 import { flagship, type GameState } from './state'
-import { harbourAdvice, harbourGreeting, leavingEmptyHanded } from './advice'
+import { harbourAdvice, harbourGreeting, harbourPlan, leavingEmptyHanded } from './advice'
 
 const ctx = createContext(CLASSIC_PACK)
 
@@ -17,19 +17,42 @@ function table(seed = 'rat'): GameState {
 const plain = (text: string) => text.replace(/\*/g, '')
 
 const here = (s: GameState) => portAt(ctx, flagship(s.players[0]!).nodeId)!
-const advise = (s: GameState) => harbourAdvice(ctx, s, s.players[0]!, here(s))
+const walk = (s: GameState) => harbourPlan(ctx, s, s.players[0]!, here(s))
 
 describe('the Kontormakler', () => {
-  it('sends a merchant with an empty hold to the Angebot', () => {
+  it('walks a merchant with an empty hold past the Angebot', () => {
     const s = table()
-    const advice = advise(s)
+    const plan = walk(s)
 
-    expect(advice.id).toBe('leer-nachladen')
-    expect(advice.tab).toBe('kaufen')
-    expect(advice.urgency).toBe('dringend')
+    // Hold first, then the quay. Nowhere to plan for with nothing aboard.
+    expect(plan.map((p) => p.step)).toEqual(['verkaufen', 'kaufen'])
+    expect(plan[0]!.id).toBe('nichts-an-bord')
+
+    const angebot = plan[1]!
+    expect(angebot.id).toBe('leer-nachladen')
+    expect(angebot.urgency).toBe('dringend')
     // The whole point: it names something actually on offer here.
     const goods = ctx.exportsOf(here(s)).map((id) => ctx.goodsById.get(id)!.name)
-    expect(goods.some((name) => plain(advice.text).includes(name))).toBe(true)
+    expect(goods.some((name) => plain(angebot.text).includes(name))).toBe(true)
+  })
+
+  it('adds the chart to the walk once there is cargo to place', () => {
+    const s = table()
+    const offer = buyOffers(ctx, s, s.players[0]!, here(s)).find((o) => o.status === 'ok')!
+    const after = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
+
+    expect(walk(after).map((p) => p.step)).toContain('wohin')
+    expect(walk(after).at(-1)!.step).toBe('wohin')
+  })
+
+  it('drops the Angebot from the walk once the harbour is shut', () => {
+    let s = table()
+    for (let i = 0; i < 2; i++) {
+      const offer = buyOffers(ctx, s, s.players[0]!, here(s)).find((o) => o.status === 'ok')
+      if (!offer) break
+      s = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
+    }
+    expect(walk(s).map((p) => p.step)).toEqual(['verkaufen', 'wohin'])
   })
 
   it('stops nagging once something is aboard', () => {
@@ -38,7 +61,7 @@ describe('the Kontormakler', () => {
     const after = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
 
     expect(flagship(after.players[0]!).cargo).toHaveLength(1)
-    expect(advise(after).id).not.toBe('leer-nachladen')
+    expect(walk(after).some((p) => p.id === 'leer-nachladen')).toBe(false)
   })
 
   it('puts the Verkaufszwang ahead of everything else', () => {
@@ -64,10 +87,12 @@ describe('the Kontormakler', () => {
       ],
     }
 
-    const advice = harbourAdvice(ctx, moved, moved.players[0]!, elsewhere)
-    expect(advice.id).toBe('verkaufszwang')
-    expect(advice.urgency).toBe('dringend')
-    expect(advice.tab).toBe('verkaufen')
+    const plan = harbourPlan(ctx, moved, moved.players[0]!, elsewhere)
+    // The walk stops dead: no Angebot, no chart, and so no way to the exit.
+    expect(plan).toHaveLength(1)
+    expect(plan[0]!.id).toBe('verkaufszwang')
+    expect(plan[0]!.urgency).toBe('dringend')
+    expect(plan[0]!.step).toBe('verkaufen')
   })
 
   it('always offers somewhere to go', () => {
@@ -86,13 +111,16 @@ describe('the Kontormakler', () => {
           ...s.players.slice(1),
         ],
       }
-      const advice = harbourAdvice(ctx, moved, moved.players[0]!, portId)
-      expect(advice.text.length, portId).toBeGreaterThan(20)
-      expect(advice.tab, portId).toBeTruthy()
-      expect(advice.cta, portId).toBeTruthy()
-      // An odd marker would print a literal asterisk at the player.
-      expect((advice.text.match(/\*/g) ?? []).length % 2, portId).toBe(0)
-      expect(advice.text, portId).toMatch(/\*[^*]+\*/)
+      const plan = harbourPlan(ctx, moved, moved.players[0]!, portId)
+      // The hold is always the first word, and there is always a first word.
+      expect(plan.length, portId).toBeGreaterThan(0)
+      expect(plan[0]!.step, portId).toBe('verkaufen')
+      for (const stage of plan) {
+        expect(stage.text.length, portId).toBeGreaterThan(20)
+        expect(stage.label, portId).toBeTruthy()
+        // An odd marker would print a literal asterisk at the player.
+        expect((stage.text.match(/\*/g) ?? []).length % 2, portId).toBe(0)
+      }
     }
   })
 })
@@ -116,7 +144,11 @@ describe('casting off', () => {
     const player = s.players[0]!
     const broke: GameState = { ...s, players: [{ ...player, cash: 0 }, ...s.players.slice(1)] }
     expect(leavingEmptyHanded(ctx, broke, broke.players[0]!, here(broke))).toBe(false)
-    expect(harbourAdvice(ctx, broke, broke.players[0]!, here(broke)).id).toBe('leer-kein-geld')
+    // The Makler still walks them past the quay, to say why it is shut.
+    expect(harbourAdvice(ctx, broke, broke.players[0]!, here(broke)).id).toBe('nichts-an-bord')
+    expect(harbourPlan(ctx, broke, broke.players[0]!, here(broke)).at(-1)!.id).toBe(
+      'leer-kein-geld',
+    )
   })
 })
 

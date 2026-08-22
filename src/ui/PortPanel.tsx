@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { harbourCharacters, harbourGuide, type HarbourCharacter } from '@engine/persona'
 import {
-  harbourAdvice,
   harbourGreeting,
+  harbourPlan,
   leavingEmptyHanded,
-  type Advice,
+  type Stage,
 } from '@engine/advice'
 import {
   buyOffers,
@@ -72,14 +72,21 @@ export function PortSheet({
   const zwang = verkaufszwangOpen(ctx, state, player, portId)
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
 
-  const advice = harbourAdvice(ctx, state, player, portId)
+  const plan = harbourPlan(ctx, state, player, portId)
   const guide = useMemo(() => harbourGuide(portId, ctx.pack.id), [portId, ctx.pack.id])
 
   // Every call at a harbour starts with the hold: what am I carrying, and
-  // does anyone here want it. The Makler's button is how you get elsewhere —
-  // a tab that moves on its own is one you never learn to find.
+  // does anyone here want it. From there the Makler's button walks the rest.
   const [tab, setTab] = useState<Tab>('verkaufen')
   useEffect(() => setTab('verkaufen'), [portId])
+
+  // Where the walk stands, and what comes after it. Reading the position out
+  // of the visible tab rather than a counter means the plan can grow or
+  // shrink underfoot — buying the last affordable good drops the Angebot from
+  // the walk — without the button ever pointing at a step that is gone.
+  const at = plan.findIndex((s) => s.step === tab)
+  const stage: Stage | undefined = at >= 0 ? plan[at] : undefined
+  const next: Stage | undefined = at >= 0 ? plan[at + 1] : undefined
 
   const folk = useMemo(
     () => harbourCharacters(portId, state.round, 2, ctx.pack.id),
@@ -133,11 +140,13 @@ export function PortSheet({
       footer={
         <button
           className={`btn w-full text-base ${
-            confirmEmpty ? 'btn-warn' : laden ? 'btn-primary' : ''
+            confirmEmpty ? 'btn-warn' : next || laden ? 'btn-primary' : ''
           }`}
           onClick={() => {
-            // Sailing with an empty hold wastes the whole leg, so it costs one
-            // extra tap — never a dialogue, and never a refusal.
+            // One button, one path: on through the harbour, and out of it at
+            // the end. Sailing with an empty hold wastes the whole leg, so
+            // that last step costs one extra tap — a warning, not a refusal.
+            if (next) return setTab(next.step)
             if (empty && !confirmEmpty) return setConfirmEmpty(true)
             onLeave()
           }}
@@ -145,11 +154,13 @@ export function PortSheet({
         >
           {zwang
             ? 'Erst absetzen — Verkaufszwang'
-            : confirmEmpty
-              ? 'Wirklich ohne Ladung ablegen?'
-              : empty
-                ? 'Ohne Ladung ablegen'
-                : 'Ablegen'}
+            : next
+              ? `Weiter zu ${next.label}`
+              : confirmEmpty
+                ? 'Wirklich ohne Ladung ablegen?'
+                : empty
+                  ? 'Ohne Ladung ablegen'
+                  : 'Ablegen'}
         </button>
       }
     >
@@ -182,7 +193,7 @@ export function PortSheet({
         </p>
       )}
 
-      <GuideNote guide={guide} advice={advice} onGo={(t) => setTab(t)} />
+      {stage && <GuideNote guide={guide} stage={stage} />}
 
       <Tabs
         value={tab}
@@ -346,41 +357,30 @@ function Landfall({
  * and the button beside them opens the panel that acts on it. This is the
  * whole tutorial: no rules screen, just somebody who works here.
  */
-function GuideNote({
-  guide,
-  advice,
-  onGo,
-}: {
-  guide: HarbourCharacter
-  advice: Advice
-  onGo: (tab: Tab) => void
-}) {
-  const loud = advice.urgency === 'dringend'
+function GuideNote({ guide, stage }: { guide: HarbourCharacter; stage: Stage }) {
+  const loud = stage.urgency === 'dringend'
   return (
     <div
-      className={`anim-fade mb-3 flex items-start gap-2.5 rounded-sm border px-2.5 py-2 ${
-        loud ? 'border-rot/40 bg-rot/5' : 'border-black/15 bg-black/[0.03]'
+      className={`paper-slip anim-fade mb-3 flex items-start gap-2.5 rounded-sm px-2.5 py-2.5 ${
+        loud ? 'ring-rot/45 ring-2' : ''
       }`}
     >
       <Portrait traits={guide.portrait} size={44} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[11px] leading-tight">
-          <span className="smallcaps text-ink-soft">{guide.role}</span>{' '}
-          <span className="font-semibold">{guide.name}</span>
+          <span className="smallcaps text-black/55">{guide.role}</span>{' '}
+          <span className="font-semibold text-black/75">{guide.name}</span>
         </p>
+        {/* Green on green: the same press ink the Warenkarten are printed
+            with, so the figures the Makler names look like the figures on
+            the cards below rather than like a different kind of writing. */}
         <p
-          className={`mt-1 text-[14px] leading-snug italic ${loud ? 'text-rot' : 'text-ink-soft'}`}
+          className={`mt-1 text-[15px] leading-snug font-semibold ${
+            loud ? 'text-rot' : 'text-press'
+          }`}
         >
-          „<Emph text={advice.text} />“
+          <Emph text={stage.text} strong={loud ? 'text-rot font-bold' : 'press-dark font-bold'} />
         </p>
-        {advice.tab && advice.cta && (
-          <button
-            className="btn btn-primary btn-sm mt-2 !py-1.5 text-[13px]"
-            onClick={() => onGo(advice.tab as Tab)}
-          >
-            {advice.cta} →
-          </button>
-        )}
       </div>
     </div>
   )

@@ -31,6 +31,29 @@ function enterHarbour(): void {
   if (button) act(() => { fireEvent.click(button) })
 }
 
+/** The single button at the foot of the harbour sheet, whatever it says. */
+const footer = () => screen.getByRole('button', { name: /Weiter zu|ablegen|Verkaufszwang/i })
+const noFooter = () =>
+  screen.queryByRole('button', { name: /Weiter zu|ablegen|Verkaufszwang/i }) === null
+
+/**
+ * Follow the Makler to the end of the walk, where departure waits.
+ *
+ * The harbour is a guided round now: the one button moves you through the
+ * panels the Makler thinks are worth seeing, and only the last of them casts
+ * off. Tests that just want to be at sea say so with this.
+ */
+function walkToDeparture(): HTMLElement {
+  for (let guard = 0; guard < 6; guard++) {
+    const button = footer()
+    if (/ablegen/i.test(button.textContent ?? '')) return button
+    act(() => {
+      fireEvent.click(button)
+    })
+  }
+  throw new Error('the Makler never walked us to a departure')
+}
+
 describe('the front page', () => {
   it('offers the two modes and walks the classic path to the names', () => {
     render(<App />)
@@ -97,7 +120,7 @@ describe('the board', () => {
     enterHarbour()
 
     // Then the harbour proper, with the board drawn behind it.
-    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
+    expect(footer()).toBeTruthy()
     expect(screen.getByText('Angebot')).toBeTruthy()
     expect(document.querySelector('svg[aria-label]')).toBeTruthy()
     // The HUD answers "who am I and what can I spend" at all times.
@@ -260,7 +283,7 @@ describe('the map on a touch screen', () => {
     fireEvent.pointerUp(svg, { pointerId: 1, clientX: 220, clientY: 180 })
 
     expect(board()).toBeTruthy()
-    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
+    expect(footer()).toBeTruthy()
   })
 
   it('survives two fingers arriving and leaving in any order', () => {
@@ -290,7 +313,7 @@ describe('the map on a touch screen', () => {
     // While the harbour is open, the bar underneath it must not be mounted:
     // it sits at bottom:0 under a sheet that covers the lower half, where it
     // can be seen sliding past but never touched.
-    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
+    expect(footer()).toBeTruthy()
     expect(screen.queryByText('Hafen öffnen')).toBeNull()
   })
 
@@ -300,7 +323,7 @@ describe('the map on a touch screen', () => {
     enterHarbour()
 
     // The harbour opens itself on arrival.
-    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
+    expect(footer()).toBeTruthy()
 
     // Drag it away. The harbour opens full, so that is full → peek → gone.
     const dragDown = () => {
@@ -310,14 +333,14 @@ describe('the map on a touch screen', () => {
       fireEvent.pointerUp(grip, { pointerId: 1, clientY: 400 })
     }
     dragDown()
-    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
+    expect(footer()).toBeTruthy()
     dragDown()
-    expect(screen.queryByRole('button', { name: /ablegen/i })).toBeNull()
+    expect(noFooter()).toBe(true)
 
     // The button that offers it back must actually bring it back.
     const reopen = screen.getByText('Hafen öffnen')
     fireEvent.click(reopen)
-    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
+    expect(footer()).toBeTruthy()
   })
 
   it('puts no unstyled wrapper above the screen', () => {
@@ -524,14 +547,10 @@ describe('the Makler on the quay', () => {
     expect(bold).toContain('Laderaum ist leer')
     expect(document.body.textContent).not.toContain('*')
 
-    // The harbour opens on the tab the Makler is pointing at, and the button
-    // beside them goes there too.
-    const go = screen.getByRole('button', { name: /Angebot ansehen/ })
+    // One button at the foot walks the round: hold, then quay.
+    expect(footer().textContent).toBe('Weiter zu Angebot')
     act(() => {
-      fireEvent.click(screen.getByRole('tab', { name: /Ladung/ }))
-    })
-    act(() => {
-      fireEvent.click(go)
+      fireEvent.click(footer())
     })
     expect(
       (screen.getByRole('tab', { name: /Angebot/ }) as HTMLElement).getAttribute('aria-selected'),
@@ -543,21 +562,21 @@ describe('the Makler on the quay', () => {
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'leer' }))
     enterHarbour()
 
-    const leave = () => screen.getByRole('button', { name: /ablegen/i })
     const active = () => useGame.getState().state!.activeIndex
-    expect(leave().textContent).toMatch(/Ohne Ladung ablegen/)
+    const leave = walkToDeparture()
+    expect(leave.textContent).toMatch(/Ohne Ladung ablegen/)
     expect(active()).toBe(0)
 
     // The first tap warns rather than hands the turn over.
     act(() => {
-      fireEvent.click(leave())
+      fireEvent.click(leave)
     })
     expect(active()).toBe(0)
-    expect(leave().textContent).toMatch(/Wirklich/)
+    expect(footer().textContent).toMatch(/Wirklich/)
 
     // The second goes through — a warning, never a refusal.
     act(() => {
-      fireEvent.click(leave())
+      fireEvent.click(footer())
     })
     expect(active()).toBe(1)
   })
@@ -577,7 +596,7 @@ describe('the Makler on the quay', () => {
     ).find((o) => o.status === 'ok')!
 
     act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
-    expect(screen.getByRole('button', { name: /ablegen/i }).textContent).toBe('Ablegen')
+    expect(walkToDeparture().textContent).toBe('Ablegen')
   })
 })
 
@@ -590,7 +609,7 @@ describe('landfall', () => {
     expect(screen.getByText(/Willkommen in|Wieder daheim in/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Hafen betreten' })).toBeTruthy()
     expect(screen.queryByRole('tab', { name: /Angebot/ })).toBeNull()
-    expect(screen.queryByRole('button', { name: /ablegen/i })).toBeNull()
+    expect(noFooter()).toBe(true)
 
     enterHarbour()
 
@@ -613,11 +632,11 @@ describe('landfall', () => {
     }
     dragDown()
     dragDown()
-    expect(screen.queryByRole('button', { name: /ablegen/i })).toBeNull()
+    expect(noFooter()).toBe(true)
 
     fireEvent.click(screen.getByText('Hafen öffnen'))
     expect(screen.queryByRole('button', { name: 'Hafen betreten' })).toBeNull()
-    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
+    expect(footer()).toBeTruthy()
   })
 
   it('greets the next merchant to take the wheel', () => {
@@ -641,7 +660,7 @@ describe('visual guidance', () => {
     enterHarbour()
 
     // The Makler wants the Angebot — the panel still starts where the goods are.
-    expect(screen.getByRole('button', { name: /Angebot ansehen/ })).toBeTruthy()
+    expect(footer().textContent).toBe('Weiter zu Angebot')
     expect(selected(/Ladung/)).toBe('true')
     expect(selected(/Angebot/)).toBe('false')
   })
@@ -652,8 +671,9 @@ describe('visual guidance', () => {
     act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'gewicht' }))
     enterHarbour()
 
-    const leave = () => screen.getByRole('button', { name: /ablegen/i })
-    expect(leave().className).not.toContain('btn-primary')
+    // The walk itself is the good next step, so its button carries weight.
+    expect(footer().className).toContain('btn-primary')
+    expect(walkToDeparture().className).not.toContain('btn-primary')
 
     const s = useGame.getState().state!
     const gameCtx = useGame.getState().ctx
@@ -663,7 +683,7 @@ describe('visual guidance', () => {
     )!
     act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
 
-    expect(leave().className).toContain('btn-primary')
+    expect(walkToDeparture().className).toContain('btn-primary')
   })
 
   it('offers to sell without repeating where you are standing', () => {
@@ -681,5 +701,117 @@ describe('visual guidance', () => {
 
     expect(screen.getByText('verkaufen')).toBeTruthy()
     expect(screen.queryByText('hier verkaufen')).toBeNull()
+  })
+})
+
+describe('the guided round', () => {
+  const tabOf = (name: RegExp) =>
+    screen.getByRole('tab', { name }).getAttribute('aria-selected')
+
+  it('walks hold, quay and chart before it will let you sail', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'rundgang' }))
+    enterHarbour()
+
+    // Hold first, and nowhere to plan for yet, so the quay is next.
+    expect(tabOf(/Ladung/)).toBe('true')
+    expect(footer().textContent).toBe('Weiter zu Angebot')
+    act(() => {
+      fireEvent.click(footer())
+    })
+    expect(tabOf(/Angebot/)).toBe('true')
+
+    // Buying gives the cargo somewhere to go, so the chart joins the round.
+    const s = useGame.getState().state!
+    const gameCtx = useGame.getState().ctx
+    const player = s.players[0]!
+    const offer = buyOffers(gameCtx, s, player, portAt(gameCtx, flagship(player).nodeId)!).find(
+      (o) => o.status === 'ok',
+    )!
+    act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+
+    expect(footer().textContent).toBe('Weiter zu Wohin?')
+    act(() => {
+      fireEvent.click(footer())
+    })
+    expect(tabOf(/Wohin/)).toBe('true')
+    expect(footer().textContent).toBe('Ablegen')
+
+    act(() => {
+      fireEvent.click(footer())
+    })
+    expect(useGame.getState().state!.activeIndex).toBe(1)
+  })
+
+  it('never offers a step that has gone away underfoot', () => {
+    // The round is read off the visible tab, not a counter, so buying the
+    // harbour out from under the Angebot cannot strand the button on it.
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'unterfuss' }))
+    enterHarbour()
+    act(() => {
+      fireEvent.click(footer())
+    })
+    expect(tabOf(/Angebot/)).toBe('true')
+
+    for (let i = 0; i < 2; i++) {
+      const s = useGame.getState().state!
+      const gameCtx = useGame.getState().ctx
+      const player = s.players[0]!
+      const offer = buyOffers(gameCtx, s, player, portAt(gameCtx, flagship(player).nodeId)!).find(
+        (o) => o.status === 'ok',
+      )
+      if (!offer) break
+      act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+    }
+
+    // The Angebot is spent; the button has moved on rather than sat there.
+    expect(footer().textContent).not.toBe('Weiter zu Angebot')
+    expect(walkToDeparture().textContent).toBe('Ablegen')
+  })
+
+  it('will not walk you to the exit while the Börse wants a sale', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'zwang-ui' }))
+    enterHarbour()
+
+    const s = useGame.getState().state!
+    const gameCtx = useGame.getState().ctx
+    const player = s.players[0]!
+    const offer = buyOffers(gameCtx, s, player, portAt(gameCtx, flagship(player).nodeId)!).find(
+      (o) => o.status === 'ok',
+    )!
+    act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+
+    // Tie up where the good is foreign, with the obligation in force — which
+    // is what a red field does to a ship carrying somebody else's export.
+    act(() => {
+      useGame.setState((g) => {
+        const state = g.state!
+        const p0 = state.players[0]!
+        const elsewhere = [...g.ctx.portsById.keys()].find(
+          (id) =>
+            id !== flagship(p0).nodeId && !g.ctx.exportsOf(id).includes(offer.goodId),
+        )!
+        return {
+          state: {
+            ...state,
+            mustSellForeign: true,
+            players: [
+              {
+                ...p0,
+                fleet: p0.fleet.map((v, i) => (i === 0 ? { ...v, nodeId: elsewhere } : v)),
+              },
+              ...state.players.slice(1),
+            ],
+          },
+        }
+      })
+    })
+    enterHarbour()
+
+    const button = footer()
+    expect(button.textContent).toMatch(/Verkaufszwang/)
+    expect((button as HTMLButtonElement).disabled).toBe(true)
   })
 })
