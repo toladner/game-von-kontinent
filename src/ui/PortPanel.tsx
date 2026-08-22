@@ -18,6 +18,7 @@ import type { EngineContext } from '@engine/context'
 import { flagship, type GameState, type PlayerState } from '@engine/state'
 import { Warenkarte } from './Cards'
 import { CargoHold } from './Cargo'
+import { Emph } from './Emph'
 import { Portrait } from './Portrait'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
 import { PLAYER_COLORS } from '@app/store'
@@ -74,10 +75,11 @@ export function PortSheet({
   const advice = harbourAdvice(ctx, state, player, portId)
   const guide = useMemo(() => harbourGuide(portId, ctx.pack.id), [portId, ctx.pack.id])
 
-  // Open on whatever the Makler is pointing at, so the first thing you see is
-  // the thing to do. It does not move again on its own after that.
-  const [tab, setTab] = useState<Tab>(advice.tab ?? 'kaufen')
-  useEffect(() => setTab(harbourAdvice(ctx, state, player, portId).tab ?? 'kaufen'), [portId])
+  // Every call at a harbour starts with the hold: what am I carrying, and
+  // does anyone here want it. The Makler's button is how you get elsewhere —
+  // a tab that moves on its own is one you never learn to find.
+  const [tab, setTab] = useState<Tab>('verkaufen')
+  useEffect(() => setTab('verkaufen'), [portId])
 
   const folk = useMemo(
     () => harbourCharacters(portId, state.round, 2, ctx.pack.id),
@@ -91,6 +93,10 @@ export function PortSheet({
   const left = state.config.maxPurchasesPerPort - flagship(player).purchasesThisVisit.length
   const affordable = offers.filter((o) => o.status === 'ok').length
 
+  // Casting off is only the good outcome with something in the hold, so the
+  // button carries weight only then. Leaving empty is a decision, not a step
+  // forward, and should not look like the obvious next tap.
+  const laden = flagship(player).cargo.length > 0
   const empty = leavingEmptyHanded(ctx, state, player, portId)
   const [confirmEmpty, setConfirmEmpty] = useState(false)
   // Buying something takes the warning away again.
@@ -126,7 +132,9 @@ export function PortSheet({
       accent={color.ink}
       footer={
         <button
-          className={`btn w-full text-base ${confirmEmpty ? 'btn-warn' : 'btn-primary'}`}
+          className={`btn w-full text-base ${
+            confirmEmpty ? 'btn-warn' : laden ? 'btn-primary' : ''
+          }`}
           onClick={() => {
             // Sailing with an empty hold wastes the whole leg, so it costs one
             // extra tap — never a dialogue, and never a refusal.
@@ -146,19 +154,19 @@ export function PortSheet({
       }
     >
       {/* Was zählt, in einer Zeile */}
-      <div className="teletype mb-3 flex items-center justify-between gap-2 rounded-sm border border-black/15 bg-black/5 px-2.5 py-1.5 text-[11px]">
+      <div className="teletype mb-3 flex items-center justify-between gap-2 rounded-sm border border-black/15 bg-black/5 px-2.5 py-2 text-[13px]">
         <span>
-          <span className="smallcaps text-ink-soft">Kasse</span>{' '}
+          <span className="smallcaps text-ink-soft text-[11px]">Kasse</span>{' '}
           <span className="tnum font-bold">{player.cash.toLocaleString('de-DE')}</span>
         </span>
         <span className={left > 0 ? '' : 'text-rot'}>
-          <span className="smallcaps text-ink-soft">Einkauf</span>{' '}
+          <span className="smallcaps text-ink-soft text-[11px]">Einkauf</span>{' '}
           <span className="tnum font-bold">
             {left}/{state.config.maxPurchasesPerPort}
           </span>
         </span>
         <span>
-          <span className="smallcaps text-ink-soft">Ladung</span>{' '}
+          <span className="smallcaps text-ink-soft text-[11px]">Ladung</span>{' '}
           <span className="tnum font-bold">{flagship(player).cargo.length}</span>
         </span>
       </div>
@@ -207,7 +215,7 @@ export function PortSheet({
                         good={goodOf(ctx, q.item.goodId)}
                         price={q.price}
                         tone={q.profit >= 0 ? 'gut' : 'schlecht'}
-                        action="hier verkaufen"
+                        action="verkaufen"
                         sublabel={
                           q.kind === 'ueberfluss'
                             ? 'Hier selbst geführt — nur Verlustpreis'
@@ -216,7 +224,7 @@ export function PortSheet({
                         onClick={() => onSell(q.item.uid)}
                       />
                       {q.kind === 'ueberfluss' && elsewhere.length > 0 && (
-                        <p className="text-ink-soft mt-1 text-[11px] leading-snug">
+                        <p className="text-ink-soft mt-1 text-[12px] leading-snug">
                           Besser anderswo:{' '}
                           {elsewhere.map((d, i) => (
                             <span key={d.portId}>
@@ -243,7 +251,7 @@ export function PortSheet({
       {tab === 'kaufen' && (
         <div className="anim-fade">
           {left === 0 && (
-            <p className="text-ink-soft mb-2 text-center text-xs italic">
+            <p className="text-ink-soft mb-2 text-center text-[13px] italic">
               Ladeschluß — in einem Hafen dürfen nur zwei Waren gekauft werden.
             </p>
           )}
@@ -280,11 +288,11 @@ export function PortSheet({
             <div key={person.name} className="flex items-start gap-2.5">
               <Portrait traits={person.portrait} size={40} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[11px] leading-tight">
+                <p className="truncate text-[12px] leading-tight">
                   <span className="smallcaps text-ink-soft">{person.role}</span>{' '}
                   <span className="font-semibold">{person.name}</span>
                 </p>
-                <p className="text-ink-soft text-[13px] leading-snug italic break-words">
+                <p className="text-ink-soft text-[14px] leading-snug italic break-words">
                   „{person.line}“
                 </p>
               </div>
@@ -320,12 +328,12 @@ function Landfall({
   return (
     <div className="anim-fade flex h-full flex-col items-center justify-center px-2 text-center">
       <Portrait traits={guide.portrait} size={104} />
-      <p className="smallcaps text-ink-soft mt-3 text-[10px]">{guide.role}</p>
-      <p className="display text-lg leading-tight">{guide.name}</p>
+      <p className="smallcaps text-ink-soft mt-3 text-[11px]">{guide.role}</p>
+      <p className="display text-xl leading-tight">{guide.name}</p>
       <hr className="rule my-3 w-24" />
-      <h3 className="display letterpress text-xl leading-tight">{headline}</h3>
-      <p className="text-ink-soft mx-auto mt-2 max-w-sm text-[13px] leading-relaxed italic">
-        „{body}“
+      <h3 className="display letterpress text-2xl leading-tight">{headline}</h3>
+      <p className="text-ink-soft mx-auto mt-2.5 max-w-sm text-[15px] leading-relaxed italic">
+        „<Emph text={body} />“
       </p>
     </div>
   )
@@ -354,20 +362,20 @@ function GuideNote({
         loud ? 'border-rot/40 bg-rot/5' : 'border-black/15 bg-black/[0.03]'
       }`}
     >
-      <Portrait traits={guide.portrait} size={40} />
+      <Portrait traits={guide.portrait} size={44} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[10px] leading-tight">
+        <p className="truncate text-[11px] leading-tight">
           <span className="smallcaps text-ink-soft">{guide.role}</span>{' '}
           <span className="font-semibold">{guide.name}</span>
         </p>
         <p
-          className={`mt-0.5 text-[13px] leading-snug italic ${loud ? 'text-rot' : 'text-ink-soft'}`}
+          className={`mt-1 text-[14px] leading-snug italic ${loud ? 'text-rot' : 'text-ink-soft'}`}
         >
-          „{advice.text}“
+          „<Emph text={advice.text} />“
         </p>
         {advice.tab && advice.cta && (
           <button
-            className="btn btn-primary btn-sm mt-2 !py-1 text-[12px]"
+            className="btn btn-primary btn-sm mt-2 !py-1.5 text-[13px]"
             onClick={() => onGo(advice.tab as Tab)}
           >
             {advice.cta} →
@@ -402,7 +410,7 @@ export function MarketReport({
   }
   return (
     <div className="anim-fade">
-      <p className="text-ink-soft mb-2 text-[11px] leading-snug italic">
+      <p className="text-ink-soft mb-2 text-[12px] leading-snug italic">
         Diese Häfen führen Ihre Ware <em>nicht</em> selbst und zahlen daher den vollen Preis.
         Der Betrag ist der Gewinn gegenüber Ihrem Einkauf, die Punkte sind die Entfernung.
       </p>
@@ -413,8 +421,8 @@ export function MarketReport({
             className="paper-card flex items-center gap-2 rounded-[2px] px-2.5 py-1.5"
           >
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-semibold">{d.name}</span>
-              <span className="text-ink-soft block text-[10px] leading-snug">
+              <span className="block truncate text-[14px] font-bold">{d.name}</span>
+              <span className="text-ink-soft block text-[12px] leading-snug">
                 {d.distance} {d.distance === 1 ? 'Punkt' : 'Punkte'} Fahrt · nimmt{' '}
                 {ctx
                   ? d.sells
@@ -426,7 +434,7 @@ export function MarketReport({
             </span>
             {cargo > 0 && (
               <span
-                className={`tnum shrink-0 text-right text-[13px] font-bold ${
+                className={`tnum shrink-0 text-right text-[14px] font-bold ${
                   d.profit >= 0 ? 'text-press' : 'text-rot'
                 }`}
               >
@@ -442,5 +450,5 @@ export function MarketReport({
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-ink-faint py-6 text-center text-xs italic">{children}</p>
+  return <p className="text-ink-faint py-6 text-center text-sm italic">{children}</p>
 }

@@ -396,7 +396,7 @@ function ActionBar({
 
     case 'port':
       return wrap(
-        <button className="btn px-8 py-3 text-base shadow-xl" onClick={onOpenPort}>
+        <button className="btn btn-primary px-8 py-3 text-base shadow-xl" onClick={onOpenPort}>
           Hafen öffnen
         </button>,
       )

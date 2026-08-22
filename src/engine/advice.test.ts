@@ -13,6 +13,9 @@ function table(seed = 'rat'): GameState {
   return replay(ctx, createGame(ctx, { seed }), openingActions(['Ada', 'Bo']))
 }
 
+/** The copy carries *emphasis markers*; most assertions want the words. */
+const plain = (text: string) => text.replace(/\*/g, '')
+
 const here = (s: GameState) => portAt(ctx, flagship(s.players[0]!).nodeId)!
 const advise = (s: GameState) => harbourAdvice(ctx, s, s.players[0]!, here(s))
 
@@ -26,7 +29,7 @@ describe('the Kontormakler', () => {
     expect(advice.urgency).toBe('dringend')
     // The whole point: it names something actually on offer here.
     const goods = ctx.exportsOf(here(s)).map((id) => ctx.goodsById.get(id)!.name)
-    expect(goods.some((name) => advice.text.includes(name))).toBe(true)
+    expect(goods.some((name) => plain(advice.text).includes(name))).toBe(true)
   })
 
   it('stops nagging once something is aboard', () => {
@@ -87,6 +90,9 @@ describe('the Kontormakler', () => {
       expect(advice.text.length, portId).toBeGreaterThan(20)
       expect(advice.tab, portId).toBeTruthy()
       expect(advice.cta, portId).toBeTruthy()
+      // An odd marker would print a literal asterisk at the player.
+      expect((advice.text.match(/\*/g) ?? []).length % 2, portId).toBe(0)
+      expect(advice.text, portId).toMatch(/\*[^*]+\*/)
     }
   })
 })
@@ -121,9 +127,11 @@ describe('stepping ashore', () => {
     const g = harbourGreeting(ctx, s, s.players[0]!, port)
 
     expect(g.headline).toContain(portOf(ctx, port).name)
-    expect(g.body).toContain('Ihr Laderaum ist leer.')
+    expect(plain(g.body)).toContain('Ihr Laderaum ist leer.')
     const goods = ctx.exportsOf(port).map((id) => ctx.goodsById.get(id)!.name)
-    expect(goods.some((name) => g.body.includes(name))).toBe(true)
+    expect(goods.some((name) => plain(g.body).includes(name))).toBe(true)
+    // And the words worth skimming for are marked.
+    expect(g.body).toMatch(/\*Laderaum ist leer\*/)
   })
 
   it('greets a merchant standing in their own home port differently', () => {
@@ -159,7 +167,7 @@ describe('stepping ashore', () => {
     const loaded = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
 
     // Where she stands the good is a local glut, so no buyer — say so plainly.
-    expect(harbourGreeting(ctx, loaded, loaded.players[0]!, here(loaded)).body).toMatch(
+    expect(plain(harbourGreeting(ctx, loaded, loaded.players[0]!, here(loaded)).body)).toMatch(
       /nimmt hier allerdings niemand/,
     )
   })

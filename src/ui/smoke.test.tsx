@@ -519,7 +519,10 @@ describe('the Makler on the quay', () => {
 
     // Somebody who works here is standing in the panel, and says something.
     expect(screen.getByText(/Kontormakler(in)?/)).toBeTruthy()
-    expect(screen.getByText(/Laderaum ist leer/)).toBeTruthy()
+    // The words worth skimming for come through in bold, not as asterisks.
+    const bold = [...document.querySelectorAll('strong')].map((e) => e.textContent)
+    expect(bold).toContain('Laderaum ist leer')
+    expect(document.body.textContent).not.toContain('*')
 
     // The harbour opens on the tab the Makler is pointing at, and the button
     // beside them goes there too.
@@ -625,5 +628,58 @@ describe('landfall', () => {
     // Ada casts off; Bo is lying in a harbour of their own.
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
     expect(screen.getByRole('button', { name: 'Hafen betreten' })).toBeTruthy()
+  })
+})
+
+describe('visual guidance', () => {
+  const selected = (name: RegExp) =>
+    screen.getByRole('tab', { name }).getAttribute('aria-selected')
+
+  it('always opens the harbour on the hold, whatever the Makler is pointing at', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'ladung-zuerst' }))
+    enterHarbour()
+
+    // The Makler wants the Angebot — the panel still starts where the goods are.
+    expect(screen.getByRole('button', { name: /Angebot ansehen/ })).toBeTruthy()
+    expect(selected(/Ladung/)).toBe('true')
+    expect(selected(/Angebot/)).toBe('false')
+  })
+
+  it('gives the leave button its weight only once there is cargo aboard', () => {
+    // Primary means "this is the good next step". Sailing empty is neither.
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'gewicht' }))
+    enterHarbour()
+
+    const leave = () => screen.getByRole('button', { name: /ablegen/i })
+    expect(leave().className).not.toContain('btn-primary')
+
+    const s = useGame.getState().state!
+    const gameCtx = useGame.getState().ctx
+    const player = s.players[0]!
+    const offer = buyOffers(gameCtx, s, player, portAt(gameCtx, flagship(player).nodeId)!).find(
+      (o) => o.status === 'ok',
+    )!
+    act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+
+    expect(leave().className).toContain('btn-primary')
+  })
+
+  it('offers to sell without repeating where you are standing', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'verkaufen' }))
+    enterHarbour()
+
+    const s = useGame.getState().state!
+    const gameCtx = useGame.getState().ctx
+    const player = s.players[0]!
+    const offer = buyOffers(gameCtx, s, player, portAt(gameCtx, flagship(player).nodeId)!).find(
+      (o) => o.status === 'ok',
+    )!
+    act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+
+    expect(screen.getByText('verkaufen')).toBeTruthy()
+    expect(screen.queryByText('hier verkaufen')).toBeNull()
   })
 })

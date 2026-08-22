@@ -35,6 +35,13 @@ export interface Advice {
 
 const money = (n: number) => n.toLocaleString('de-DE')
 
+/**
+ * Marks a word for emphasis. The UI renders *...* in bold — see Emph — so
+ * the port, the good and the sum can be picked out of a full sentence at a
+ * glance without the copy turning into a table.
+ */
+const key = (text: string | number) => `*${text}*`
+
 export function harbourAdvice(
   ctx: EngineContext,
   state: GameState,
@@ -51,7 +58,7 @@ export function harbourAdvice(
   if (verkaufszwangOpen(ctx, state, player, portId)) {
     return {
       id: 'verkaufszwang',
-      text: 'Die Börse verlangt einen Abschluß: Sie müssen hier eine Ware absetzen, die dieser Hafen nicht selbst führt. Vorher kommen Sie nicht hinaus.',
+      text: `Die Börse verlangt einen Abschluß: Sie müssen hier ${key('eine Ware absetzen')}, die dieser Hafen nicht selbst führt. Vorher kommen Sie nicht hinaus.`,
       tab: 'verkaufen',
       cta: 'Ladung zeigen',
       urgency: 'dringend',
@@ -66,7 +73,7 @@ export function harbourAdvice(
   if (best) {
     return {
       id: 'hier-verkaufen',
-      text: `${goodOf(ctx, best.item.goodId).name} nimmt man Ihnen hier ab — ${money(best.price)}, das sind ${money(best.profit)} über Ihrem Einkauf.`,
+      text: `${key(goodOf(ctx, best.item.goodId).name)} nimmt man Ihnen hier ab — ${key(money(best.price))}, das sind ${key(money(best.profit))} über Ihrem Einkauf.`,
       tab: 'verkaufen',
       cta: 'Verkaufen',
       urgency: 'hinweis',
@@ -82,7 +89,7 @@ export function harbourAdvice(
     const name = goodOf(ctx, cheapest.goodId).name
     return {
       id: 'leer-nachladen',
-      text: `Ihr Laderaum ist leer — und leer verdient kein Schiff. Hier wird ${name} verladen, ab ${money(goodOf(ctx, cheapest.goodId).buy)}. Nehmen Sie ${left === 1 ? 'noch einen Posten' : `bis zu ${left} Posten`} mit.`,
+      text: `Ihr ${key('Laderaum ist leer')} — und leer verdient kein Schiff. Hier wird ${key(name)} verladen, ab ${key(money(goodOf(ctx, cheapest.goodId).buy))}. Nehmen Sie ${left === 1 ? 'noch einen Posten' : `bis zu ${key(left)} Posten`} mit.`,
       tab: 'kaufen',
       cta: 'Angebot ansehen',
       urgency: 'dringend',
@@ -93,7 +100,7 @@ export function harbourAdvice(
   if (cargo.length === 0 && left > 0 && offers.length > 0) {
     return {
       id: 'leer-kein-geld',
-      text: `Was hier verladen wird, ist Ihnen heute zu teuer — das Billigste kostet ${money(Math.min(...offers.map((o) => goodOf(ctx, o.goodId).buy)))}, Ihre Kasse hält ${money(player.cash)}.`,
+      text: `Was hier verladen wird, ist Ihnen heute zu teuer — das Billigste kostet ${key(money(Math.min(...offers.map((o) => goodOf(ctx, o.goodId).buy))))}, Ihre Kasse hält ${key(money(player.cash))}.`,
       tab: 'kaufen',
       cta: 'Angebot ansehen',
       urgency: 'hinweis',
@@ -104,9 +111,10 @@ export function harbourAdvice(
   if (cargo.length === 0) {
     return {
       id: 'leer-ladeschluss',
-      text: left > 0
-        ? 'Dieser Hafen führt nichts aus, was Sie laden könnten. Suchen Sie sich einen, der etwas anzubieten hat.'
-        : 'Ladeschluß — hier bekommen Sie nichts mehr an Bord. Weiterfahren und anderswo kaufen.',
+      text:
+        left > 0
+          ? `Dieser Hafen führt ${key('nichts aus')}, was Sie laden könnten. Suchen Sie sich einen, der etwas anzubieten hat.`
+          : `${key('Ladeschluß')} — hier bekommen Sie nichts mehr an Bord. Weiterfahren und anderswo kaufen.`,
       tab: 'wohin',
       cta: 'Wohin?',
       urgency: 'hinweis',
@@ -117,7 +125,7 @@ export function harbourAdvice(
   if (left > 0 && affordable.length > 0) {
     return {
       id: 'nachladen',
-      text: `In diesem Hafen dürfen Sie noch ${left === 1 ? 'eine Ware' : `${left} Waren`} kaufen — der Laderaum selbst hat keine Grenze.`,
+      text: `In diesem Hafen dürfen Sie noch ${key(left === 1 ? 'eine Ware' : `${left} Waren`)} kaufen — der Laderaum selbst hat keine Grenze.`,
       tab: 'kaufen',
       cta: 'Angebot ansehen',
       urgency: 'ruhig',
@@ -130,7 +138,7 @@ export function harbourAdvice(
   if (target) {
     return {
       id: 'weiterfahren',
-      text: `Hier ist Ihr Geschäft gemacht. ${target.name} führt Ihre Ware nicht selbst und zahlt voll — ${money(target.profit)} bei ${target.distance} ${target.distance === 1 ? 'Punkt' : 'Punkten'} Fahrt.`,
+      text: `Hier ist Ihr Geschäft gemacht. ${key(target.name)} führt Ihre Ware nicht selbst und zahlt voll — ${key(money(target.profit))} bei ${key(`${target.distance} ${target.distance === 1 ? 'Punkt' : 'Punkten'}`)} Fahrt.`,
       tab: 'wohin',
       cta: 'Wohin?',
       urgency: 'hinweis',
@@ -140,7 +148,7 @@ export function harbourAdvice(
   // 8. Nothing pressing. The quay still has people on it.
   return {
     id: 'ruhig',
-    text: `Ruhiger Tag in ${portOf(ctx, portId).name}. Ihre Ladung wartet auf einen Hafen, der sie braucht.`,
+    text: `Ruhiger Tag in ${key(portOf(ctx, portId).name)}. Ihre Ladung wartet auf einen Hafen, der sie braucht.`,
     tab: 'kai',
     cta: 'Am Kai',
     urgency: 'ruhig',
@@ -207,18 +215,18 @@ export function harbourGreeting(
     exports.length === 0
       ? 'Ausgeführt wird von hier nichts.'
       : exports.length > 3
-        ? `Von hier gehen ${named} und anderes in alle Welt.`
-        : `Von hier gehen ${named} in alle Welt.`
+        ? `Von hier gehen ${key(named)} und anderes in alle Welt.`
+        : `Von hier gehen ${key(named)} in alle Welt.`
 
   const sellsHere = saleQuotes(ctx, state, player, portId).find(
     (q) => q.kind === 'markt' && q.profit > 0,
   )
   const laderaum =
     ship.cargo.length === 0
-      ? 'Ihr Laderaum ist leer.'
+      ? `Ihr ${key('Laderaum ist leer')}.`
       : sellsHere
-        ? `Und Ihre ${goodOf(ctx, sellsHere.item.goodId).name} findet hier einen Abnehmer.`
-        : `Ihre ${ship.cargo.length} Posten nimmt hier allerdings niemand.`
+        ? `Und Ihre ${key(goodOf(ctx, sellsHere.item.goodId).name)} ${key('findet hier einen Abnehmer')}.`
+        : `Ihre ${key(`${ship.cargo.length} Posten`)} nimmt hier allerdings niemand.`
 
   return {
     headline: daheim ? `Wieder daheim in ${port.name}.` : `Willkommen in ${port.name}!`,

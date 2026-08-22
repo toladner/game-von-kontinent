@@ -37,21 +37,23 @@ export function Warenkarte({
       disabled={disabled}
       type={onClick ? 'button' : undefined}
     >
+      {/* The name and the two figures are what the eye is hunting for, so
+          they carry the weight; everything else on the card is a label. */}
       <div className="flex items-baseline justify-between gap-2">
-        <span className="smallcaps press-green text-[13px] leading-tight font-semibold">
+        <span className="smallcaps press-green text-[15px] leading-tight font-bold">
           {good.name}
         </span>
         <span className="display press-green text-xl leading-none">{good.id}</span>
       </div>
 
-      <dl className="teletype mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5 text-[11px]">
-        <div className="flex gap-1.5">
-          <dt className="smallcaps text-ink-soft">Einkauf</dt>
-          <dd className="tnum press-green">{fmt(good.buy)}</dd>
+      <dl className="teletype mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5 text-[13px]">
+        <div className="flex items-baseline gap-1.5">
+          <dt className="smallcaps text-ink-soft text-[11px]">Einkauf</dt>
+          <dd className="tnum press-green font-bold">{fmt(good.buy)}</dd>
         </div>
-        <div className="flex gap-1.5">
-          <dt className="smallcaps text-ink-soft">Verkauf</dt>
-          <dd className={`tnum ${toneClass}`}>{fmt(price ?? good.sell)}</dd>
+        <div className="flex items-baseline gap-1.5">
+          <dt className="smallcaps text-ink-soft text-[11px]">Verkauf</dt>
+          <dd className={`tnum font-bold ${toneClass}`}>{fmt(price ?? good.sell)}</dd>
         </div>
       </dl>
 
@@ -59,9 +61,9 @@ export function Warenkarte({
           the other however long the reason runs. */}
       {(sublabel || action) && (
         <div className="mt-1.5 flex items-end justify-between gap-2">
-          <p className="text-ink-soft min-w-0 flex-1 text-[10px] leading-tight">{sublabel}</p>
+          <p className="text-ink-soft min-w-0 flex-1 text-[12px] leading-tight">{sublabel}</p>
           {action && (
-            <span className="smallcaps bg-ink/85 text-paper shrink-0 rounded-[2px] px-1.5 py-0.5 text-[10px] leading-none">
+            <span className="smallcaps bg-ink/85 text-paper shrink-0 rounded-[2px] px-2 py-1 text-[11px] leading-none font-semibold">
               {action}
             </span>
           )}
@@ -80,7 +82,7 @@ export function KonjunkturSlip({ card }: { card: KonjunkturCard }) {
       </p>
       <hr className="my-2 border-t border-black/25" />
       <p className="display text-center text-xl">{card.title}</p>
-      <div className="teletype mt-2 space-y-0.5 text-center text-[12px]">
+      <div className="teletype mt-2 space-y-0.5 text-center text-[13px]">
         {card.lines.map((line, i) => (
           <p key={i}>{line}</p>
         ))}
