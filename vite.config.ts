@@ -43,6 +43,12 @@ export default defineConfig({
     proxy: {
       '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true, ws: true },
     },
+    watch: {
+      // The Partieserver writes its Durable Object storage constantly. Without
+      // this every save reloads the page, which on a telephone looks exactly
+      // like the game crashing and losing your place.
+      ignored: ['**/.wrangler/**', '**/dist/**'],
+    },
   },
   resolve: {
     alias: {
