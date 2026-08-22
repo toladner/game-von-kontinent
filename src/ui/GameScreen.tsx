@@ -9,7 +9,13 @@ import { CargoHold } from './Cargo'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
 import { formatMoney, PLAYER_COLORS, useGame, type LogLine } from '@app/store'
 import { arrivalAt, legalSteps, marketReport, portAt, standings } from '@engine/selectors'
-import { cargoValue, netWorth, type GameState, type PlayerState } from '@engine/state'
+import {
+  cargoValue,
+  flagship,
+  netWorth,
+  type GameState,
+  type PlayerState,
+} from '@engine/state'
 import type { EngineContext } from '@engine/context'
 import { clockText, durationText, untilText, useNow } from './useNow'
 import { PLAYER_COLORS as COLORS } from '@app/store'
@@ -35,8 +41,8 @@ export function GameScreen() {
   // Round play follows the turn; real-time play follows whoever this device
   // is commanding.
   const player = (realtime ? acting : state.players[state.activeIndex]) ?? state.players[0]!
-  const voyage = player.ship.voyage ?? null
-  const portId = voyage ? null : portAt(ctx, player.ship.nodeId)
+  const voyage = flagship(player).voyage ?? null
+  const portId = voyage ? null : portAt(ctx, flagship(player).nodeId)
   const targets = state.phase === 'move' ? legalSteps(ctx, player) : []
 
   const [kind, setKind] = useState<SheetKind>(null)
@@ -103,11 +109,11 @@ export function GameScreen() {
         state={state}
         legalTargets={targets}
         onPick={(to) => dispatch({ type: 'step', to })}
-        focusNode={player.ship.nodeId}
+        focusNode={flagship(player).nodeId}
         highlightPorts={state.phase === 'move' ? [] : highlights}
         now={now}
         focusNonce={focusNonce}
-        course={voyage ? [player.ship.nodeId, ...voyage.route] : []}
+        course={voyage ? [flagship(player).nodeId, ...voyage.route] : []}
         {...(realtime && portId
           ? { onPickPort: (to: string) => to !== portId && dispatch({ type: 'setCourse', to }) }
           : {})}
@@ -121,10 +127,10 @@ export function GameScreen() {
         <PlayerHUD
           ctx={ctx}
           player={player}
-          cargoCount={player.cargo.length}
+          cargoCount={flagship(player).cargo.length}
           purchasesLeft={
             state.phase === 'port'
-              ? state.config.maxPurchasesPerPort - player.purchasesThisVisit.length
+              ? state.config.maxPurchasesPerPort - flagship(player).purchasesThisVisit.length
               : null
           }
           onOpen={() => open('kontor')}
@@ -371,7 +377,7 @@ function RealtimeBar({
 }) {
   if (hidden || state.phase === 'over') return null
 
-  const voyage = player.ship.voyage ?? null
+  const voyage = flagship(player).voyage ?? null
   const wrap = (children: React.ReactNode) => (
     <div
       className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 lg:right-[400px]"
@@ -491,9 +497,10 @@ function SeasonSheet({
         {state.players.map((p) => {
           const color = COLORS[p.colorIndex % COLORS.length]!
           const eta = arrivalAt(state, p)
-          const where = p.ship.voyage
-            ? `unterwegs nach ${ctx.portsById.get(p.ship.voyage.destination)?.name ?? ''}`
-            : `liegt in ${ctx.portsById.get(p.ship.nodeId)?.name ?? 'See'}`
+          const ship = flagship(p)
+          const where = ship.voyage
+            ? `unterwegs nach ${ctx.portsById.get(ship.voyage.destination)?.name ?? ''}`
+            : `liegt in ${ctx.portsById.get(ship.nodeId)?.name ?? 'See'}`
           return (
             <li key={p.id} className="flex items-center gap-2">
               <span
@@ -564,12 +571,12 @@ function KontorSheet({
           </dl>
 
           <h3 className="smallcaps text-ink-soft mt-4 mb-1.5 text-[11px]">
-            Laderaum · {player.vehicle.name}
+            Laderaum · {flagship(player).kind.name}
           </h3>
-          <CargoHold ctx={ctx} cargo={player.cargo} vehicle={player.vehicle} size={38} />
-          {player.cargo.length > 0 && (
+          <CargoHold ctx={ctx} cargo={flagship(player).cargo} vehicle={flagship(player).kind} size={38} />
+          {flagship(player).cargo.length > 0 && (
             <ul className="mt-2 space-y-0.5 text-[12px]">
-              {player.cargo.map((c) => (
+              {flagship(player).cargo.map((c) => (
                 <li key={c.uid} className="flex justify-between gap-2">
                   <span>{ctx.goodsById.get(c.goodId)?.name}</span>
                   <span className="tnum text-ink-soft">
@@ -603,7 +610,7 @@ function KontorSheet({
         </div>
       )}
 
-      {tab === 'wohin' && <MarketReport report={report} cargo={player.cargo.length} />}
+      {tab === 'wohin' && <MarketReport report={report} cargo={flagship(player).cargo.length} />}
 
       {tab === 'journal' && (
         <ul className="anim-fade space-y-1.5 text-[12px] leading-snug">

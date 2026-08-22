@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from '@app/App'
 import { useGame } from '@app/store'
 import { legalSteps, portAt, routeTo } from '@engine/selectors'
+import { flagship } from '@engine/state'
 import { createGame } from '@engine/setup'
 import { applyAction, replay } from '@engine/reducer'
 
@@ -115,13 +116,13 @@ describe('the board', () => {
 
     const before = useGame.getState().state!.players[0]!
     const ctx = useGame.getState().ctx
-    const portId = portAt(ctx, before.ship.nodeId)!
+    const portId = portAt(ctx, flagship(before).nodeId)!
     const goodId = ctx.exportsOf(portId)[0]!
 
     act(() => useGame.getState().dispatch({ type: 'buy', goodId }))
 
     const after = useGame.getState().state!.players[0]!
-    expect(after.cargo).toHaveLength(1)
+    expect(flagship(after).cargo).toHaveLength(1)
     expect(after.cash).toBeLessThan(before.cash)
     expect(screen.getAllByText('Ladung').length).toBeGreaterThan(0)
     // The hold is drawn as crates, one per posten, stencilled with the card number.
@@ -207,7 +208,7 @@ describe('real-time play in the interface', () => {
     expect(screen.getAllByText('Saison').length).toBeGreaterThan(0)
     expect(screen.getByText(/Kurs zu setzen/)).toBeTruthy()
 
-    const from = state.players[0]!.ship.nodeId
+    const from = flagship(state.players[0]!).nodeId
     const target = [...ctx.portsById.keys()].find(
       (id) => id !== from && routeTo(ctx, from, null, id).length >= 2,
     )!
@@ -215,8 +216,8 @@ describe('real-time play in the interface', () => {
     act(() => useGame.getState().dispatch({ type: 'setCourse', to: target }))
 
     const sailing = useGame.getState().state!.players[0]!
-    expect(sailing.ship.voyage).not.toBeNull()
-    expect(sailing.ship.voyage!.destination).toBe(target)
+    expect(flagship(sailing).voyage).not.toBeNull()
+    expect(flagship(sailing).voyage!.destination).toBe(target)
     expect(screen.getByText(new RegExp('Kurs auf'))).toBeTruthy()
     expect(screen.getByText(/Ankunft/)).toBeTruthy()
   })

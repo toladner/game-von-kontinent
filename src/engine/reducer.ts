@@ -1,6 +1,7 @@
 import type { ActionResult, GameAction, GameEvent } from './actions'
-import type { CargoItem, GameState, PlayerState } from './state'
-import { makePersona } from './persona'
+import type { CargoItem, GameState, PlayerState, VehicleInstance } from './state'
+import { flagship } from './state'
+import { makePersona, makeShipIdentity } from './persona'
 import { goodOf, type EngineContext } from './context'
 import { isPort } from './mapbuild'
 import { rollDie } from './rng'
@@ -26,6 +27,28 @@ function patchPlayer(draft: Draft, index: number, patch: Partial<PlayerState>): 
   const current = draft.players[index]
   if (!current) throw new Error(`No player at ${index}`)
   draft.players[index] = { ...current, ...patch }
+}
+
+/** Replace one vessel in a house's fleet. */
+function patchVehicle(
+  draft: Draft,
+  index: number,
+  vehicleId: string,
+  patch: Partial<VehicleInstance>,
+): void {
+  const player = draft.players[index]
+  if (!player) throw new Error(`No player at ${index}`)
+  draft.players[index] = {
+    ...player,
+    fleet: player.fleet.map((v) => (v.id === vehicleId ? { ...v, ...patch } : v)),
+  }
+}
+
+/** Patch the vessel the merchant is aboard. */
+function patchShip(draft: Draft, index: number, patch: Partial<VehicleInstance>): void {
+  const player = draft.players[index]
+  if (!player) throw new Error(`No player at ${index}`)
+  patchVehicle(draft, index, flagship(player).id, patch)
 }
 
 const reject = (state: GameState, reason: string): ActionResult => ({
@@ -54,23 +77,36 @@ function chargePlayer(
 ): void {
   if (amount <= 0) return
   let player = draft.players[index]!
+  let guard = 0
 
-  while (player.cash < amount && player.cargo.length > 0) {
-    // Liquidate the most valuable piece first - fewest forced sales.
-    const sorted = [...player.cargo].sort((a, b) => b.pricePaid - a.pricePaid)
-    const item = sorted[0]!
-    const price = Math.round(item.pricePaid * draft.config.distressSaleRate)
-    draft.bankStock[item.goodId] = (draft.bankStock[item.goodId] ?? 0) + 1
-    patchPlayer(draft, index, {
-      cash: player.cash + price,
-      cargo: player.cargo.filter((c) => c.uid !== item.uid),
+  // The whole house answers for a debt, not just the ship the merchant
+  // happens to be standing on.
+  for (;;) {
+    if (player.cash >= amount || guard++ > 200) break
+    let bestVehicle: VehicleInstance | null = null
+    let bestItem: CargoItem | null = null
+    for (const vehicle of player.fleet) {
+      for (const item of vehicle.cargo) {
+        if (!bestItem || item.pricePaid > bestItem.pricePaid) {
+          bestItem = item
+          bestVehicle = vehicle
+        }
+      }
+    }
+    if (!bestItem || !bestVehicle) break
+
+    const price = Math.round(bestItem.pricePaid * draft.config.distressSaleRate)
+    draft.bankStock[bestItem.goodId] = (draft.bankStock[bestItem.goodId] ?? 0) + 1
+    patchVehicle(draft, index, bestVehicle.id, {
+      cargo: bestVehicle.cargo.filter((c) => c.uid !== bestItem!.uid),
     })
+    patchPlayer(draft, index, { cash: draft.players[index]!.cash + price })
     events.push({
       type: 'sold',
       playerId: player.id,
-      goodId: item.goodId,
+      goodId: bestItem.goodId,
       price,
-      profit: price - item.pricePaid,
+      profit: price - bestItem.pricePaid,
       kind: 'notverkauf',
     })
     player = draft.players[index]!
@@ -121,7 +157,7 @@ function applyEffect(
       // "für alle in einem Hafen stehenden Schiffe"
       for (let i = 0; i < draft.players.length; i++) {
         const p = draft.players[i]!
-        if (portAt(ctx, p.ship.nodeId)) {
+        if (portAt(ctx, flagship(p).nodeId)) {
           chargePlayer(draft, i, effect.amount, 'hafengebuehr', events)
         }
       }
@@ -140,7 +176,10 @@ function applyEffect(
           events.push({ type: 'levySkipped', playerId: p.id, levy: effect.levy })
           continue
         }
-        const value = p.cargo.reduce((s, c) => s + c.pricePaid, 0)
+        const value = p.fleet.reduce(
+          (sum, v) => sum + v.cargo.reduce((s, c) => s + c.pricePaid, 0),
+          0,
+        )
         const due = Math.round((value * effect.percentOfCargoValue) / 100)
         chargePlayer(draft, i, due, effect.levy, events)
         patchPlayer(draft, i, {
@@ -159,28 +198,26 @@ function applyEffect(
 function resolveArrival(ctx: EngineContext, draft: Draft, events: GameEvent[]): void {
   const index = draft.activeIndex
   const player = draft.players[index]!
-  const node = player.ship.nodeId
+  const node = flagship(player).nodeId
   const portId = portAt(ctx, node)
 
   draft.movement = null
   draft.saleModifierPercent = 0
-  patchPlayer(draft, index, { purchasesThisVisit: [] })
+  patchShip(draft, index, { purchasesThisVisit: [] })
 
   if (!portId) {
     // "Steht ein Schiff auf freier See ... und es kommt ein zweites Schiff auf
     // dem gleichen Punkt zu stehen, so bedeutet dies einen Zusammenstoß."
     const victimIndex = draft.players.findIndex(
-      (p, i) => i !== index && p.ship.nodeId === node,
+      (p, i) => i !== index && flagship(p).nodeId === node,
     )
     if (victimIndex >= 0) {
       const victim = draft.players[victimIndex]!
-      const value = victim.cargo.reduce((s, c) => s + c.pricePaid, 0)
+      const value = flagship(victim).cargo.reduce((s, c) => s + c.pricePaid, 0)
       const damages = Math.round(value * draft.config.collisionDamageRate)
       chargePlayer(draft, index, damages, 'schaden', events)
       payPlayer(draft, victimIndex, damages, 'schaden', events)
-      patchPlayer(draft, index, {
-        ship: { ...draft.players[index]!.ship, skipTurns: draft.config.collisionPenaltyTurns },
-      })
+      patchShip(draft, index, { skipTurns: draft.config.collisionPenaltyTurns })
       events.push({
         type: 'collision',
         playerId: player.id,
@@ -242,39 +279,45 @@ function pathToNearestPort(
 function resolveFinalRun(ctx: EngineContext, draft: Draft, events: GameEvent[]): void {
   for (let i = 0; i < draft.players.length; i++) {
     const player = draft.players[i]!
-    let portId = portAt(ctx, player.ship.nodeId)
+    // Every vessel of the house runs for the nearest harbour and sells up.
+    for (const start of player.fleet) {
+      let portId = portAt(ctx, start.nodeId)
 
-    if (!portId) {
-      const path = pathToNearestPort(ctx, player.ship.nodeId, player.ship.cameFrom)
-      if (path.length > 0) {
-        const dest = path[path.length - 1]!
-        const before = path.length > 1 ? path[path.length - 2]! : player.ship.nodeId
-        patchPlayer(draft, i, { ship: { nodeId: dest, cameFrom: before, skipTurns: 0 } })
-        portId = portAt(ctx, dest)
-        if (portId) events.push({ type: 'arrived', playerId: player.id, portId })
+      if (!portId) {
+        const path = pathToNearestPort(ctx, start.nodeId, start.cameFrom)
+        if (path.length > 0) {
+          const dest = path[path.length - 1]!
+          const before = path.length > 1 ? path[path.length - 2]! : start.nodeId
+          patchVehicle(draft, i, start.id, {
+            nodeId: dest,
+            cameFrom: before,
+            skipTurns: 0,
+            voyage: null,
+          })
+          portId = portAt(ctx, dest)
+          if (portId) events.push({ type: 'arrived', playerId: player.id, portId })
+        }
       }
-    }
-    if (!portId) continue
+      if (!portId) continue
 
-    for (const item of draft.players[i]!.cargo) {
-      const local = ctx.exportsOf(portId).includes(item.goodId)
-      const price = local
-        ? Math.round(item.pricePaid * draft.config.finalRoundGlutSaleRate)
-        : goodOf(ctx, item.goodId).sell
-      draft.bankStock[item.goodId] = (draft.bankStock[item.goodId] ?? 0) + 1
-      events.push({
-        type: 'sold',
-        playerId: player.id,
-        goodId: item.goodId,
-        price,
-        profit: price - item.pricePaid,
-        kind: 'schluss',
-      })
-      patchPlayer(draft, i, {
-        cash: draft.players[i]!.cash + price,
-      })
+      for (const item of start.cargo) {
+        const local = ctx.exportsOf(portId).includes(item.goodId)
+        const price = local
+          ? Math.round(item.pricePaid * draft.config.finalRoundGlutSaleRate)
+          : goodOf(ctx, item.goodId).sell
+        draft.bankStock[item.goodId] = (draft.bankStock[item.goodId] ?? 0) + 1
+        events.push({
+          type: 'sold',
+          playerId: player.id,
+          goodId: item.goodId,
+          price,
+          profit: price - item.pricePaid,
+          kind: 'schluss',
+        })
+        patchPlayer(draft, i, { cash: draft.players[i]!.cash + price })
+      }
+      patchVehicle(draft, i, start.id, { cargo: [], voyage: null })
     }
-    patchPlayer(draft, i, { cargo: [] })
   }
 
   draft.phase = 'over'
@@ -284,7 +327,8 @@ function resolveFinalRun(ctx: EngineContext, draft: Draft, events: GameEvent[]):
 
 function advanceTurn(ctx: EngineContext, draft: Draft, events: GameEvent[]): void {
   const finished = draft.players[draft.activeIndex]!
-  patchPlayer(draft, draft.activeIndex, { hasDeparted: true, purchasesThisVisit: [] })
+  patchPlayer(draft, draft.activeIndex, { hasDeparted: true })
+  patchShip(draft, draft.activeIndex, { purchasesThisVisit: [] })
   events.push({ type: 'turnEnded', playerId: finished.id })
 
   draft.pendingCard = null
@@ -311,10 +355,8 @@ function advanceTurn(ctx: EngineContext, draft: Draft, events: GameEvent[]): voi
     }
 
     const next = draft.players[draft.activeIndex]!
-    if (next.ship.skipTurns > 0) {
-      patchPlayer(draft, draft.activeIndex, {
-        ship: { ...next.ship, skipTurns: next.ship.skipTurns - 1 },
-      })
+    if (flagship(next).skipTurns > 0) {
+      patchShip(draft, draft.activeIndex, { skipTurns: flagship(next).skipTurns - 1 })
       events.push({ type: 'turnEnded', playerId: next.id })
       continue
     }
@@ -381,7 +423,7 @@ export function applyAction(
       if (draft.phase !== 'roll') return reject(state, 'Jetzt ist nicht gewürfelt.')
       const [value, rng] = rollDie(draft.rng, draft.config.diceSides)
       draft.rng = rng
-      draft.movement = { rolled: value, remaining: value, path: [player.ship.nodeId] }
+      draft.movement = { rolled: value, remaining: value, path: [flagship(player).nodeId] }
       draft.phase = 'move'
       events.push({ type: 'rolled', playerId: player.id, value })
       break
@@ -394,8 +436,9 @@ export function applyAction(
       if (!legalSteps(ctx, player).includes(action.to)) {
         return reject(state, 'Dorthin führt keine Linie — oder es wäre ein Pendeln.')
       }
-      patchPlayer(draft, index, {
-        ship: { nodeId: action.to, cameFrom: player.ship.nodeId, skipTurns: player.ship.skipTurns },
+      patchShip(draft, index, {
+        nodeId: action.to,
+        cameFrom: flagship(player).nodeId,
       })
       draft.movement = {
         rolled: draft.movement.rolled,
@@ -425,24 +468,25 @@ export function applyAction(
     }
 
     case 'buy': {
+      const buyer = flagship(player)
       if (realtime) {
-        if (player.ship.voyage) return reject(state, 'Auf See wird nicht gehandelt.')
+        if (buyer.voyage) return reject(state, 'Auf See wird nicht gehandelt.')
       } else if (draft.phase !== 'port') {
         return reject(state, 'Das Kontor ist geschlossen.')
       }
-      const portId = portAt(ctx, player.ship.nodeId)
+      const portId = portAt(ctx, buyer.nodeId)
       if (!portId) return reject(state, 'Ihr Schiff liegt nicht im Hafen.')
       if (!ctx.exportsOf(portId).includes(action.goodId)) {
         return reject(state, 'Diese Ware führt der Hafen nicht aus.')
       }
-      if (player.purchasesThisVisit.length >= draft.config.maxPurchasesPerPort) {
+      if (buyer.purchasesThisVisit.length >= draft.config.maxPurchasesPerPort) {
         return reject(state, 'In einem Hafen dürfen nur zwei Waren gekauft werden.')
       }
-      if (player.purchasesThisVisit.includes(action.goodId)) {
+      if (buyer.purchasesThisVisit.includes(action.goodId)) {
         return reject(state, 'Von einer Warengattung nur eine Karte.')
       }
-      const capacity = player.vehicle.capacity
-      if (capacity !== null && player.cargo.length >= capacity) {
+      const capacity = buyer.kind.capacity
+      if (capacity !== null && buyer.cargo.length >= capacity) {
         return reject(state, `Der Laderaum faßt nur ${capacity} Posten.`)
       }
       if ((draft.bankStock[action.goodId] ?? 0) <= 0) {
@@ -459,31 +503,32 @@ export function applyAction(
         boughtRound: draft.round,
       }
       draft.bankStock[action.goodId] = (draft.bankStock[action.goodId] ?? 0) - 1
-      patchPlayer(draft, index, {
-        cash: player.cash - g.buy,
-        cargo: [...player.cargo, item],
-        purchasesThisVisit: [...player.purchasesThisVisit, action.goodId],
+      patchPlayer(draft, index, { cash: player.cash - g.buy })
+      patchVehicle(draft, index, buyer.id, {
+        cargo: [...buyer.cargo, item],
+        purchasesThisVisit: [...buyer.purchasesThisVisit, action.goodId],
       })
       events.push({ type: 'bought', playerId: player.id, goodId: action.goodId, price: g.buy })
       break
     }
 
     case 'sell': {
+      const seller = flagship(player)
       if (realtime) {
-        if (player.ship.voyage) return reject(state, 'Auf See wird nicht gehandelt.')
+        if (seller.voyage) return reject(state, 'Auf See wird nicht gehandelt.')
       } else if (draft.phase !== 'port') {
         return reject(state, 'Das Kontor ist geschlossen.')
       }
-      const portId = portAt(ctx, player.ship.nodeId)
+      const portId = portAt(ctx, seller.nodeId)
       if (!portId) return reject(state, 'Ihr Schiff liegt nicht im Hafen.')
-      const item = player.cargo.find((c) => c.uid === action.uid)
+      const item = seller.cargo.find((c) => c.uid === action.uid)
       if (!item) return reject(state, 'Diese Ware ist nicht an Bord.')
 
       const quote = quoteSale(ctx, state, item, portId)
       draft.bankStock[item.goodId] = (draft.bankStock[item.goodId] ?? 0) + 1
-      patchPlayer(draft, index, {
-        cash: player.cash + quote.price,
-        cargo: player.cargo.filter((c) => c.uid !== action.uid),
+      patchPlayer(draft, index, { cash: player.cash + quote.price })
+      patchVehicle(draft, index, seller.id, {
+        cargo: seller.cargo.filter((c) => c.uid !== action.uid),
       })
       events.push({
         type: 'sold',
@@ -499,24 +544,22 @@ export function applyAction(
 
     case 'setCourse': {
       if (draft.phase !== 'laufend') return reject(state, 'Die Partie fährt nicht.')
-      if (player.ship.voyage) return reject(state, 'Das Schiff ist bereits unterwegs.')
-      const here = portAt(ctx, player.ship.nodeId)
+      const ship = flagship(player)
+      if (ship.voyage) return reject(state, 'Das Schiff ist bereits unterwegs.')
+      const here = portAt(ctx, ship.nodeId)
       if (!here) return reject(state, 'Das Schiff liegt nicht im Hafen.')
       if (action.to === here) return reject(state, 'Sie liegen bereits dort.')
 
-      const route = routeTo(ctx, player.ship.nodeId, player.ship.cameFrom, action.to)
+      const route = routeTo(ctx, ship.nodeId, ship.cameFrom, action.to)
       if (route.length === 0) return reject(state, 'Dorthin führt keine Linie.')
 
       const legMs = draft.config.realtime.minutesPerPip * 60_000
-      patchPlayer(draft, index, {
-        ship: {
-          ...player.ship,
-          voyage: {
-            route,
-            legStartedAt: draft.now,
-            legArrivesAt: draft.now + legMs,
-            destination: action.to,
-          },
+      patchVehicle(draft, index, ship.id, {
+        voyage: {
+          route,
+          legStartedAt: draft.now,
+          legArrivesAt: draft.now + legMs,
+          destination: action.to,
         },
       })
       events.push({
@@ -532,7 +575,7 @@ export function applyAction(
       if (draft.phase !== 'port' && draft.phase !== 'endOfTurn') {
         return reject(state, 'Der Zug ist noch nicht zu Ende.')
       }
-      const portId = portAt(ctx, player.ship.nodeId)
+      const portId = portAt(ctx, flagship(player).nodeId)
       if (portId && verkaufszwangOpen(ctx, state, player, portId)) {
         return reject(
           state,
@@ -583,37 +626,41 @@ function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
   const legMs = draft.config.realtime.minutesPerPip * 60_000
 
   for (let i = 0; i < draft.players.length; i++) {
-    let player = draft.players[i]!
-    let voyage = player.ship.voyage
-    let guard = 0
+    for (const start of draft.players[i]!.fleet) {
+      let vehicle = start
+      let guard = 0
 
-    while (voyage && draft.now >= voyage.legArrivesAt && guard++ < 5000) {
-      const next = voyage.route[0]!
-      const rest = voyage.route.slice(1)
+      while (vehicle.voyage && draft.now >= vehicle.voyage.legArrivesAt && guard++ < 5000) {
+        const voyage = vehicle.voyage
+        const next = voyage.route[0]!
+        const rest = voyage.route.slice(1)
 
-      const ship = {
-        nodeId: next,
-        cameFrom: player.ship.nodeId,
-        skipTurns: player.ship.skipTurns,
-        voyage:
-          rest.length === 0
-            ? null
-            : {
-                route: rest,
-                legStartedAt: voyage.legArrivesAt,
-                legArrivesAt: voyage.legArrivesAt + legMs,
-                destination: voyage.destination,
-              },
+        patchVehicle(draft, i, vehicle.id, {
+          nodeId: next,
+          cameFrom: vehicle.nodeId,
+          purchasesThisVisit: rest.length === 0 ? [] : vehicle.purchasesThisVisit,
+          voyage:
+            rest.length === 0
+              ? null
+              : {
+                  route: rest,
+                  legStartedAt: voyage.legArrivesAt,
+                  legArrivesAt: voyage.legArrivesAt + legMs,
+                  destination: voyage.destination,
+                },
+        })
+
+        if (rest.length === 0) {
+          const portId = portAt(ctx, next)
+          if (portId) {
+            events.push({ type: 'arrived', playerId: draft.players[i]!.id, portId })
+          }
+        }
+
+        const refreshed = draft.players[i]!.fleet.find((v) => v.id === vehicle.id)
+        if (!refreshed) break
+        vehicle = refreshed
       }
-      patchPlayer(draft, i, { ship, purchasesThisVisit: rest.length === 0 ? [] : player.purchasesThisVisit })
-
-      if (rest.length === 0) {
-        const portId = portAt(ctx, next)
-        if (portId) events.push({ type: 'arrived', playerId: player.id, portId })
-      }
-
-      player = draft.players[i]!
-      voyage = player.ship.voyage
     }
   }
 }
@@ -690,17 +737,28 @@ function applyJoin(
   const homePort = pool.shift() ?? ctx.pack.map.startPorts[0]!
   draft.startPortPool = pool.length > 0 ? pool : [...ctx.pack.map.startPorts]
 
+  const identity = makeShipIdentity(`${action.playerId}:0:${ctx.pack.id}`)
+  const firstShip: VehicleInstance = {
+    id: `${action.playerId}-v1`,
+    name: identity.name,
+    kind: draft.config.startingVehicle,
+    nodeId: homePort,
+    cameFrom: null,
+    skipTurns: 0,
+    voyage: null,
+    cargo: [],
+    purchasesThisVisit: [],
+  }
+
   const player: PlayerState = {
     id: action.playerId,
     name,
     persona: makePersona(name, ctx.pack.id),
     colorIndex: state.players.length,
     cash: draft.config.startingCapital,
-    cargo: [],
-    ship: { nodeId: homePort, cameFrom: null, skipTurns: 0 },
-    vehicle: draft.config.startingVehicle,
+    fleet: [firstShip],
+    aboard: firstShip.id,
     homePort,
-    purchasesThisVisit: [],
     hasDeparted: false,
     levyPaidRound: { steuer: null, versicherung: null },
   }

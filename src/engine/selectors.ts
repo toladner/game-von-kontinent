@@ -1,5 +1,5 @@
 import type { CargoItem, GameState, PlayerState } from './state'
-import { activePlayer, netWorth } from './state'
+import { activePlayer, flagship, netWorth } from './state'
 import { goodOf, type EngineContext } from './context'
 import { isPort } from './mapbuild'
 import type { GoodId, Money, NodeId, PortId } from './types'
@@ -11,7 +11,7 @@ export function portAt(ctx: EngineContext, nodeId: NodeId): PortId | null {
 }
 
 export function currentPortId(ctx: EngineContext, state: GameState): PortId | null {
-  return portAt(ctx, activePlayer(state).ship.nodeId)
+  return portAt(ctx, flagship(activePlayer(state)).nodeId)
 }
 
 /**
@@ -21,8 +21,8 @@ export function currentPortId(ctx: EngineContext, state: GameState): PortId | nu
  * otherwise a ship at Vancouver or Leningrad would be stuck for good.
  */
 export function legalSteps(ctx: EngineContext, player: PlayerState): readonly NodeId[] {
-  const all = ctx.graph.neighbours.get(player.ship.nodeId) ?? []
-  const forward = all.filter((n) => n !== player.ship.cameFrom)
+  const all = ctx.graph.neighbours.get(flagship(player).nodeId) ?? []
+  const forward = all.filter((n) => n !== flagship(player).cameFrom)
   return forward.length > 0 ? forward : all
 }
 
@@ -61,7 +61,7 @@ export function saleQuotes(
   player: PlayerState,
   portId: PortId,
 ): readonly SaleQuote[] {
-  return player.cargo.map((item) => quoteSale(ctx, state, item, portId))
+  return flagship(player).cargo.map((item) => quoteSale(ctx, state, item, portId))
 }
 
 export type BuyBlock =
@@ -92,10 +92,10 @@ export function buyOffers(
     const g = goodOf(ctx, goodId)
     const stock = state.bankStock[goodId] ?? 0
     let status: BuyBlock = 'ok'
-    const capacity = player.vehicle.capacity
-    if (player.purchasesThisVisit.includes(goodId)) status = 'schon-geladen'
-    else if (capacity !== null && player.cargo.length >= capacity) status = 'laderaum-voll'
-    else if (player.purchasesThisVisit.length >= max) status = 'ladeschluss'
+    const capacity = flagship(player).kind.capacity
+    if (flagship(player).purchasesThisVisit.includes(goodId)) status = 'schon-geladen'
+    else if (capacity !== null && flagship(player).cargo.length >= capacity) status = 'laderaum-voll'
+    else if (flagship(player).purchasesThisVisit.length >= max) status = 'ladeschluss'
     else if (stock <= 0) status = 'ausverkauft'
     else if (player.cash < g.buy) status = 'kein-geld'
     return { goodId, price: g.buy, stock, status }
@@ -114,7 +114,7 @@ export function verkaufszwangOpen(
   portId: PortId,
 ): boolean {
   if (!state.mustSellForeign) return false
-  return player.cargo.some((item) => !ctx.exportsOf(portId).includes(item.goodId))
+  return flagship(player).cargo.some((item) => !ctx.exportsOf(portId).includes(item.goodId))
 }
 
 // ---------------------------------------------------------------------------
@@ -220,8 +220,8 @@ export function marketReport(
   player: PlayerState,
   limit = 6,
 ): readonly Destination[] {
-  const dist = distancesFrom(ctx, player.ship.nodeId, player.ship.cameFrom)
-  const held = new Set(player.cargo.map((c) => c.goodId))
+  const dist = distancesFrom(ctx, flagship(player).nodeId, flagship(player).cameFrom)
+  const held = new Set(flagship(player).cargo.map((c) => c.goodId))
 
   const rows: Destination[] = []
   for (const port of ctx.portsById.values()) {
@@ -232,7 +232,7 @@ export function marketReport(
     let proceeds = 0
     let profit = 0
     let sellable = 0
-    for (const item of player.cargo) {
+    for (const item of flagship(player).cargo) {
       if (exports.includes(item.goodId)) continue // only a loss price there
       const price = goodOf(ctx, item.goodId).sell
       proceeds += price
@@ -252,10 +252,10 @@ export function marketReport(
   }
 
   const score = (d: Destination) =>
-    player.cargo.length > 0 ? d.profit / (d.distance + 2) : d.offers / (d.distance + 2)
+    flagship(player).cargo.length > 0 ? d.profit / (d.distance + 2) : d.offers / (d.distance + 2)
 
   return rows
-    .filter((d) => (player.cargo.length > 0 ? d.sellable > 0 : d.offers > 0))
+    .filter((d) => (flagship(player).cargo.length > 0 ? d.sellable > 0 : d.offers > 0))
     .sort((a, b) => score(b) - score(a))
     .slice(0, limit)
 }
@@ -287,7 +287,7 @@ export function nextEventAt(state: GameState): number | null {
   const times: number[] = []
 
   for (const p of state.players) {
-    const voyage = p.ship.voyage
+    const voyage = flagship(p).voyage
     // One tick at the final arrival walks the ship through every leg at once.
     if (voyage) times.push(voyage.legArrivesAt + legMs * (voyage.route.length - 1))
   }
@@ -302,7 +302,7 @@ export function nextEventAt(state: GameState): number | null {
 
 /** Arrival time of the whole voyage, not just the current leg. */
 export function arrivalAt(state: GameState, player: PlayerState): number | null {
-  const voyage = player.ship.voyage
+  const voyage = flagship(player).voyage
   if (!voyage) return null
   const legMs = state.config.realtime.minutesPerPip * 60_000
   return voyage.legArrivesAt + legMs * (voyage.route.length - 1)

@@ -145,6 +145,36 @@ export function makePersona(playerName: string, salt = ''): Persona {
 }
 
 // ---------------------------------------------------------------------------
+// Ships
+// ---------------------------------------------------------------------------
+
+const SHIP_FIRST = [
+  'Stella', 'Nordstern', 'Amalie', 'Concordia', 'Fortuna', 'Albatros', 'Möwe',
+  'Passat', 'Kormoran', 'Hanseat', 'Elbe', 'Providentia', 'Iris', 'Nautilus',
+  'Sturmvogel', 'Adler', 'Delphin', 'Merkur', 'Anna Sophie', 'Seeschwalbe',
+] as const
+
+const SHIP_SUFFIX = ['', '', '', ' II', ' III', ' von Bremen', ' von Triest', ' von Lübeck'] as const
+
+/** A vessel's name, and the master who answers for her. */
+export interface ShipIdentity {
+  readonly name: string
+  readonly captain: string
+}
+
+export function makeShipIdentity(seedText: string): ShipIdentity {
+  let s = seedFrom(`schiff:${seedText}`)
+  const take = <T>(list: readonly T[]): T => {
+    const [v, next] = pick(list, s)
+    s = next
+    return v
+  }
+  const name = `${take(SHIP_FIRST)}${take(SHIP_SUFFIX)}`
+  const captain = `Kapitän ${take(FIRST_NAMES)} ${take(LAST_NAMES)}`
+  return { name, captain }
+}
+
+// ---------------------------------------------------------------------------
 // Harbour characters
 // ---------------------------------------------------------------------------
 

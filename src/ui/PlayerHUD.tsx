@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Portrait } from './Portrait'
 import { CargoHold } from './Cargo'
-import type { PlayerState } from '@engine/state'
+import { flagship, type PlayerState } from '@engine/state'
 import type { EngineContext } from '@engine/context'
 import { PLAYER_COLORS } from '@app/store'
 
@@ -92,7 +92,7 @@ export function PlayerHUD({
         </span>
         {cargoCount > 0 && (
           <span className="mt-1 block">
-            <CargoHold ctx={ctx} cargo={player.cargo} vehicle={player.vehicle} size={22} max={5} />
+            <CargoHold ctx={ctx} cargo={flagship(player).cargo} vehicle={flagship(player).kind} size={22} max={5} />
           </span>
         )}
       </span>

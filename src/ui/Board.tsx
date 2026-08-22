@@ -4,7 +4,7 @@ import type { EngineContext } from '@engine/context'
 import type { Port } from '@engine/types'
 import { isPort } from '@engine/mapbuild'
 import { project } from '@engine/geo'
-import { voyageProgress } from '@engine/state'
+import { flagship, voyageProgress } from '@engine/state'
 import land from '@content/geo/land.json'
 import { PLAYER_COLORS } from '@app/store'
 
@@ -306,14 +306,14 @@ export function Board({
   const targetSet = useMemo(() => new Set(legalTargets), [legalTargets])
   const hintSet = useMemo(() => new Set(highlightPorts), [highlightPorts])
   const occupiedPorts = useMemo(
-    () => new Set(state.players.map((p) => p.ship.nodeId)),
+    () => new Set(state.players.map((p) => flagship(p).nodeId)),
     [state.players],
   )
 
   const ships = state.players.map((p, i) => {
-    const here = at(p.ship.nodeId)
+    const here = at(flagship(p).nodeId)
     if (!here) return null
-    const voyage = p.ship.voyage ?? null
+    const voyage = flagship(p).voyage ?? null
     const next = voyage ? at(voyage.route[0]) : null
 
     let pos = here
@@ -321,7 +321,7 @@ export function Board({
       const t = voyageProgress(voyage, now || voyage.legStartedAt)
       pos = { x: here.x + (next.x - here.x) * t, y: here.y + (next.y - here.y) * t }
     }
-    const from = voyage && next ? here : at(p.ship.cameFrom)
+    const from = voyage && next ? here : at(flagship(p).cameFrom)
     return { player: p, pos, from, sailing: Boolean(voyage), index: i }
   })
 
@@ -461,9 +461,9 @@ export function Board({
                 x={s.pos.x}
                 y={s.pos.y}
                 heading={s.from ? Math.atan2(s.pos.y - s.from.y, s.pos.x - s.from.x) : 0}
-                active={s.player.ship.nodeId === focusNode}
+                active={flagship(s.player).nodeId === focusNode}
                 nudge={s.index * 4 - 2}
-                laden={s.player.cargo.length}
+                laden={flagship(s.player).cargo.length}
                 sailing={s.sailing}
               />
             ) : null,

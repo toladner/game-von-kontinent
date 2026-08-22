@@ -3,7 +3,7 @@ import { harbourCharacters } from '@engine/persona'
 import { buyOffers, marketReport, saleQuotes, verkaufszwangOpen } from '@engine/selectors'
 import { goodOf, portOf } from '@engine/context'
 import type { EngineContext } from '@engine/context'
-import type { GameState, PlayerState } from '@engine/state'
+import { flagship, type GameState, type PlayerState } from '@engine/state'
 import { Warenkarte } from './Cards'
 import { CargoHold } from './Cargo'
 import { Portrait } from './Portrait'
@@ -49,7 +49,7 @@ export function PortSheet({
   const zwang = verkaufszwangOpen(ctx, state, player, portId)
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
 
-  const [tab, setTab] = useState<Tab>(player.cargo.length > 0 ? 'verkaufen' : 'kaufen')
+  const [tab, setTab] = useState<Tab>(flagship(player).cargo.length > 0 ? 'verkaufen' : 'kaufen')
 
   const folk = useMemo(
     () => harbourCharacters(portId, state.round, 2, ctx.pack.id),
@@ -60,7 +60,7 @@ export function PortSheet({
     [ctx, player],
   )
 
-  const left = state.config.maxPurchasesPerPort - player.purchasesThisVisit.length
+  const left = state.config.maxPurchasesPerPort - flagship(player).purchasesThisVisit.length
   const affordable = offers.filter((o) => o.status === 'ok').length
 
   return (
@@ -90,7 +90,7 @@ export function PortSheet({
         </span>
         <span>
           <span className="smallcaps text-ink-soft">Ladung</span>{' '}
-          <span className="tnum font-bold">{player.cargo.length}</span>
+          <span className="tnum font-bold">{flagship(player).cargo.length}</span>
         </span>
       </div>
 
@@ -115,7 +115,7 @@ export function PortSheet({
         value={tab}
         onChange={setTab}
         items={[
-          { id: 'verkaufen', label: 'Ladung', badge: player.cargo.length },
+          { id: 'verkaufen', label: 'Ladung', badge: flagship(player).cargo.length },
           { id: 'kaufen', label: 'Angebot', badge: affordable },
           { id: 'wohin', label: 'Wohin?' },
           { id: 'kai', label: 'Am Kai' },
@@ -124,9 +124,9 @@ export function PortSheet({
 
       {tab === 'verkaufen' && (
         <div className="anim-fade">
-          {player.cargo.length > 0 && (
+          {flagship(player).cargo.length > 0 && (
             <div className="mb-3">
-              <CargoHold ctx={ctx} cargo={player.cargo} vehicle={player.vehicle} size={36} />
+              <CargoHold ctx={ctx} cargo={flagship(player).cargo} vehicle={flagship(player).kind} size={36} />
             </div>
           )}
           {quotes.length === 0 ? (
@@ -182,7 +182,7 @@ export function PortSheet({
         </div>
       )}
 
-      {tab === 'wohin' && <MarketReport report={report} cargo={player.cargo.length} />}
+      {tab === 'wohin' && <MarketReport report={report} cargo={flagship(player).cargo.length} />}
 
       {tab === 'kai' && (
         <div className="stagger anim-fade space-y-3">

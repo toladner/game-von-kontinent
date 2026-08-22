@@ -25,7 +25,18 @@ export interface Voyage {
   readonly destination: PortId
 }
 
-export interface ShipState {
+/**
+ * One vessel of a trading house.
+ *
+ * A player begins with a single ship and may buy more. Each carries its own
+ * hold and sails its own course, which is what makes it possible to own
+ * something you cannot see.
+ */
+export interface VehicleInstance {
+  readonly id: string
+  /** The ship's name, so a captain can be written to by more than an id. */
+  readonly name: string
+  readonly kind: Vehicle
   readonly nodeId: NodeId
   /**
    * The node the ship came from. "Ein Pendeln der Schiffe ... ist verboten" -
@@ -35,8 +46,14 @@ export interface ShipState {
   /** Turns still to be sat out, e.g. after ramming another ship. */
   readonly skipTurns: number
   /** Null when lying still. Only used in real-time play. */
-  readonly voyage?: Voyage | null
+  readonly voyage: Voyage | null
+  readonly cargo: readonly CargoItem[]
+  /** Goods bought during the current port call; max 2, never twice the same. */
+  readonly purchasesThisVisit: readonly GoodId[]
 }
+
+/** Kept as an alias: a great deal of code speaks of a player's ship. */
+export type ShipState = VehicleInstance
 
 export interface PlayerState {
   readonly id: string
@@ -44,12 +61,11 @@ export interface PlayerState {
   readonly persona: Persona
   readonly colorIndex: number
   readonly cash: Money
-  readonly cargo: readonly CargoItem[]
-  readonly ship: ShipState
-  readonly vehicle: Vehicle
+  /** Every vessel the house owns. Never empty. */
+  readonly fleet: readonly VehicleInstance[]
+  /** The vessel the merchant is personally travelling aboard. */
+  readonly aboard: string
   readonly homePort: PortId
-  /** Goods bought during the current port visit; max 2, never twice the same. */
-  readonly purchasesThisVisit: readonly GoodId[]
   /**
    * False until the player has finished provisioning in their Ausgangshafen.
    * The very first turn is a port visit, not a throw of the dice.
@@ -140,9 +156,31 @@ export interface GameState {
   readonly seq: number
 }
 
-/** True when this ship is lying in a harbour and free to trade. */
-export function inPort(player: PlayerState, portIds: ReadonlySet<string>): boolean {
-  return !player.ship.voyage && portIds.has(player.ship.nodeId)
+// ---------------------------------------------------------------------------
+// Fleet helpers
+// ---------------------------------------------------------------------------
+
+/** The vessel the merchant is aboard. Never null: a house always has a ship. */
+export function flagship(player: PlayerState): VehicleInstance {
+  const v = player.fleet.find((x) => x.id === player.aboard) ?? player.fleet[0]
+  if (!v) throw new Error(`${player.name} has no vessel`)
+  return v
+}
+
+export function vehicleOf(player: PlayerState, vehicleId: string): VehicleInstance | null {
+  return player.fleet.find((v) => v.id === vehicleId) ?? null
+}
+
+/** Every vessel on the board, with the house that owns it. */
+export function allVehicles(
+  state: GameState,
+): readonly { player: PlayerState; vehicle: VehicleInstance }[] {
+  return state.players.flatMap((player) => player.fleet.map((vehicle) => ({ player, vehicle })))
+}
+
+/** True when this vessel is lying in a harbour and free to trade. */
+export function inPort(vehicle: VehicleInstance, portIds: ReadonlySet<string>): boolean {
+  return !vehicle.voyage && portIds.has(vehicle.nodeId)
 }
 
 /** How far along the current leg, 0..1. For drawing only. */
@@ -164,11 +202,19 @@ export function playerById(state: GameState, id: string): PlayerState {
   return p
 }
 
+/** What the whole fleet is carrying, at what it cost. */
 export function cargoValue(player: PlayerState): Money {
-  return player.cargo.reduce((sum, item) => sum + item.pricePaid, 0)
+  return player.fleet.reduce(
+    (sum, v) => sum + v.cargo.reduce((s, item) => s + item.pricePaid, 0),
+    0,
+  )
 }
 
-/** Net worth as the rules score it at the end: cash plus what the hold is worth. */
+export function fleetCargo(player: PlayerState): readonly CargoItem[] {
+  return player.fleet.flatMap((v) => v.cargo)
+}
+
+/** Net worth as the rules score it at the end: cash plus what the holds hold. */
 export function netWorth(player: PlayerState): Money {
   return player.cash + cargoValue(player)
 }

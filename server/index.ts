@@ -14,6 +14,7 @@ import { createContext } from '../src/engine/context'
 import { createGame } from '../src/engine/setup'
 import { applyAction } from '../src/engine/reducer'
 import type { GameAction } from '../src/engine/actions'
+import { flagship } from '../src/engine/state'
 import type { GameState, JoinPolicy } from '../src/engine/state'
 import { nextEventAt } from '../src/engine/selectors'
 import type { TravelMode } from '../src/engine/types'
@@ -213,9 +214,9 @@ export class GameRoom {
           this.state?.players.map((p) => ({
             id: p.id,
             name: p.name,
-            at: p.ship.nodeId,
+            at: flagship(p).nodeId,
             cash: p.cash,
-            destination: p.ship.voyage?.destination ?? null,
+            destination: flagship(p).voyage?.destination ?? null,
           })) ?? [],
       })
     }

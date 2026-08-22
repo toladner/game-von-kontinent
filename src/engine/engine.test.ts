@@ -5,7 +5,7 @@ import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
 import { buyOffers, legalSteps, portAt, routeTo, standings } from './selectors'
 import { isPort } from './mapbuild'
-import { netWorth } from './state'
+import { flagship, netWorth } from './state'
 import type { GameAction } from './actions'
 
 const ctx = createContext(CLASSIC_PACK)
@@ -79,14 +79,14 @@ describe('a turn', () => {
   it('starts every ship in a harbour with 500.000', () => {
     for (const p of game.players) {
       expect(p.cash).toBe(500_000)
-      expect(portAt(ctx, p.ship.nodeId)).not.toBeNull()
+      expect(portAt(ctx, flagship(p).nodeId)).not.toBeNull()
       expect(p.hasDeparted).toBe(false)
     }
     expect(game.phase).toBe('port')
   })
 
   it('allows two goods per port and never twice the same', () => {
-    const portId = portAt(ctx, game.players[0]!.ship.nodeId)!
+    const portId = portAt(ctx, flagship(game.players[0]!).nodeId)!
     const offers = buyOffers(ctx, game, game.players[0]!, portId)
     const affordable = offers.filter((o) => o.status === 'ok')
     expect(affordable.length).toBeGreaterThan(0)
@@ -94,7 +94,7 @@ describe('a turn', () => {
     let s = game
     const first = affordable[0]!.goodId
     s = applyAction(ctx, s, { type: 'buy', goodId: first }).state
-    expect(s.players[0]!.cargo).toHaveLength(1)
+    expect(flagship(s.players[0]!).cargo).toHaveLength(1)
 
     const again = applyAction(ctx, s, { type: 'buy', goodId: first })
     expect(again.events[0]).toMatchObject({ type: 'rejected' })
@@ -102,7 +102,7 @@ describe('a turn', () => {
     const second = affordable.find((o) => o.goodId !== first)
     if (second) {
       s = applyAction(ctx, s, { type: 'buy', goodId: second.goodId }).state
-      expect(s.players[0]!.cargo).toHaveLength(2)
+      expect(flagship(s.players[0]!).cargo).toHaveLength(2)
       const third = affordable.find((o) => o.goodId !== first && o.goodId !== second.goodId)
       if (third) {
         const blocked = applyAction(ctx, s, { type: 'buy', goodId: third.goodId })
@@ -126,7 +126,7 @@ describe('a turn', () => {
     for (let i = 0; i < value; i++) {
       const player = s.players[s.activeIndex]!
       const options = legalSteps(ctx, player)
-      expect(options).not.toContain(player.ship.cameFrom)
+      expect(options).not.toContain(flagship(player).cameFrom)
       s = applyAction(ctx, s, { type: 'step', to: options[0]! }).state
     }
     expect(s.movement).toBeNull()
@@ -180,7 +180,7 @@ describe('real-time sailing', () => {
 
   it('sails a course over real time and arrives by itself', () => {
     let s = afloat()
-    const from = s.players[0]!.ship.nodeId
+    const from = flagship(s.players[0]!).nodeId
     const target = [...ctx.portsById.keys()].find((id) => {
       if (id === from) return false
       const r = routeTo(ctx, from, null, id)
@@ -189,23 +189,23 @@ describe('real-time sailing', () => {
     const pips = routeTo(ctx, from, null, target).length
 
     s = applyAction(ctx, s, { type: 'setCourse', to: target, by: 'a' }).state
-    expect(s.players[0]!.ship.voyage!.destination).toBe(target)
+    expect(flagship(s.players[0]!).voyage!.destination).toBe(target)
 
     // Halfway there, still at sea.
     s = applyAction(ctx, s, { type: 'tick', at: T0 + Math.floor(pips / 2) * MIN }).state
-    expect(s.players[0]!.ship.voyage).not.toBeNull()
-    expect(portAt(ctx, s.players[0]!.ship.nodeId)).not.toBe(target)
+    expect(flagship(s.players[0]!).voyage).not.toBeNull()
+    expect(portAt(ctx, flagship(s.players[0]!).nodeId)).not.toBe(target)
 
     // Come back later: the ship is in harbour without anyone watching.
     const arrived = applyAction(ctx, s, { type: 'tick', at: T0 + (pips + 1) * MIN })
-    expect(arrived.state.players[0]!.ship.nodeId).toBe(target)
-    expect(arrived.state.players[0]!.ship.voyage ?? null).toBeNull()
+    expect(flagship(arrived.state.players[0]!).nodeId).toBe(target)
+    expect(flagship(arrived.state.players[0]!).voyage ?? null).toBeNull()
     expect(arrived.events.some((e) => e.type === 'arrived')).toBe(true)
   })
 
   it('will not trade from the open sea', () => {
     let s = afloat()
-    const from = s.players[0]!.ship.nodeId
+    const from = flagship(s.players[0]!).nodeId
     const target = [...ctx.portsById.keys()].find(
       (id) => id !== from && routeTo(ctx, from, null, id).length >= 3,
     )!
@@ -219,11 +219,11 @@ describe('real-time sailing', () => {
 
   it('lets both traders act without waiting for a turn', () => {
     const s = afloat()
-    const portOfA = portAt(ctx, s.players[0]!.ship.nodeId)!
-    const portOfB = portAt(ctx, s.players[1]!.ship.nodeId)!
+    const portOfA = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    const portOfB = portAt(ctx, flagship(s.players[1]!).nodeId)!
 
     const afterA = applyAction(ctx, s, { type: 'buy', goodId: ctx.exportsOf(portOfA)[0]!, by: 'a' })
-    expect(afterA.state.players[0]!.cargo).toHaveLength(1)
+    expect(flagship(afterA.state.players[0]!).cargo).toHaveLength(1)
 
     // Bo does not have to wait for Ada to finish.
     const afterB = applyAction(ctx, afterA.state, {
@@ -231,7 +231,7 @@ describe('real-time sailing', () => {
       goodId: ctx.exportsOf(portOfB)[0]!,
       by: 'b',
     })
-    expect(afterB.state.players[1]!.cargo).toHaveLength(1)
+    expect(flagship(afterB.state.players[1]!).cargo).toHaveLength(1)
   })
 
   it('turns the world market on its own schedule', () => {
@@ -249,7 +249,7 @@ describe('real-time sailing', () => {
     const s = afloat()
     const done = applyAction(ctx, s, { type: 'tick', at: T0 + 3 * 3_600_000 })
     expect(done.state.phase).toBe('over')
-    for (const p of done.state.players) expect(p.cargo).toHaveLength(0)
+    for (const p of done.state.players) expect(flagship(p).cargo).toHaveLength(0)
     expect(standings(done.state)).toHaveLength(2)
   })
 })
