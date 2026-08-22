@@ -17,19 +17,44 @@ function snapHeights(): Record<SheetSnap, number> {
 }
 
 /**
+ * How far into the gap to the next level a drag must travel before that level
+ * takes it. A fifth, so a short deliberate flick commits: the sheet goes where
+ * the thumb was heading rather than where it happened to stop.
+ */
+const COMMIT = 0.2
+
+const ORDER: readonly SheetSnap[] = ['closed', 'peek', 'full']
+
+/**
  * Which level a released drag belongs to.
  *
- * Nearest wins, rather than "did it move more than 40px in some direction":
- * a long haul upwards from a peek should land on full, and a long haul down
- * from full should close rather than stopping halfway because the first
- * threshold it crossed said so.
+ * Direction matters, which is why this needs to know where the drag began.
+ * Nearest-wins put the boundary at the halfway mark, so committing to a level
+ * meant hauling the sheet most of the way there by hand. Now a fifth of the
+ * gap in the direction of travel is enough, and the rule keeps stepping while
+ * the fifth is cleared — a long haul from full to the floor closes rather
+ * than stopping at the first level it passes.
  */
-export function nearestSnap(heightPx: number, viewport?: number): SheetSnap {
-  const h = viewport ?? (typeof window === 'undefined' ? 800 : window.innerHeight)
-  const levels: SheetSnap[] = ['closed', 'peek', 'full']
-  return levels.reduce((best, level) =>
-    Math.abs(SHARE[level] * h - heightPx) < Math.abs(SHARE[best] * h - heightPx) ? level : best,
-  )
+export function snapTo(from: SheetSnap, heightPx: number, viewport?: number): SheetSnap {
+  const vh = viewport ?? (typeof window === 'undefined' ? 800 : window.innerHeight)
+  const px = (level: SheetSnap) => SHARE[level] * vh
+
+  let at = Math.max(ORDER.indexOf(from), 0)
+  const up = heightPx > px(ORDER[at]!)
+  const step = up ? 1 : -1
+
+  for (let guard = 0; guard < ORDER.length; guard++) {
+    const here = ORDER[at]!
+    const next = ORDER[at + step]
+    if (!next) return here
+    const gap = Math.abs(px(next) - px(here))
+    const committed = up
+      ? heightPx >= px(here) + COMMIT * gap
+      : heightPx <= px(here) - COMMIT * gap
+    if (!committed) return here
+    at += step
+  }
+  return ORDER[at]!
 }
 
 /**
@@ -119,7 +144,7 @@ export function Sheet({
     // A tap on the grip is a perfectly good way to ask for more room.
     if (!d.moved) return onSnap(snap === 'full' ? 'peek' : 'full')
 
-    onSnap(nearestSnap(clamp(d.height - (e.clientY - d.y), 0, snapHeights().full)))
+    onSnap(snapTo(snap, clamp(d.height - (e.clientY - d.y), 0, snapHeights().full)))
   }
 
   if (snap === 'closed') return null
