@@ -700,9 +700,9 @@ function TraderSlot({
     [trimmed, trader.gender],
   )
   const color = PLAYER_COLORS[index % PLAYER_COLORS.length]!
-  // Before a name is typed there is nobody yet, but the switch still holds a
-  // preference — so it never appears out of nowhere and never sits dead.
-  const chosen = persona?.gender ?? trader.gender ?? null
+  // A Kaufmann unless someone says otherwise, and shown as such from the
+  // start — so the switch never moves on its own while a name is typed.
+  const chosen = persona?.gender ?? trader.gender ?? 'm'
 
   return (
     <div className="paper-card relative flex items-center gap-3 rounded-md p-3">

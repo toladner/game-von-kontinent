@@ -17,10 +17,15 @@ describe('trader personas', () => {
     expect(b).toEqual(a)
   })
 
-  it('makes women and men in roughly equal numbers', () => {
-    const women = NAMES.filter((n) => makePersona(n).gender === 'w').length
-    expect(women).toBeGreaterThan(NAMES.length * 0.35)
-    expect(women).toBeLessThan(NAMES.length * 0.65)
+  it('settles on a Kaufmann and will not budge as a name is typed', () => {
+    // Rolling gender from the seed made the ♀/♂ switch flip under the
+    // player's finger letter by letter, which reads as a fault.
+    for (const name of NAMES) expect(makePersona(name).gender).toBe('m')
+
+    const typing = 'Wilhelmine'
+    for (let i = 1; i <= typing.length; i++) {
+      expect(makePersona(typing.slice(0, i), 'classic').gender).toBe('m')
+    }
   })
 
   it('honours a gender that was chosen rather than rolled', () => {
@@ -39,6 +44,13 @@ describe('trader personas', () => {
     expect(women.some((p) => p.rank === 'Reeder')).toBe(false)
     expect(men.some((p) => p.rank === 'Reeder')).toBe(true)
     expect(men.some((p) => p.rank === 'Reederin')).toBe(false)
+  })
+
+  it('still gives the quay both women and men, whatever the players chose', () => {
+    const folk = Array.from({ length: 300 }, (_, i) => harbourCharacters(`hafen-${i}`, 1, 1)[0]!)
+    const women = folk.filter((f) => f.gender === 'w').length
+    expect(women).toBeGreaterThan(folk.length * 0.35)
+    expect(women).toBeLessThan(folk.length * 0.65)
   })
 
   it('never puts a beard on a woman, nor a bonnet on a man', () => {
@@ -73,13 +85,18 @@ describe('trader personas', () => {
   })
 
   it('varies every portrait axis instead of leaning on one', () => {
-    const traits = NAMES.map((n) => makePersona(n).portrait)
+    const traits = [
+      ...NAMES.map((n) => makePersona(n, '', 'm').portrait),
+      ...NAMES.map((n) => makePersona(n, '', 'w').portrait),
+    ]
     const spread = (get: (t: (typeof traits)[number]) => number) =>
       new Set(traits.map(get)).size
     expect(spread((t) => t.face)).toBe(4)
     expect(spread((t) => t.hair)).toBeGreaterThanOrEqual(9)
+    expect(spread((t) => t.beard)).toBe(6)
     expect(spread((t) => t.headwear)).toBeGreaterThanOrEqual(6)
     expect(spread((t) => t.accessory)).toBeGreaterThanOrEqual(6)
+    expect(spread((t) => t.collar)).toBe(4)
     expect(spread((t) => t.age)).toBe(3)
   })
 })

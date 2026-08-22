@@ -351,20 +351,20 @@ function traits(rng: RngState, gender: Gender): [PortraitTraits, RngState] {
 /**
  * Build a trader identity from the name the player typed.
  *
- * `gender` is derived from the name when not given, so a player who types a
- * name and nothing else still gets a whole person — and the same one every
- * time. Passing it explicitly is what the ♀/♂ toggle in the setup does.
+ * Gender is the one thing the name does *not* decide. Rolling it from the
+ * seed meant the switch flipped under your finger with every letter typed,
+ * which reads as a fault rather than as character. It defaults to a Kaufmann
+ * and only ever changes when someone taps the ♀/♂ switch. Harbour folk are
+ * still drawn at random — see `person`.
  */
-export function makePersona(playerName: string, salt = '', gender?: Gender): Persona {
+export function makePersona(playerName: string, salt = '', gender: Gender = 'm'): Persona {
   let s = seedFrom(`persona:${playerName.trim().toLowerCase()}:${salt}`)
   const take = <T>(list: readonly T[]): T => {
     const [v, next] = pick(list, s)
     s = next
     return v
   }
-  const [coin, afterCoin] = nextInt(s, 2)
-  s = afterCoin
-  const sex: Gender = gender ?? (coin === 0 ? 'w' : 'm')
+  const sex: Gender = gender
 
   const head = take(HOUSE_HEADS)
   const forms = HOUSE_FORMS.filter((f) => !f.only || f.only === sex)
