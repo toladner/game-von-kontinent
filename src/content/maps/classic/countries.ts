@@ -1,4 +1,4 @@
-import type { Country } from '@engine/types'
+import type { Country } from '../../../engine/types'
 
 /**
  * Export countries exactly as printed in the Warenverzeichnis (liste.pdf).

@@ -127,26 +127,43 @@ So "start in a small town with a handcart and trade your way up" needs:
 The cargo hold is drawn from `capacity`: give a vehicle a limit and the UI
 grows empty crate slots on its own.
 
-### 5. Playing together, across devices and across days
+### 5. Playing together, across devices and across days — built
 
-This is the one extension that needs something the browser cannot provide
-alone: a place to keep the game while nobody is looking at it.
+`server/index.ts` is a Cloudflare Worker with one Durable Object per game.
 
-The design already fits it. A game is `{seed, options, actions[]}` — a couple
-of kilobytes. A server does not need the rules at all; it stores the action
-list, checks whose turn it is, and broadcasts. Suggested shape:
+The object stores nothing but `{meta, actions[]}`. Because the engine is pure
+TypeScript with no DOM, **the server imports and runs the same reducer as the
+browser** — there is no second implementation of the rules to keep in step.
+The server's only extra job is deciding *who may speak*:
 
-- **Cloudflare Worker + one Durable Object per game.** The object holds the
-  action log and the connected sockets, and survives between visits. Free tier
-  covers a game night comfortably, and it deploys next to the static site.
-- The client gains a `transport` behind the same `dispatch()` the local game
-  uses: local play appends to an array, online play sends the action and waits
-  for the echo. Nothing above the store changes.
-- **Late joiners** (`joinPolicy: 'jederzeit'`) work because a new player is
-  just an action — `joinGame` appended to the log, replayed by everyone.
-- **Real-time sailing and asynchronous play are the same feature.** Once a
-  ship's position is a function of wall-clock time, "check back this evening"
-  is the natural way to play, and the turn order stops being a queue.
+```
+mayAct(playerId, action):
+  join   → handled at the door, not here
+  start  → only state.hostId
+  else   → state.players[state.activeIndex].id === playerId
+```
+
+Everything else falls out of the log-shaped design:
+
+| Feature | How it works |
+| --- | --- |
+| Sync across devices | Only actions travel; clients apply nothing until the server echoes, so they cannot drift |
+| Late joiners | `join` is an ordinary action, replayed by everyone (`joinPolicy: 'jederzeit'`) |
+| Reconnect / a sleeping phone | A seat token in `localStorage`; the server resends the whole log, which is a few kB |
+| Spectators | `hello` with no name: the full log, no seat |
+| Persistence between sessions | The Durable Object outlives every connection |
+
+The client half is `src/app/net.ts` (the socket, with backoff) and the `net`
+slice of the store. `dispatch()` is the only thing that branches: local games
+apply immediately, online games send and wait.
+
+**Real-time sailing is now a small step, not a big one.** The hard part —
+somewhere for a game to live while nobody is watching — is done. Once a ship's
+position is a function of wall-clock time, "check back this evening" becomes
+the natural way to play, and turn order stops being a queue.
+
+Run it with `npm run server` beside `npm run dev`; `npm run test:server`
+drives two clients through a real game without a browser.
 
 ## Fidelity notes
 

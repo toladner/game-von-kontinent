@@ -84,14 +84,8 @@ export const CAPABILITIES: Record<string, Capability> = {
     note: 'Schiffe fahren in Echtzeit — die Seekarte kennt bereits die echten Entfernungen, die Zugsteuerung fehlt noch.',
   },
   'table:lokal': { ready: true, note: '' },
-  'table:online-eroeffnen': {
-    ready: false,
-    note: 'Braucht den Partieserver. Der Spielstand ist bereits als Zugliste aufgebaut und damit übertragbar.',
-  },
-  'table:online-beitreten': {
-    ready: false,
-    note: 'Braucht den Partieserver.',
-  },
+  'table:online-eroeffnen': { ready: true, note: '' },
+  'table:online-beitreten': { ready: true, note: '' },
 }
 
 export function isReady(key: string): boolean {

@@ -43,7 +43,11 @@ export interface PlayerState {
   readonly levyPaidRound: { readonly steuer: number | null; readonly versicherung: number | null }
 }
 
+export type JoinPolicy = 'nur-zu-beginn' | 'jederzeit'
+
 export type Phase =
+  /** Players are gathering; nobody has sailed yet. */
+  | 'lobby'
   /** Waiting for the active player to throw. */
   | 'roll'
   /** Dice thrown; player is picking their way along the sea lanes. */
@@ -74,6 +78,16 @@ export interface GameState {
   readonly packId: string
   readonly config: RuleConfig
   readonly rng: RngState
+  /** Whether latecomers may still take a ship out. */
+  readonly joinPolicy: JoinPolicy
+  /**
+   * Ausgangshäfen not yet handed out, shuffled at creation. Joining consumes
+   * one, which is what lets a player arrive mid-game and still be dealt a
+   * harbour deterministically.
+   */
+  readonly startPortPool: readonly PortId[]
+  /** The player who opened the table; only they may start it. */
+  readonly hostId: string | null
   /** 1-based; matches the Kegelfigur on the printed round track. */
   readonly round: number
   readonly startPlayerIndex: number

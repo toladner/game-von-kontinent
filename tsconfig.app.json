@@ -28,5 +28,6 @@
       "@app/*": ["src/app/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["server"]
 }

@@ -1,4 +1,4 @@
-import type { Good } from '@engine/types'
+import type { Good } from '../engine/types'
 
 /**
  * The 72 Warenkarten.

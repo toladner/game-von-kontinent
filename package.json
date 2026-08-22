@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit && tsc -p tsconfig.worker.json",
+    "server": "wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "test:server": "node scripts/e2e-server.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -17,6 +20,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260822.1",
     "@tailwindcss/vite": "^4.1.14",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
@@ -31,6 +35,7 @@
     "vite": "^7.1.9",
     "vite-plugin-pwa": "^1.0.3",
     "vitest": "^3.2.4",
-    "world-atlas": "^2.0.2"
+    "world-atlas": "^2.0.2",
+    "wrangler": "^4.125.0"
   }
 }

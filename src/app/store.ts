@@ -1,10 +1,16 @@
 import { create } from 'zustand'
 import { CLASSIC_PACK } from '@content/maps/classic'
 import { createContext, type EngineContext } from '@engine/context'
-import { createGame } from '@engine/setup'
+import { createGame, openingActions } from '@engine/setup'
 import { applyAction, replay } from '@engine/reducer'
 import type { GameAction, GameEvent } from '@engine/actions'
-import type { GameState } from '@engine/state'
+import type { GameState, JoinPolicy } from '@engine/state'
+import {
+  createOnlineGame,
+  Session,
+  type ConnectionStatus,
+  type GameMeta,
+} from './net'
 
 const SAVE_KEY = 'vkzk.partie.v1'
 
@@ -28,6 +34,15 @@ export interface LogLine {
   readonly tone: 'neutral' | 'gut' | 'schlecht' | 'wichtig'
 }
 
+/** Who is at this device, and how it is connected. */
+export interface NetState {
+  readonly code: string
+  readonly status: ConnectionStatus
+  /** Null while the server has not yet seated us (spectator or in flight). */
+  readonly playerId: string | null
+  readonly online: readonly string[]
+}
+
 interface Store {
   readonly ctx: EngineContext
   state: GameState | null
@@ -35,12 +50,18 @@ interface Store {
   /** Events from the most recent action, for animations and flashes. */
   lastEvents: readonly GameEvent[]
   notice: string | null
+  /** Null for a local game at one device. */
+  net: NetState | null
 
   begin: (names: string[], options?: BeginOptions) => void
+  host: (name: string, options: BeginOptions & { joinPolicy: JoinPolicy }) => Promise<string>
+  join: (code: string, name: string) => void
   dispatch: (action: GameAction) => void
   resume: () => boolean
   abandon: () => void
   dismissNotice: () => void
+  /** True when this device may act right now. */
+  myTurn: () => boolean
 }
 
 const ctx = createContext(CLASSIC_PACK)
@@ -137,12 +158,15 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
   }
 }
 
+let session: Session | null = null
+
 export const useGame = create<Store>((set, get) => ({
   ctx,
   state: null,
   log: [],
   lastEvents: [],
   notice: null,
+  net: null,
 
   begin(names, options = {}) {
     const totalRounds = options.totalRounds ?? 30
@@ -150,9 +174,15 @@ export const useGame = create<Store>((set, get) => ({
     const realSeed = options.seed ?? `${Date.now().toString(36)}-${names.join('|')}`
     saved = { names, seed: realSeed, totalRounds, startingCapital, actions: [] }
     persist()
-    const state = createGame(ctx, { names, seed: realSeed, totalRounds, startingCapital })
+    const opening = openingActions(names)
+    const state = replay(ctx, createGame(ctx, { seed: realSeed, totalRounds, startingCapital }), opening)
+    saved.actions.push(...opening)
+    persist()
+    session?.close()
+    session = null
     set({
       state,
+      net: null,
       log: [
         {
           id: ++logId,
@@ -165,9 +195,87 @@ export const useGame = create<Store>((set, get) => ({
     })
   },
 
+  async host(name, options) {
+    const { code } = await createOnlineGame({
+      totalRounds: options.totalRounds ?? 30,
+      startingCapital: options.startingCapital ?? ctx.pack.config.startingCapital,
+      joinPolicy: options.joinPolicy,
+    })
+    get().join(code, name)
+    return code
+  },
+
+  join(code, name) {
+    session?.close()
+    // A networked game is never saved locally; the server holds the log.
+    saved = null
+    set({ state: null, log: [], lastEvents: [], notice: null, net: { code, status: 'verbindet', playerId: null, online: [] } })
+
+    session = new Session(code, name, {
+      onStatus: (status) =>
+        set((s) => ({ net: s.net ? { ...s.net, status } : s.net })),
+
+      onWelcome: (playerId, meta, actions) => {
+        const initial = createGame(ctx, {
+          seed: meta.seed,
+          totalRounds: meta.totalRounds,
+          startingCapital: meta.startingCapital,
+          joinPolicy: meta.joinPolicy,
+        })
+        set((s) => ({
+          state: replay(ctx, initial, actions),
+          net: s.net ? { ...s.net, playerId } : s.net,
+          notice: null,
+        }))
+      },
+
+      onAppend: (actions) => {
+        const current = get().state
+        if (!current) return
+        let next = current
+        const fresh: LogLine[] = []
+        for (const action of actions) {
+          const result = applyAction(ctx, next, action)
+          next = result.state
+          for (const event of result.events) {
+            const line = describe(ctx, next, event)
+            if (line) fresh.push(line)
+          }
+        }
+        set((s) => ({
+          state: next,
+          lastEvents: [],
+          log: [...fresh.reverse(), ...s.log].slice(0, 200),
+        }))
+      },
+
+      onPresence: (online) => set((s) => ({ net: s.net ? { ...s.net, online } : s.net })),
+      onError: (reason) => set({ notice: reason }),
+    })
+    session.connect()
+  },
+
+  myTurn() {
+    const { state, net } = get()
+    if (!state) return false
+    if (!net) return true // one device, one pair of hands
+    if (state.phase === 'lobby') return true
+    return state.players[state.activeIndex]?.id === net.playerId
+  },
+
   dispatch(action) {
-    const { state } = get()
+    const { state, net } = get()
     if (!state) return
+
+    if (net) {
+      // The server is the referee. We apply nothing until it echoes back,
+      // so two devices can never disagree about what happened.
+      if (!session?.send(action)) {
+        set({ notice: 'Keine Verbindung zur Partie. Es wird erneut versucht.' })
+      }
+      return
+    }
+
     const result = applyAction(ctx, state, action)
 
     const rejection = result.events.find((e) => e.type === 'rejected')
@@ -200,14 +308,13 @@ export const useGame = create<Store>((set, get) => ({
       const file = JSON.parse(raw) as SaveFile
       if (!Array.isArray(file.names) || file.names.length === 0) return false
       const initial = createGame(ctx, {
-        names: file.names,
         seed: file.seed,
         totalRounds: file.totalRounds,
         ...(file.startingCapital ? { startingCapital: file.startingCapital } : {}),
       })
       const state = replay(ctx, initial, file.actions ?? [])
       saved = file
-      set({ state, log: [], lastEvents: [], notice: null })
+      set({ state, log: [], lastEvents: [], notice: null, net: null })
       return true
     } catch {
       return false
@@ -215,19 +322,23 @@ export const useGame = create<Store>((set, get) => ({
   },
 
   abandon() {
+    session?.close()
+    session = null
     saved = null
     try {
       localStorage.removeItem(SAVE_KEY)
     } catch {
       /* nothing to clean up */
     }
-    set({ state: null, log: [], lastEvents: [], notice: null })
+    set({ state: null, log: [], lastEvents: [], notice: null, net: null })
   },
 
   dismissNotice() {
     set({ notice: null })
   },
 }))
+
+export type { GameMeta }
 
 export function hasSavedGame(): boolean {
   try {

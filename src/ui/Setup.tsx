@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { makePersona } from '@engine/persona'
 import { Portrait } from './Portrait'
 import { hasSavedGame, PLAYER_COLORS, useGame } from '@app/store'
@@ -12,33 +12,75 @@ import {
   type Travel,
 } from '@app/options'
 
-type Step = 'modus' | 'optionen' | 'tisch' | 'namen'
+type Step = 'modus' | 'optionen' | 'tisch' | 'namen' | 'beitreten'
 
 /**
  * Setup as a short walk, not a form.
  *
- * "Klassisch" is one tap away from the names screen and asks nothing else.
- * "Vollständig" opens the same settings the classic path silently assumes.
+ * "Klassisch" is one tap from the names screen. "Vollständig" opens the same
+ * settings the classic path silently assumes. Joining skips all of it — the
+ * host already decided.
  */
 export function Setup() {
   const begin = useGame((s) => s.begin)
+  const host = useGame((s) => s.host)
+  const join = useGame((s) => s.join)
   const resume = useGame((s) => s.resume)
   const canResume = useMemo(hasSavedGame, [])
 
   const [step, setStep] = useState<Step>('modus')
   const [options, setOptions] = useState<GameOptions>(DEFAULT_OPTIONS)
   const [names, setNames] = useState<string[]>(['', ''])
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  // An invitation link drops you straight on the join screen.
+  const invited = useMemo(() => {
+    const m = location.hash.match(/partie=([A-Za-z0-9]{3,8})/)
+    return m ? m[1]!.toUpperCase() : ''
+  }, [])
+  useEffect(() => {
+    if (invited) setStep('beitreten')
+  }, [invited])
 
   const set = <K extends keyof GameOptions>(key: K, value: GameOptions[K]) =>
     setOptions((o) => ({ ...o, [key]: value }))
 
   const filled = names.map((n) => n.trim()).filter(Boolean)
 
+  const startGame = async () => {
+    setProblem(null)
+    if (options.table === 'online-eroeffnen') {
+      setBusy(true)
+      try {
+        await host(filled[0] ?? 'Kaufmann', {
+          totalRounds: options.totalRounds,
+          startingCapital: options.startingCapital,
+          joinPolicy: options.joinPolicy,
+        })
+      } catch (error) {
+        setProblem(
+          error instanceof Error ? error.message : 'Die Partie ließ sich nicht eröffnen.',
+        )
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
+    begin(filled, {
+      totalRounds: options.totalRounds,
+      startingCapital: options.startingCapital,
+    })
+  }
+
   return (
     <div className="board-shell h-full overflow-y-auto">
       <div
         className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-3 py-5 sm:px-6"
-        style={{ paddingTop: 'calc(var(--safe-t) + 1.25rem)', paddingBottom: 'calc(var(--safe-b) + 1.5rem)' }}
+        style={{
+          paddingTop: 'calc(var(--safe-t) + 1.25rem)',
+          paddingBottom: 'calc(var(--safe-b) + 1.5rem)',
+        }}
       >
         <div className="paper anim-rise flex-1 rounded-lg p-5 sm:p-8">
           <header className="text-center">
@@ -57,10 +99,6 @@ export function Setup() {
             <StepModus
               canResume={canResume}
               onResume={() => resume()}
-              onJoin={() => {
-                setOptions((o) => ({ ...o, table: 'online-beitreten' }))
-                setStep('namen')
-              }}
               onClassic={() => {
                 setOptions({ ...DEFAULT_OPTIONS, mode: 'klassisch', totalRounds: 50 })
                 setStep('namen')
@@ -69,6 +107,7 @@ export function Setup() {
                 setOptions((o) => ({ ...o, mode: 'vollstaendig' }))
                 setStep('optionen')
               }}
+              onJoin={() => setStep('beitreten')}
             />
           )}
 
@@ -95,13 +134,18 @@ export function Setup() {
               options={options}
               names={names}
               setNames={setNames}
+              busy={busy}
+              problem={problem}
               onBack={() => setStep(options.mode === 'klassisch' ? 'modus' : 'tisch')}
-              onStart={() =>
-                begin(filled, {
-                  totalRounds: options.totalRounds,
-                  startingCapital: options.startingCapital,
-                })
-              }
+              onStart={() => void startGame()}
+            />
+          )}
+
+          {step === 'beitreten' && (
+            <StepBeitreten
+              initialCode={invited}
+              onBack={() => setStep('modus')}
+              onJoin={(code, name) => join(code, name)}
             />
           )}
         </div>
@@ -149,7 +193,57 @@ function Choice({
   )
 }
 
-function Nav({ onBack, onNext, nextLabel = 'Weiter', nextDisabled }: {
+/** A slider with the value read off above it. */
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  format,
+  hint,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  format: (v: number) => string
+  hint?: string
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="paper-card rounded-md px-3.5 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="smallcaps text-ink-soft text-[11px]">{label}</span>
+        <span className="tnum display text-xl">{format(value)}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="accent-press mt-2 w-full"
+        aria-label={label}
+      />
+      <div className="text-ink-faint flex justify-between text-[10px]">
+        <span>{format(min)}</span>
+        {hint && <span className="italic">{hint}</span>}
+        <span>{format(max)}</span>
+      </div>
+    </div>
+  )
+}
+
+function Nav({
+  onBack,
+  onNext,
+  nextLabel = 'Weiter',
+  nextDisabled,
+}: {
   onBack: () => void
   onNext?: () => void
   nextLabel?: string
@@ -199,19 +293,17 @@ function StepModus({
       <div className="stagger space-y-2.5">
         <Choice
           title="Klassisch"
-          blurb="Nach den Originalregeln: gedruckter Spielplan, Würfel, 50 Runden, an einem Gerät. Keine Einstellungen."
+          blurb="Nach den Originalregeln: gedruckter Spielplan, Würfel, 50 Runden, an einem Gerät."
           onClick={onClassic}
         />
         <Choice
           title="Vollständig"
-          blurb="Spielplan, Fahrtweise, Rundenzahl, Startkapital und Mitspieler selbst bestimmen."
+          blurb="Spielplan, Fahrtweise, Dauer, Kapital und Mitspieler selbst bestimmen — auch über mehrere Geräte."
           onClick={onFull}
         />
         <Choice
           title="Partie beitreten"
-          blurb="Sie haben einen Code — die Partie ist bereits eingerichtet, Sie tragen nur Ihren Namen ein."
-          disabled={!CAPABILITIES['table:online-beitreten']!.ready}
-          note={CAPABILITIES['table:online-beitreten']!.note}
+          blurb="Sie haben einen Code — die Partie ist eingerichtet, Sie tragen nur Ihren Namen ein."
           onClick={onJoin}
         />
       </div>
@@ -269,31 +361,28 @@ function StepOptionen({
         />
       </div>
 
-      <Legend>Dauer</Legend>
-      <div className="flex flex-wrap gap-2">
-        {[20, 30, 50].map((r) => (
-          <button
-            key={r}
-            className={`btn ${options.totalRounds === r ? 'btn-primary' : ''}`}
-            onClick={() => set('totalRounds', r)}
-          >
-            {r} Runden{r === 50 ? ' (original)' : ''}
-          </button>
-        ))}
-      </div>
-
-      <Legend>Betriebskapital</Legend>
-      <div className="flex flex-wrap gap-2">
-        {[300_000, 500_000, 800_000].map((c) => (
-          <button
-            key={c}
-            className={`btn tnum ${options.startingCapital === c ? 'btn-primary' : ''}`}
-            onClick={() => set('startingCapital', c)}
-          >
-            {c.toLocaleString('de-DE')}
-            {c === 500_000 ? ' (original)' : ''}
-          </button>
-        ))}
+      <Legend>Dauer und Kapital</Legend>
+      <div className="space-y-2.5">
+        <Slider
+          label="Runden"
+          value={options.totalRounds}
+          min={10}
+          max={80}
+          step={5}
+          hint={options.totalRounds === 50 ? 'wie im Original' : undefined}
+          format={(v) => String(v)}
+          onChange={(v) => set('totalRounds', v)}
+        />
+        <Slider
+          label="Betriebskapital"
+          value={options.startingCapital}
+          min={100_000}
+          max={2_000_000}
+          step={50_000}
+          hint={options.startingCapital === 500_000 ? 'wie im Original' : undefined}
+          format={(v) => v.toLocaleString('de-DE')}
+          onChange={(v) => set('startingCapital', v)}
+        />
       </div>
 
       <Nav onBack={onBack} onNext={onNext} />
@@ -324,10 +413,11 @@ function StepTisch({
         />
         <Choice
           title="Partie eröffnen"
-          blurb="Sie eröffnen eine Partie und laden andere mit einem Code dazu."
+          blurb="Jeder spielt auf seinem eigenen Gerät. Sie bekommen einen Code zum Weitergeben."
           selected={options.table === 'online-eroeffnen'}
           disabled={!CAPABILITIES['table:online-eroeffnen']!.ready}
           note={CAPABILITIES['table:online-eroeffnen']!.note}
+          onClick={() => set('table', 'online-eroeffnen' as Table)}
         />
       </div>
       <p className="text-ink-faint mt-2 text-[11px] italic">
@@ -335,21 +425,25 @@ function StepTisch({
         einzurichten.
       </p>
 
-      <Legend>Wer darf mitfahren?</Legend>
-      <div className="space-y-2">
-        <Choice
-          title="Nur zu Beginn"
-          blurb="Die Mitspieler stehen fest, bevor das erste Schiff ausläuft."
-          selected={options.joinPolicy === 'nur-zu-beginn'}
-          onClick={() => set('joinPolicy', 'nur-zu-beginn' as JoinPolicy)}
-        />
-        <Choice
-          title="Jederzeit"
-          blurb="Späte Ankömmlinge steigen mit eigenem Schiff und vollem Kapital ein."
-          selected={options.joinPolicy === 'jederzeit'}
-          onClick={() => set('joinPolicy', 'jederzeit' as JoinPolicy)}
-        />
-      </div>
+      {options.table === 'online-eroeffnen' && (
+        <>
+          <Legend>Wer darf mitfahren?</Legend>
+          <div className="space-y-2">
+            <Choice
+              title="Nur zu Beginn"
+              blurb="Die Mitspieler stehen fest, bevor das erste Schiff ausläuft."
+              selected={options.joinPolicy === 'nur-zu-beginn'}
+              onClick={() => set('joinPolicy', 'nur-zu-beginn' as JoinPolicy)}
+            />
+            <Choice
+              title="Jederzeit"
+              blurb="Späte Ankömmlinge steigen mit eigenem Schiff und vollem Kapital ein."
+              selected={options.joinPolicy === 'jederzeit'}
+              onClick={() => set('joinPolicy', 'jederzeit' as JoinPolicy)}
+            />
+          </div>
+        </>
+      )}
 
       <Nav onBack={onBack} onNext={onNext} />
     </div>
@@ -360,49 +454,114 @@ function StepNamen({
   options,
   names,
   setNames,
+  busy,
+  problem,
   onBack,
   onStart,
 }: {
   options: GameOptions
   names: string[]
   setNames: React.Dispatch<React.SetStateAction<string[]>>
+  busy: boolean
+  problem: string | null
   onBack: () => void
   onStart: () => void
 }) {
+  const online = options.table === 'online-eroeffnen'
   const setName = (i: number, value: string) =>
     setNames((prev) => prev.map((n, j) => (j === i ? value : n)))
   const ready = names.some((n) => n.trim())
+  const slots = online ? names.slice(0, 1) : names
 
   return (
     <div className="anim-fade">
-      <Legend>Die Mitspieler</Legend>
+      <Legend>{online ? 'Ihr Name' : 'Die Mitspieler'}</Legend>
       <div className="stagger grid gap-2.5 sm:grid-cols-2">
-        {names.map((name, i) => (
+        {slots.map((name, i) => (
           <TraderSlot
             key={i}
             index={i}
             name={name}
             onChange={(v) => setName(i, v)}
             onRemove={
-              names.length > 1 ? () => setNames((p) => p.filter((_, j) => j !== i)) : undefined
+              !online && names.length > 1
+                ? () => setNames((p) => p.filter((_, j) => j !== i))
+                : undefined
             }
           />
         ))}
       </div>
 
-      {names.length < 6 && (
+      {!online && names.length < 6 && (
         <button className="btn mt-3 w-full" onClick={() => setNames((p) => [...p, ''])}>
           Weiteren Kaufmann eintragen
         </button>
       )}
 
+      {online && (
+        <p className="text-ink-soft mt-3 text-center text-xs">
+          Die anderen tragen sich selbst ein, sobald sie den Code haben.
+        </p>
+      )}
+
       <p className="text-ink-faint mt-5 text-center text-[11px]">
         {options.mode === 'klassisch'
           ? 'Originalregeln · 50 Runden · an einem Gerät'
-          : `${options.totalRounds} Runden · ${options.startingCapital.toLocaleString('de-DE')} Kapital · an einem Gerät`}
+          : `${options.totalRounds} Runden · ${options.startingCapital.toLocaleString('de-DE')} Kapital · ${
+              online ? 'eigene Geräte' : 'ein Gerät'
+            }`}
       </p>
 
-      <Nav onBack={onBack} onNext={onStart} nextLabel="An Bord gehen" nextDisabled={!ready} />
+      {problem && <p className="text-rot mt-3 text-center text-sm">{problem}</p>}
+
+      <Nav
+        onBack={onBack}
+        onNext={onStart}
+        nextLabel={busy ? 'Einen Augenblick …' : online ? 'Partie eröffnen' : 'An Bord gehen'}
+        nextDisabled={!ready || busy}
+      />
+    </div>
+  )
+}
+
+function StepBeitreten({
+  initialCode,
+  onBack,
+  onJoin,
+}: {
+  initialCode: string
+  onBack: () => void
+  onJoin: (code: string, name: string) => void
+}) {
+  const [code, setCode] = useState(initialCode)
+  const [name, setName] = useState('')
+  const clean = code.trim().toUpperCase()
+  const ready = clean.length >= 3 && name.trim().length > 0
+
+  return (
+    <div className="anim-fade">
+      <Legend>Code der Partie</Legend>
+      <input
+        className="focusable paper-card tnum display w-full rounded-md px-3 py-3 text-center text-3xl tracking-[0.3em] uppercase outline-none"
+        value={code}
+        maxLength={8}
+        autoCapitalize="characters"
+        autoCorrect="off"
+        spellCheck={false}
+        placeholder="ABCD"
+        onChange={(e) => setCode(e.target.value.toUpperCase())}
+        aria-label="Code der Partie"
+      />
+
+      <Legend>Ihr Name</Legend>
+      <TraderSlot index={0} name={name} onChange={setName} />
+
+      <Nav
+        onBack={onBack}
+        onNext={() => onJoin(clean, name.trim())}
+        nextLabel="Beitreten"
+        nextDisabled={!ready}
+      />
     </div>
   )
 }

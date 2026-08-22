@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CLASSIC_PACK } from '@content/maps/classic'
 import { createContext } from './context'
-import { createGame } from './setup'
+import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
 import { buyOffers, legalSteps, portAt, standings } from './selectors'
 import { isPort } from './mapbuild'
@@ -9,6 +9,11 @@ import { netWorth } from './state'
 import type { GameAction } from './actions'
 
 const ctx = createContext(CLASSIC_PACK)
+
+/** Open a table, seat the given traders and start play. */
+function seated(names: string[], options: Parameters<typeof createGame>[1] = {}) {
+  return replay(ctx, createGame(ctx, options), openingActions(names))
+}
 
 describe('content', () => {
   it('holds all 72 Warenkarten with sane prices', () => {
@@ -69,7 +74,7 @@ describe('map', () => {
 })
 
 describe('a turn', () => {
-  const game = createGame(ctx, { names: ['Ada', 'Bo'], seed: 'test-1' })
+  const game = seated(['Ada', 'Bo'], { seed: 'test-1' })
 
   it('starts every ship in a harbour with 500.000', () => {
     for (const p of game.players) {
@@ -131,24 +136,24 @@ describe('a turn', () => {
 
 describe('determinism', () => {
   it('replays to exactly the same state', () => {
-    const a = createGame(ctx, { names: ['Ada', 'Bo'], seed: 'seed-42' })
+    const a = seated(['Ada', 'Bo'], { seed: 'seed-42' })
     const script: GameAction[] = [{ type: 'endTurn' }, { type: 'endTurn' }, { type: 'roll' }]
     const first = replay(ctx, a, script)
-    const b = createGame(ctx, { names: ['Ada', 'Bo'], seed: 'seed-42' })
+    const b = seated(['Ada', 'Bo'], { seed: 'seed-42' })
     const second = replay(ctx, b, script)
     expect(JSON.stringify(first)).toEqual(JSON.stringify(second))
   })
 
   it('gives the same trader for the same name', () => {
-    const a = createGame(ctx, { names: ['Tobias'], seed: 'x' })
-    const b = createGame(ctx, { names: ['Tobias'], seed: 'y' })
+    const a = seated(['Tobias'], { seed: 'x' })
+    const b = seated(['Tobias'], { seed: 'y' })
     expect(a.players[0]!.persona).toEqual(b.players[0]!.persona)
   })
 })
 
 describe('scoring', () => {
   it('ranks by cash plus cargo', () => {
-    const game = createGame(ctx, { names: ['Ada', 'Bo'], seed: 'score' })
+    const game = seated(['Ada', 'Bo'], { seed: 'score' })
     const table = standings(game)
     expect(table).toHaveLength(2)
     expect(table[0]!.worth).toBe(netWorth(table[0]!.player))

@@ -1,4 +1,4 @@
-import type { KonjunkturCard } from '@engine/types'
+import type { KonjunkturCard } from '../engine/types'
 
 /**
  * The 27 Konjunktur-Karten, transcribed from the photographed deck.

@@ -8,6 +8,14 @@ import type { GoodId, Money, NodeId, PortId } from './types'
  * over a wire instead of calling the reducer directly.
  */
 export type GameAction =
+  /**
+   * Taking a ship out. This is an action rather than a setup parameter so a
+   * latecomer is simply another entry in the log - the same mechanism that
+   * makes replay, saving and network sync work.
+   */
+  | { readonly type: 'join'; readonly playerId: string; readonly name: string }
+  /** The host opens the season. */
+  | { readonly type: 'start' }
   | { readonly type: 'roll' }
   | { readonly type: 'step'; readonly to: NodeId }
   | { readonly type: 'drawKonjunktur' }
@@ -20,6 +28,14 @@ export type GameAction =
  * Events are produced by the reducer; they never feed back into it.
  */
 export type GameEvent =
+  | {
+      readonly type: 'playerJoined'
+      readonly playerId: string
+      readonly name: string
+      readonly portId: PortId
+      readonly midGame: boolean
+    }
+  | { readonly type: 'gameStarted' }
   | { readonly type: 'rolled'; readonly playerId: string; readonly value: number }
   | { readonly type: 'moved'; readonly playerId: string; readonly to: NodeId }
   | { readonly type: 'arrived'; readonly playerId: string; readonly portId: PortId }

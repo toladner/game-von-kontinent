@@ -4,6 +4,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from '@app/App'
 import { useGame } from '@app/store'
 import { legalSteps, portAt } from '@engine/selectors'
+import { createGame } from '@engine/setup'
+import { applyAction, replay } from '@engine/reducer'
 
 /**
  * A stand-in for looking at the thing: boots the real app, walks the real
@@ -45,10 +47,14 @@ describe('the front page', () => {
     expect((screen.getByText('In Echtzeit').closest('button') as HTMLButtonElement).disabled).toBe(
       true,
     )
+    // Dauer and Kapital are sliders, not fixed buttons.
+    expect((screen.getByLabelText('Runden') as HTMLInputElement).type).toBe('range')
+    expect((screen.getByLabelText('Betriebskapital') as HTMLInputElement).type).toBe('range')
+
     fireEvent.click(screen.getByText('Weiter'))
     expect(
       (screen.getByText('Partie eröffnen').closest('button') as HTMLButtonElement).disabled,
-    ).toBe(true)
+    ).toBe(false)
     expect(
       (screen.getByText('An einem Gerät').closest('button') as HTMLButtonElement).disabled,
     ).toBe(false)
@@ -124,6 +130,53 @@ describe('the board', () => {
     expect(useGame.getState().state!.phase).toBe('over')
     expect(screen.getByText(/Wer hat den Handel gemacht/)).toBeTruthy()
     expect(screen.getByText('Schlußabrechnung')).toBeTruthy()
+  })
+})
+
+describe('the lobby', () => {
+  it('gathers players before anyone sails', () => {
+    render(<App />)
+    const ctx = useGame.getState().ctx
+
+    // A table opened by hand: nobody aboard until they join.
+    act(() => {
+      useGame.setState({ state: createGame(ctx, { seed: 'lobby-seed' }) })
+    })
+    expect(useGame.getState().state!.phase).toBe('lobby')
+    expect(screen.getByText('Am Kai')).toBeTruthy()
+
+    act(() => useGame.getState().dispatch({ type: 'join', playerId: 'a', name: 'Ada' }))
+    act(() => useGame.getState().dispatch({ type: 'join', playerId: 'b', name: 'Bo' }))
+
+    const state = useGame.getState().state!
+    expect(state.players).toHaveLength(2)
+    // Whoever opened the table gives the word.
+    expect(state.hostId).toBe('a')
+    expect(state.players[0]!.homePort).not.toBe(state.players[1]!.homePort)
+
+    act(() => useGame.getState().dispatch({ type: 'start' }))
+    expect(useGame.getState().state!.phase).toBe('port')
+  })
+
+  it('turns a latecomer away unless the table allows it', () => {
+    const ctx = useGame.getState().ctx
+    const shut = replay(ctx, createGame(ctx, { seed: 'shut' }), [
+      { type: 'join', playerId: 'a', name: 'Ada' },
+      { type: 'start' },
+    ])
+    expect(applyAction(ctx, shut, { type: 'join', playerId: 'z', name: 'Zoe' }).events[0])
+      .toMatchObject({ type: 'rejected' })
+
+    const open = replay(ctx, createGame(ctx, { seed: 'open', joinPolicy: 'jederzeit' }), [
+      { type: 'join', playerId: 'a', name: 'Ada' },
+      { type: 'start' },
+    ])
+    const late = applyAction(ctx, open, { type: 'join', playerId: 'z', name: 'Zoe' })
+    expect(late.events[0]).toMatchObject({ type: 'playerJoined', midGame: true })
+    expect(late.state.players).toHaveLength(2)
+    // A latecomer provisions in harbour on their first turn, like everyone.
+    expect(late.state.players[1]!.hasDeparted).toBe(false)
+    expect(late.state.players[1]!.cash).toBe(late.state.config.startingCapital)
   })
 })
 

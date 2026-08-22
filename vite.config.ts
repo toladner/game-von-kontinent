@@ -38,6 +38,11 @@ export default defineConfig({
     // Cloudflare quick tunnels hand out a random *.trycloudflare.com name;
     // without this Vite refuses the request as an unknown host.
     allowedHosts: ['.trycloudflare.com', '.ngrok-free.app', '.loca.lt'],
+    // `npm run server` runs the Partieserver on 8787; the game talks to it
+    // through the same origin so no CORS or URL juggling is needed.
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true, ws: true },
+    },
   },
   resolve: {
     alias: {

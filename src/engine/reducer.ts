@@ -1,6 +1,7 @@
 import type { ActionResult, GameAction, GameEvent } from './actions'
 import type { CargoItem, GameState, PlayerState } from './state'
 import { activePlayer } from './state'
+import { makePersona } from './persona'
 import { goodOf, type EngineContext } from './context'
 import { isPort } from './mapbuild'
 import { rollDie } from './rng'
@@ -328,12 +329,23 @@ function advanceTurn(ctx: EngineContext, draft: Draft, events: GameEvent[]): voi
 // The reducer
 // ---------------------------------------------------------------------------
 
+const MAX_PLAYERS = 6
+
 export function applyAction(
   ctx: EngineContext,
   state: GameState,
   action: GameAction,
 ): ActionResult {
   if (state.phase === 'over') return reject(state, 'Das Spiel ist beendet.')
+
+  // Joining and starting stand apart: they are the only actions that do not
+  // belong to whoever is currently at the table.
+  if (action.type === 'join') return applyJoin(ctx, state, action)
+  if (action.type === 'start') return applyStart(state)
+
+  if (state.phase === 'lobby') {
+    return reject(state, 'Die Partie hat noch nicht begonnen.')
+  }
 
   const draft = draftOf(state)
   const events: GameEvent[] = []
@@ -471,6 +483,80 @@ export function applyAction(
 
   draft.seq += 1
   return { state: draft as GameState, events }
+}
+
+/**
+ * A latecomer is dealt the next harbour from the shuffled pool and the full
+ * starting capital, and provisions on their first turn exactly like everyone
+ * else — `hasDeparted: false` does that work.
+ */
+function applyJoin(
+  ctx: EngineContext,
+  state: GameState,
+  action: Extract<GameAction, { type: 'join' }>,
+): ActionResult {
+  if (state.players.some((p) => p.id === action.playerId)) {
+    return reject(state, 'Dieser Kaufmann ist bereits eingetragen.')
+  }
+  if (state.players.length >= MAX_PLAYERS) {
+    return reject(state, `Mehr als ${MAX_PLAYERS} Schiffe fahren nicht.`)
+  }
+  if (state.phase !== 'lobby' && state.joinPolicy !== 'jederzeit') {
+    return reject(state, 'Diese Partie nimmt keine Nachzügler auf.')
+  }
+
+  const draft = draftOf(state)
+  const name = action.name.trim() || `Kaufmann ${state.players.length + 1}`
+
+  const pool = [...draft.startPortPool]
+  const homePort = pool.shift() ?? ctx.pack.map.startPorts[0]!
+  draft.startPortPool = pool.length > 0 ? pool : [...ctx.pack.map.startPorts]
+
+  const player: PlayerState = {
+    id: action.playerId,
+    name,
+    persona: makePersona(name, ctx.pack.id),
+    colorIndex: state.players.length,
+    cash: draft.config.startingCapital,
+    cargo: [],
+    ship: { nodeId: homePort, cameFrom: null, skipTurns: 0 },
+    vehicle: draft.config.startingVehicle,
+    homePort,
+    purchasesThisVisit: [],
+    hasDeparted: false,
+    levyPaidRound: { steuer: null, versicherung: null },
+  }
+
+  draft.players = [...draft.players, player]
+  if (draft.hostId === null) draft.hostId = player.id
+  draft.seq += 1
+
+  return {
+    state: draft as GameState,
+    events: [
+      {
+        type: 'playerJoined',
+        playerId: player.id,
+        name,
+        portId: homePort,
+        midGame: state.phase !== 'lobby',
+      },
+    ],
+  }
+}
+
+function applyStart(state: GameState): ActionResult {
+  if (state.phase !== 'lobby') return reject(state, 'Die Partie läuft bereits.')
+  if (state.players.length < 1) return reject(state, 'Es braucht mindestens einen Kaufmann.')
+
+  const draft = draftOf(state)
+  draft.phase = 'port' // everyone provisions in their Ausgangshafen first
+  draft.activeIndex = 0
+  draft.startPlayerIndex = 0
+  draft.round = 1
+  draft.seq += 1
+
+  return { state: draft as GameState, events: [{ type: 'gameStarted' }] }
 }
 
 /** Fold a whole action list - used by replays, tests and save files. */

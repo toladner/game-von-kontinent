@@ -1,4 +1,4 @@
-import type { Port } from '@engine/types'
+import type { Port } from '../../../engine/types'
 
 /**
  * Every Ausfuhrhafen printed on the classic board, at its real position.
