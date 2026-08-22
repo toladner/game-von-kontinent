@@ -1,10 +1,16 @@
-@import 'tailwindcss';
-
 /* ==========================================================================
    Von Kontinent zu Kontinent — Ausstattung
    A 1950s export-trade parlour game: pressed board colours, tan Warenkarten
    printed in green, pale-green Konjunktur slips, and a lot of honest paper.
+
+   Everything below sits in a cascade layer on purpose. Unlayered CSS beats
+   layered CSS whatever the source order, so a plain `.paper { position:
+   relative }` would quietly defeat Tailwind's `fixed` utility — which is
+   exactly how the bottom sheet once ended up in normal flow, pushed off the
+   bottom of the screen.
    ========================================================================== */
+
+@import 'tailwindcss';
 
 @theme {
   /* Paper and ink */
@@ -37,6 +43,9 @@
   --font-teletype: 'Courier New', 'Nimbus Mono PS', monospace;
 }
 
+/* --- Grundlage ------------------------------------------------------- */
+
+@layer base {
 :root {
   --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
   color-scheme: light;
@@ -50,18 +59,12 @@ html {
   height: 100%;
 }
 
-/*
- * The app owns the window. `inset: 0` on a fixed body gives the real visible
- * box on a telephone, without fighting the address bar the way 100vh does,
- * and #root then resolves its 100% against a definite height.
- */
 #root {
   position: fixed;
   inset: 0;
   overflow: hidden;
 }
 
-/* Respect the notch and the home indicator. */
 :root {
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -69,15 +72,10 @@ html {
   --safe-r: env(safe-area-inset-right, 0px);
 }
 
-/* Touch targets never smaller than a thumb. */
 button,
 [role='button'] {
   min-height: 44px;
   touch-action: manipulation;
-}
-
-.btn-sm {
-  min-height: 32px;
 }
 
 body {
@@ -94,212 +92,6 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* --------------------------------------------------------------------------
-   Paper surfaces
-   -------------------------------------------------------------------------- */
-
-.paper {
-  position: relative;
-  background-color: var(--color-paper);
-  background-image:
-    radial-gradient(120% 90% at 50% 0%, rgb(255 250 235 / 0.55), transparent 60%),
-    linear-gradient(180deg, rgb(0 0 0 / 0), rgb(90 70 40 / 0.09));
-  box-shadow:
-    inset 0 0 40px rgb(120 95 55 / 0.10),
-    0 1px 0 rgb(255 255 255 / 0.35);
-}
-
-.paper::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--paper-grain);
-  mix-blend-mode: multiply;
-  opacity: 0.26;
-  pointer-events: none;
-}
-
-.paper-card {
-  background-color: var(--color-card);
-  background-image: linear-gradient(175deg, rgb(255 250 230 / 0.5), rgb(120 90 40 / 0.12));
-  border: 1px solid rgb(90 70 40 / 0.35);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.4),
-    0 2px 3px rgb(40 30 15 / 0.25);
-}
-
-.paper-slip {
-  background-color: var(--color-slip);
-  background-image: linear-gradient(170deg, rgb(255 255 240 / 0.55), rgb(80 100 40 / 0.14));
-  border: 1px solid rgb(70 90 40 / 0.4);
-}
-
-/*
- * The Konjunktur slips came on perforated strips and were cut apart with
- * scissors. Scalloped top and bottom edges, masked out of the element itself
- * so the paper texture shows through the notches.
- */
-.coupon-edge {
-  --r: 6px;
-  -webkit-mask:
-    radial-gradient(var(--r) at 50% 0, #0000 98%, #000) 0 0 / calc(2 * var(--r)) 100% repeat-x,
-    radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% / calc(2 * var(--r)) 100%
-      repeat-x;
-  -webkit-mask-composite: source-in;
-  mask:
-    radial-gradient(var(--r) at 50% 0, #0000 98%, #000) 0 0 / calc(2 * var(--r)) 100% repeat-x,
-    radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% / calc(2 * var(--r)) 100%
-      repeat-x;
-  mask-composite: intersect;
-}
-
-/* A single torn edge, for receipts and tickets. */
-.torn-bottom {
-  --r: 5px;
-  -webkit-mask: radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% /
-    calc(2 * var(--r)) 100% repeat-x;
-  mask: radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% / calc(2 * var(--r)) 100%
-    repeat-x;
-}
-
-/* --------------------------------------------------------------------------
-   Type
-   -------------------------------------------------------------------------- */
-
-.display {
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.letterpress {
-  text-shadow:
-    0 1px 0 rgb(255 250 235 / 0.5),
-    0 -1px 0 rgb(60 45 20 / 0.15);
-}
-
-.smallcaps {
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.14em;
-}
-
-.teletype {
-  font-family: var(--font-teletype);
-  letter-spacing: 0.02em;
-}
-
-.press-green {
-  color: var(--color-press);
-}
-
-.rule {
-  border: 0;
-  border-top: 1px solid rgb(90 70 40 / 0.32);
-}
-
-.rule-double {
-  border: 0;
-  border-top: 3px double rgb(90 70 40 / 0.4);
-}
-
-/* Numerals should line up in the ledger. */
-.tnum {
-  font-variant-numeric: tabular-nums lining-nums;
-}
-
-/* --------------------------------------------------------------------------
-   Controls
-   -------------------------------------------------------------------------- */
-
-.btn {
-  font-family: var(--font-body);
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.1em;
-  padding: 0.5rem 1.1rem;
-  border: 1px solid rgb(70 55 30 / 0.5);
-  border-radius: 2px;
-  background-image: linear-gradient(180deg, rgb(255 250 235 / 0.6), rgb(120 95 55 / 0.14));
-  background-color: var(--color-paper-2);
-  color: var(--color-ink);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.5),
-    0 2px 0 rgb(60 45 20 / 0.25);
-  cursor: pointer;
-  transition: transform 90ms ease, box-shadow 90ms ease, filter 120ms ease;
-}
-
-.btn:hover:not(:disabled) {
-  filter: brightness(1.04);
-}
-
-.btn:active:not(:disabled) {
-  transform: translateY(2px);
-  box-shadow: inset 0 1px 2px rgb(60 45 20 / 0.35);
-}
-
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background-color: #2f5f4a;
-  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.22), rgb(0 0 0 / 0.18));
-  color: #f3ecd8;
-  border-color: #21432f;
-}
-
-.btn-danger {
-  background-color: #a8382b;
-  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.2), rgb(0 0 0 / 0.2));
-  color: #f6e9dc;
-  border-color: #7d281e;
-}
-
-.btn:focus-visible,
-.focusable:focus-visible {
-  outline: 2px solid var(--color-gold);
-  outline-offset: 2px;
-}
-
-/* Rubber stamp, used for status flashes like VERKAUFT or ZOLL */
-.stamp {
-  font-family: var(--font-display);
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.18em;
-  border: 3px solid currentColor;
-  border-radius: 3px;
-  padding: 0.1em 0.45em;
-  transform: rotate(-7deg);
-  opacity: 0.85;
-}
-
-/* --------------------------------------------------------------------------
-   Board
-   -------------------------------------------------------------------------- */
-
-.board-shell {
-  background:
-    radial-gradient(120% 120% at 50% -20%, #4a4032, #2b2419 70%);
-}
-
-.sea-lane {
-  stroke: var(--color-route);
-  stroke-linecap: round;
-  fill: none;
-}
-
-.port-label {
-  font-family: var(--font-body);
-  font-size: 7px;
-  fill: var(--color-ink);
-  paint-order: stroke;
-  stroke: rgb(255 252 240 / 0.95);
-  stroke-width: 2.4px;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
@@ -307,15 +99,14 @@ body {
   }
 }
 
-/* Thin, unobtrusive scrollbars that suit the paper. */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgb(120 95 55 / 0.5) transparent;
 }
+}
 
-/* --------------------------------------------------------------------------
-   Bewegung
-   -------------------------------------------------------------------------- */
+
+/* --- Bewegung (Keyframes gehören in keine Ebene) ---------------------- */
 
 @keyframes rise {
   from {
@@ -414,41 +205,291 @@ body {
   }
 }
 
+
+/* --- Ausstattung ----------------------------------------------------- */
+
+@layer components {
+/*
+ * The app owns the window. `inset: 0` on a fixed body gives the real visible
+ * box on a telephone, without fighting the address bar the way 100vh does,
+ * and #root then resolves its 100% against a definite height.
+ */
+
+/* Respect the notch and the home indicator. */
+
+/* Touch targets never smaller than a thumb. */
+
+.btn-sm {
+  min-height: 32px;
+}
+
+/* --------------------------------------------------------------------------
+   Paper surfaces
+   -------------------------------------------------------------------------- */
+
+.paper {
+  position: relative;
+  background-color: var(--color-paper);
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgb(255 250 235 / 0.55), transparent 60%),
+    linear-gradient(180deg, rgb(0 0 0 / 0), rgb(90 70 40 / 0.09));
+  box-shadow:
+    inset 0 0 40px rgb(120 95 55 / 0.10),
+    0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+.paper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--paper-grain);
+  mix-blend-mode: multiply;
+  opacity: 0.26;
+  pointer-events: none;
+}
+
+.paper-card {
+  background-color: var(--color-card);
+  background-image: linear-gradient(175deg, rgb(255 250 230 / 0.5), rgb(120 90 40 / 0.12));
+  border: 1px solid rgb(90 70 40 / 0.35);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    0 2px 3px rgb(40 30 15 / 0.25);
+}
+
+.paper-slip {
+  background-color: var(--color-slip);
+  background-image: linear-gradient(170deg, rgb(255 255 240 / 0.55), rgb(80 100 40 / 0.14));
+  border: 1px solid rgb(70 90 40 / 0.4);
+}
+
+/*
+ * The Konjunktur slips came on perforated strips and were cut apart with
+ * scissors. Scalloped top and bottom edges, masked out of the element itself
+ * so the paper texture shows through the notches.
+ */
+
+.coupon-edge {
+  --r: 6px;
+  -webkit-mask:
+    radial-gradient(var(--r) at 50% 0, #0000 98%, #000) 0 0 / calc(2 * var(--r)) 100% repeat-x,
+    radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% / calc(2 * var(--r)) 100%
+      repeat-x;
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(var(--r) at 50% 0, #0000 98%, #000) 0 0 / calc(2 * var(--r)) 100% repeat-x,
+    radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% / calc(2 * var(--r)) 100%
+      repeat-x;
+  mask-composite: intersect;
+}
+
+/* A single torn edge, for receipts and tickets. */
+
+.torn-bottom {
+  --r: 5px;
+  -webkit-mask: radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% /
+    calc(2 * var(--r)) 100% repeat-x;
+  mask: radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% / calc(2 * var(--r)) 100%
+    repeat-x;
+}
+
+/* --------------------------------------------------------------------------
+   Type
+   -------------------------------------------------------------------------- */
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.letterpress {
+  text-shadow:
+    0 1px 0 rgb(255 250 235 / 0.5),
+    0 -1px 0 rgb(60 45 20 / 0.15);
+}
+
+.smallcaps {
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.14em;
+}
+
+.teletype {
+  font-family: var(--font-teletype);
+  letter-spacing: 0.02em;
+}
+
+.press-green {
+  color: var(--color-press);
+}
+
+.rule {
+  border: 0;
+  border-top: 1px solid rgb(90 70 40 / 0.32);
+}
+
+.rule-double {
+  border: 0;
+  border-top: 3px double rgb(90 70 40 / 0.4);
+}
+
+/* Numerals should line up in the ledger. */
+
+.tnum {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Controls
+   -------------------------------------------------------------------------- */
+
+.btn {
+  font-family: var(--font-body);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.1em;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid rgb(70 55 30 / 0.5);
+  border-radius: 2px;
+  background-image: linear-gradient(180deg, rgb(255 250 235 / 0.6), rgb(120 95 55 / 0.14));
+  background-color: var(--color-paper-2);
+  color: var(--color-ink);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.5),
+    0 2px 0 rgb(60 45 20 / 0.25);
+  cursor: pointer;
+  transition: transform 90ms ease, box-shadow 90ms ease, filter 120ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 2px rgb(60 45 20 / 0.35);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: #2f5f4a;
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.22), rgb(0 0 0 / 0.18));
+  color: #f3ecd8;
+  border-color: #21432f;
+}
+
+.btn-danger {
+  background-color: #a8382b;
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.2), rgb(0 0 0 / 0.2));
+  color: #f6e9dc;
+  border-color: #7d281e;
+}
+
+.btn:focus-visible,
+.focusable:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+/* Rubber stamp, used for status flashes like VERKAUFT or ZOLL */
+
+.stamp {
+  font-family: var(--font-display);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.18em;
+  border: 3px solid currentColor;
+  border-radius: 3px;
+  padding: 0.1em 0.45em;
+  transform: rotate(-7deg);
+  opacity: 0.85;
+}
+
+/* --------------------------------------------------------------------------
+   Board
+   -------------------------------------------------------------------------- */
+
+.board-shell {
+  background:
+    radial-gradient(120% 120% at 50% -20%, #4a4032, #2b2419 70%);
+}
+
+.sea-lane {
+  stroke: var(--color-route);
+  stroke-linecap: round;
+  fill: none;
+}
+
+.port-label {
+  font-family: var(--font-body);
+  font-size: 7px;
+  fill: var(--color-ink);
+  paint-order: stroke;
+  stroke: rgb(255 252 240 / 0.95);
+  stroke-width: 2.4px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* Thin, unobtrusive scrollbars that suit the paper. */
+
+/* --------------------------------------------------------------------------
+   Bewegung
+   -------------------------------------------------------------------------- */
+
 .anim-rise {
   animation: rise 240ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
+
 .anim-sheet {
   animation: sheet-up 280ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
 
 /* Height animates from the class so a drag can suspend it inline. */
+
 .sheet {
   transition: height 260ms cubic-bezier(0.2, 0.9, 0.25, 1);
 }
+
 .anim-fade {
   animation: fade-in 200ms ease both;
 }
+
 .anim-deal {
   animation: deal-in 380ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
+
 .anim-stamp {
   animation: stamp-down 420ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
 }
+
 .anim-tumble {
   animation: tumble 620ms cubic-bezier(0.25, 0.9, 0.3, 1) both;
 }
+
 .anim-flash {
   animation: coin-flash 900ms ease-out both;
 }
 
 /* Staggered list entrances without a library. */
+
 .stagger > * {
   animation: rise 260ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
+
 .stagger > *:nth-child(1) { animation-delay: 0ms; }
+
 .stagger > *:nth-child(2) { animation-delay: 35ms; }
+
 .stagger > *:nth-child(3) { animation-delay: 70ms; }
+
 .stagger > *:nth-child(4) { animation-delay: 105ms; }
+
 .stagger > *:nth-child(5) { animation-delay: 140ms; }
+
 .stagger > *:nth-child(6) { animation-delay: 175ms; }
+
 .stagger > *:nth-child(n + 7) { animation-delay: 210ms; }
+}
