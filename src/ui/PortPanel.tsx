@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { harbourCharacters, harbourGuide, type HarbourCharacter } from '@engine/persona'
-import { harbourAdvice, leavingEmptyHanded, type Advice } from '@engine/advice'
+import {
+  harbourAdvice,
+  harbourGreeting,
+  leavingEmptyHanded,
+  type Advice,
+} from '@engine/advice'
 import {
   buyOffers,
   marketReport,
@@ -43,6 +48,8 @@ export function PortSheet({
   onBuy,
   onSell,
   onLeave,
+  greeting,
+  onEnter,
 }: {
   ctx: EngineContext
   state: GameState
@@ -53,6 +60,9 @@ export function PortSheet({
   onBuy: (goodId: number) => void
   onSell: (uid: string) => void
   onLeave: () => void
+  /** The gangway is down but nobody has stepped ashore yet. */
+  greeting: boolean
+  onEnter: () => void
 }) {
   const port = portOf(ctx, portId)
   const country = ctx.pack.map.countries.find((c) => c.id === port.country)
@@ -87,6 +97,25 @@ export function PortSheet({
   useEffect(() => {
     if (!empty) setConfirmEmpty(false)
   }, [empty])
+
+  if (greeting) {
+    return (
+      <Sheet
+        snap={snap}
+        onSnap={onSnap}
+        title={port.name}
+        subtitle={country?.name}
+        accent={color.ink}
+        footer={
+          <button className="btn btn-primary w-full text-base" onClick={onEnter}>
+            Hafen betreten
+          </button>
+        }
+      >
+        <Landfall ctx={ctx} state={state} player={player} portId={portId} guide={guide} />
+      </Sheet>
+    )
+  }
 
   return (
     <Sheet
@@ -264,6 +293,41 @@ export function PortSheet({
         </div>
       )}
     </Sheet>
+  )
+}
+
+/**
+ * Stepping ashore.
+ *
+ * Nothing to do here, on purpose: you meet the person before you meet the
+ * ledgers. Having shaken hands once, the small portrait in the corner of the
+ * trading panel afterwards reads as somebody to ask rather than decoration.
+ */
+function Landfall({
+  ctx,
+  state,
+  player,
+  portId,
+  guide,
+}: {
+  ctx: EngineContext
+  state: GameState
+  player: PlayerState
+  portId: string
+  guide: HarbourCharacter
+}) {
+  const { headline, body } = harbourGreeting(ctx, state, player, portId)
+  return (
+    <div className="anim-fade flex h-full flex-col items-center justify-center px-2 text-center">
+      <Portrait traits={guide.portrait} size={104} />
+      <p className="smallcaps text-ink-soft mt-3 text-[10px]">{guide.role}</p>
+      <p className="display text-lg leading-tight">{guide.name}</p>
+      <hr className="rule my-3 w-24" />
+      <h3 className="display letterpress text-xl leading-tight">{headline}</h3>
+      <p className="text-ink-soft mx-auto mt-2 max-w-sm text-[13px] leading-relaxed italic">
+        „{body}“
+      </p>
+    </div>
   )
 }
 

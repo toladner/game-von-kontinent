@@ -162,3 +162,66 @@ export function leavingEmptyHanded(
   if (state.config.maxPurchasesPerPort - ship.purchasesThisVisit.length <= 0) return false
   return buyOffers(ctx, state, player, portId).some((o) => o.status === 'ok')
 }
+
+// ---------------------------------------------------------------------------
+// Arrival
+// ---------------------------------------------------------------------------
+
+export interface Greeting {
+  readonly headline: string
+  /** Two sentences at most: who is speaking, and what this harbour means. */
+  readonly body: string
+}
+
+/**
+ * What the Makler says as the gangway goes down, before any panel opens.
+ *
+ * Its real job is an introduction — meeting the person first is what makes it
+ * obvious afterwards that they are there to be asked. So the offer of help is
+ * phrased differently in each port rather than repeating one line 105 times.
+ */
+const OFFERS = [
+  'Ich führe hier die Bücher — wenn Sie nicht weiterwissen, fragen Sie mich.',
+  'Solange Ihr Schiff hier liegt, stehe ich für Sie am Kai.',
+  'Ich kenne jeden Kontrakt in diesem Hafen. Fragen kostet nichts.',
+  'Wenn Sie nicht wissen, was zu tun ist: ich bin gleich hier.',
+  'Man schickt mich zu jedem fremden Schiff. Heute also zu Ihnen.',
+] as const
+
+export function harbourGreeting(
+  ctx: EngineContext,
+  state: GameState,
+  player: PlayerState,
+  portId: PortId,
+): Greeting {
+  const port = portOf(ctx, portId)
+  const ship = flagship(player)
+  const daheim = player.homePort === portId
+
+  // Deterministic per harbour, so the same Makler always opens the same way.
+  const offer = OFFERS[[...portId].reduce((n, c) => n + c.charCodeAt(0), 0) % OFFERS.length]!
+
+  const exports = ctx.exportsOf(portId).map((id) => goodOf(ctx, id).name)
+  const named = exports.slice(0, 3).join(', ')
+  const ware =
+    exports.length === 0
+      ? 'Ausgeführt wird von hier nichts.'
+      : exports.length > 3
+        ? `Von hier gehen ${named} und anderes in alle Welt.`
+        : `Von hier gehen ${named} in alle Welt.`
+
+  const sellsHere = saleQuotes(ctx, state, player, portId).find(
+    (q) => q.kind === 'markt' && q.profit > 0,
+  )
+  const laderaum =
+    ship.cargo.length === 0
+      ? 'Ihr Laderaum ist leer.'
+      : sellsHere
+        ? `Und Ihre ${goodOf(ctx, sellsHere.item.goodId).name} findet hier einen Abnehmer.`
+        : `Ihre ${ship.cargo.length} Posten nimmt hier allerdings niemand.`
+
+  return {
+    headline: daheim ? `Wieder daheim in ${port.name}.` : `Willkommen in ${port.name}!`,
+    body: `${offer} ${ware} ${laderaum}`,
+  }
+}

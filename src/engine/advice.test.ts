@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { CLASSIC_PACK } from '@content/maps/classic'
-import { createContext } from './context'
+import { createContext, portOf } from './context'
 import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
 import { buyOffers, portAt } from './selectors'
 import { flagship, type GameState } from './state'
-import { harbourAdvice, leavingEmptyHanded } from './advice'
+import { harbourAdvice, harbourGreeting, leavingEmptyHanded } from './advice'
 
 const ctx = createContext(CLASSIC_PACK)
 
@@ -111,5 +111,56 @@ describe('casting off', () => {
     const broke: GameState = { ...s, players: [{ ...player, cash: 0 }, ...s.players.slice(1)] }
     expect(leavingEmptyHanded(ctx, broke, broke.players[0]!, here(broke))).toBe(false)
     expect(harbourAdvice(ctx, broke, broke.players[0]!, here(broke)).id).toBe('leer-kein-geld')
+  })
+})
+
+describe('stepping ashore', () => {
+  it('names the harbour, what it ships and what you are carrying', () => {
+    const s = table()
+    const port = here(s)
+    const g = harbourGreeting(ctx, s, s.players[0]!, port)
+
+    expect(g.headline).toContain(portOf(ctx, port).name)
+    expect(g.body).toContain('Ihr Laderaum ist leer.')
+    const goods = ctx.exportsOf(port).map((id) => ctx.goodsById.get(id)!.name)
+    expect(goods.some((name) => g.body.includes(name))).toBe(true)
+  })
+
+  it('greets a merchant standing in their own home port differently', () => {
+    const s = table()
+    const player = s.players[0]!
+    expect(player.homePort).toBe(here(s))
+    expect(harbourGreeting(ctx, s, player, here(s)).headline).toMatch(/Wieder daheim/)
+
+    const away = [...ctx.portsById.keys()].find((id) => id !== player.homePort)!
+    expect(harbourGreeting(ctx, s, player, away).headline).toMatch(/Willkommen in/)
+  })
+
+  it('says the same thing every time you call at the same quay', () => {
+    const s = table()
+    expect(harbourGreeting(ctx, s, s.players[0]!, here(s))).toEqual(
+      harbourGreeting(ctx, s, s.players[0]!, here(s)),
+    )
+  })
+
+  it('does not open with the same words in every port', () => {
+    const s = table()
+    const openings = new Set(
+      [...ctx.portsById.keys()]
+        .slice(0, 30)
+        .map((id) => harbourGreeting(ctx, s, s.players[0]!, id).body.split('.')[0]),
+    )
+    expect(openings.size).toBeGreaterThan(2)
+  })
+
+  it('mentions a sale waiting here once there is cargo for it', () => {
+    const s = table()
+    const offer = buyOffers(ctx, s, s.players[0]!, here(s)).find((o) => o.status === 'ok')!
+    const loaded = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
+
+    // Where she stands the good is a local glut, so no buyer — say so plainly.
+    expect(harbourGreeting(ctx, loaded, loaded.players[0]!, here(loaded)).body).toMatch(
+      /nimmt hier allerdings niemand/,
+    )
   })
 })

@@ -50,6 +50,17 @@ export function GameScreen() {
   const [kind, setKind] = useState<SheetKind>(null)
   const [snap, setSnap] = useState<SheetSnap>('peek')
   const [pigeonFor, setPigeonFor] = useState<string | null>(null)
+  const [greeting, setGreeting] = useState(true)
+
+  /**
+   * A new harbour under the keel, or the wheel in somebody else's hands: the
+   * Makler comes aboard before the ledgers do. Kept out here rather than in
+   * the sheet so that closing and reopening it mid-visit does not repeat the
+   * welcome.
+   */
+  useEffect(() => {
+    setGreeting(portId !== null)
+  }, [portId, player.id])
 
   // The harbour opens itself; everything else waits to be asked for.
   useEffect(() => {
@@ -201,6 +212,8 @@ export function GameScreen() {
           onBuy={(goodId) => dispatch({ type: 'buy', goodId })}
           onSell={(uid) => dispatch({ type: 'sell', uid })}
           onLeave={() => dispatch({ type: 'endTurn' })}
+          greeting={greeting}
+          onEnter={() => setGreeting(false)}
         />
       )}
 

@@ -20,6 +20,17 @@ beforeEach(() => {
   useGame.getState().abandon()
 })
 
+/**
+ * Step past the Makler's welcome, which every arrival opens with.
+ *
+ * Harmless when it is not showing, so tests that only care about the trading
+ * panels can call it after any move without checking first.
+ */
+function enterHarbour(): void {
+  const button = screen.queryByRole('button', { name: 'Hafen betreten' })
+  if (button) act(() => { fireEvent.click(button) })
+}
+
 describe('the front page', () => {
   it('offers the two modes and walks the classic path to the names', () => {
     render(<App />)
@@ -81,7 +92,11 @@ describe('the board', () => {
       useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'smoke-seed' })
     })
 
-    // Starts in harbour: the sheet is open and the board is drawn behind it.
+    // Landfall first: the Makler introduces themselves before the ledgers.
+    expect(screen.getByText(/Willkommen in|Wieder daheim in/)).toBeTruthy()
+    enterHarbour()
+
+    // Then the harbour proper, with the board drawn behind it.
     expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
     expect(screen.getByText('Angebot')).toBeTruthy()
     expect(document.querySelector('svg[aria-label]')).toBeTruthy()
@@ -114,6 +129,7 @@ describe('the board', () => {
   it('shows a buy as a change of cash and cargo', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'buy-seed' }))
+    enterHarbour()
 
     const before = useGame.getState().state!.players[0]!
     const ctx = useGame.getState().ctx
@@ -134,6 +150,7 @@ describe('the board', () => {
   it('reaches the final reckoning and ranks the houses', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 1, seed: 'end-seed' }))
+    enterHarbour()
 
     // One-round game: both provision, and the wrap past the last round settles up.
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
@@ -230,6 +247,7 @@ describe('the map on a touch screen', () => {
   it('survives a gesture that is cancelled mid-drag', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'touch' }))
+    enterHarbour()
 
     const svg = board()
     expect(svg).toBeTruthy()
@@ -248,6 +266,7 @@ describe('the map on a touch screen', () => {
   it('survives two fingers arriving and leaving in any order', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'pinch' }))
+    enterHarbour()
     const svg = board()
 
     fireEvent.pointerDown(svg, { pointerId: 1, clientX: 100, clientY: 100 })
@@ -266,6 +285,7 @@ describe('the map on a touch screen', () => {
   it('never leaves an action button stranded behind the sheet', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'layer' }))
+    enterHarbour()
 
     // While the harbour is open, the bar underneath it must not be mounted:
     // it sits at bottom:0 under a sheet that covers the lower half, where it
@@ -277,6 +297,7 @@ describe('the map on a touch screen', () => {
   it('reopens the harbour after the sheet has been dismissed', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'reopen' }))
+    enterHarbour()
 
     // The harbour opens itself on arrival.
     expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
@@ -305,6 +326,7 @@ describe('the map on a touch screen', () => {
     // to its intrinsic aspect ratio — half a screen of dark board.
     const { container } = render(<App />)
     act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'chain' }))
+    enterHarbour()
 
     const first = container.firstElementChild as HTMLElement
     expect(first).toBeTruthy()
@@ -315,6 +337,7 @@ describe('the map on a touch screen', () => {
   it('moves the ship when a green dot is tapped', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'tap' }))
+    enterHarbour()
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
     act(() => useGame.getState().dispatch({ type: 'roll' }))
@@ -338,6 +361,7 @@ describe('the map on a touch screen', () => {
   it('ignores a tap that was really a drag', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'drag' }))
+    enterHarbour()
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
     act(() => useGame.getState().dispatch({ type: 'roll' }))
@@ -355,6 +379,7 @@ describe('the map on a touch screen', () => {
   it('shows the plan through a viewBox shaped like the screen, never letterboxed', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'focus' }))
+    enterHarbour()
 
     const svg = board()
     // 'slice' covers the container; the default 'meet' would leave dead bands
@@ -370,6 +395,7 @@ describe('the map on a touch screen', () => {
     try {
       render(<App />)
       act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'focus' }))
+      enterHarbour()
       act(() => {
         vi.advanceTimersByTime(800)
       })
@@ -467,6 +493,7 @@ describe('saving', () => {
   it('resumes a game from the action log alone', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'resume-seed' }))
+    enterHarbour()
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
     const expected = useGame.getState().state!
 
@@ -488,6 +515,7 @@ describe('the Makler on the quay', () => {
   it('greets the merchant, points at the Angebot and gets there in one tap', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'makler' }))
+    enterHarbour()
 
     // Somebody who works here is standing in the panel, and says something.
     expect(screen.getByText(/Kontormakler(in)?/)).toBeTruthy()
@@ -510,6 +538,7 @@ describe('the Makler on the quay', () => {
   it('makes casting off with an empty hold take a second tap', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'leer' }))
+    enterHarbour()
 
     const leave = () => screen.getByRole('button', { name: /ablegen/i })
     const active = () => useGame.getState().state!.activeIndex
@@ -533,6 +562,7 @@ describe('the Makler on the quay', () => {
   it('drops the warning as soon as something is loaded', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'geladen' }))
+    enterHarbour()
 
     const state = useGame.getState().state!
     const player = state.players[0]!
@@ -545,5 +575,55 @@ describe('the Makler on the quay', () => {
 
     act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
     expect(screen.getByRole('button', { name: /ablegen/i }).textContent).toBe('Ablegen')
+  })
+})
+
+describe('landfall', () => {
+  it('shows the Makler alone first, and the ledgers only after stepping ashore', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'landfall' }))
+
+    // The welcome, and nothing to trade with yet.
+    expect(screen.getByText(/Willkommen in|Wieder daheim in/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Hafen betreten' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: /Angebot/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /ablegen/i })).toBeNull()
+
+    enterHarbour()
+
+    expect(screen.getByRole('tab', { name: /Angebot/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Hafen betreten' })).toBeNull()
+  })
+
+  it('does not greet you twice in the same harbour', () => {
+    // Meeting the Makler is an arrival, not a panel: closing the sheet and
+    // asking for it again mid-visit must not replay the welcome.
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'zweimal' }))
+    enterHarbour()
+
+    const dragDown = () => {
+      const grip = screen.getAllByLabelText(/Vergrößern|Verkleinern/)[0]!
+      fireEvent.pointerDown(grip, { pointerId: 1, clientY: 100 })
+      fireEvent.pointerMove(grip, { pointerId: 1, clientY: 400 })
+      fireEvent.pointerUp(grip, { pointerId: 1, clientY: 400 })
+    }
+    dragDown()
+    dragDown()
+    expect(screen.queryByRole('button', { name: /ablegen/i })).toBeNull()
+
+    fireEvent.click(screen.getByText('Hafen öffnen'))
+    expect(screen.queryByRole('button', { name: 'Hafen betreten' })).toBeNull()
+    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
+  })
+
+  it('greets the next merchant to take the wheel', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'naechster' }))
+    enterHarbour()
+
+    // Ada casts off; Bo is lying in a harbour of their own.
+    act(() => useGame.getState().dispatch({ type: 'endTurn' }))
+    expect(screen.getByRole('button', { name: 'Hafen betreten' })).toBeTruthy()
   })
 })
