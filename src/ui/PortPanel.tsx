@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
-import { harbourCharacters } from '@engine/persona'
+import { useEffect, useMemo, useState } from 'react'
+import { harbourCharacters, harbourGuide, type HarbourCharacter } from '@engine/persona'
+import { harbourAdvice, leavingEmptyHanded, type Advice } from '@engine/advice'
 import {
   buyOffers,
   marketReport,
@@ -55,7 +56,13 @@ export function PortSheet({
   const zwang = verkaufszwangOpen(ctx, state, player, portId)
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
 
-  const [tab, setTab] = useState<Tab>(flagship(player).cargo.length > 0 ? 'verkaufen' : 'kaufen')
+  const advice = harbourAdvice(ctx, state, player, portId)
+  const guide = useMemo(() => harbourGuide(portId, ctx.pack.id), [portId, ctx.pack.id])
+
+  // Open on whatever the Makler is pointing at, so the first thing you see is
+  // the thing to do. It does not move again on its own after that.
+  const [tab, setTab] = useState<Tab>(advice.tab ?? 'kaufen')
+  useEffect(() => setTab(harbourAdvice(ctx, state, player, portId).tab ?? 'kaufen'), [portId])
 
   const folk = useMemo(
     () => harbourCharacters(portId, state.round, 2, ctx.pack.id),
@@ -69,6 +76,13 @@ export function PortSheet({
   const left = state.config.maxPurchasesPerPort - flagship(player).purchasesThisVisit.length
   const affordable = offers.filter((o) => o.status === 'ok').length
 
+  const empty = leavingEmptyHanded(ctx, state, player, portId)
+  const [confirmEmpty, setConfirmEmpty] = useState(false)
+  // Buying something takes the warning away again.
+  useEffect(() => {
+    if (!empty) setConfirmEmpty(false)
+  }, [empty])
+
   return (
     <Sheet
       snap={snap}
@@ -77,8 +91,23 @@ export function PortSheet({
       subtitle={country?.name}
       accent={color.ink}
       footer={
-        <button className="btn btn-primary w-full text-base" onClick={onLeave} disabled={zwang}>
-          {zwang ? 'Erst absetzen — Verkaufszwang' : 'Ablegen'}
+        <button
+          className={`btn w-full text-base ${confirmEmpty ? 'btn-warn' : 'btn-primary'}`}
+          onClick={() => {
+            // Sailing with an empty hold wastes the whole leg, so it costs one
+            // extra tap — never a dialogue, and never a refusal.
+            if (empty && !confirmEmpty) return setConfirmEmpty(true)
+            onLeave()
+          }}
+          disabled={zwang}
+        >
+          {zwang
+            ? 'Erst absetzen — Verkaufszwang'
+            : confirmEmpty
+              ? 'Wirklich ohne Ladung ablegen?'
+              : empty
+                ? 'Ohne Ladung ablegen'
+                : 'Ablegen'}
         </button>
       }
     >
@@ -111,11 +140,7 @@ export function PortSheet({
         </p>
       )}
 
-      {zwang && (
-        <p className="text-rot border-rot/40 bg-rot/5 anim-fade mb-3 rounded-sm border px-2 py-1.5 text-center text-xs">
-          Verkaufszwang: eine Ware absetzen, die dieser Hafen nicht selbst führt.
-        </p>
-      )}
+      <GuideNote guide={guide} advice={advice} onGo={(t) => setTab(t)} />
 
       <Tabs
         value={tab}
@@ -227,6 +252,53 @@ export function PortSheet({
         </div>
       )}
     </Sheet>
+  )
+}
+
+/**
+ * The one person who is always on the quay when you tie up.
+ *
+ * They say the single most useful thing about the state you are actually in,
+ * and the button beside them opens the panel that acts on it. This is the
+ * whole tutorial: no rules screen, just somebody who works here.
+ */
+function GuideNote({
+  guide,
+  advice,
+  onGo,
+}: {
+  guide: HarbourCharacter
+  advice: Advice
+  onGo: (tab: Tab) => void
+}) {
+  const loud = advice.urgency === 'dringend'
+  return (
+    <div
+      className={`anim-fade mb-3 flex items-start gap-2.5 rounded-sm border px-2.5 py-2 ${
+        loud ? 'border-rot/40 bg-rot/5' : 'border-black/15 bg-black/[0.03]'
+      }`}
+    >
+      <Portrait traits={guide.portrait} size={40} className="shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] leading-tight">
+          <span className="smallcaps text-ink-soft">{guide.role}</span>{' '}
+          <span className="font-semibold">{guide.name}</span>
+        </p>
+        <p
+          className={`mt-0.5 text-[13px] leading-snug italic ${loud ? 'text-rot' : 'text-ink-soft'}`}
+        >
+          „{advice.text}“
+        </p>
+        {advice.tab && advice.cta && (
+          <button
+            className="btn btn-sm mt-1.5 !py-0.5 text-[11px]"
+            onClick={() => onGo(advice.tab as Tab)}
+          >
+            {advice.cta} →
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 

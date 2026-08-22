@@ -19,6 +19,7 @@ import type { GameState, JoinPolicy } from '../src/engine/state'
 import { nextEventAt } from '../src/engine/selectors'
 import { projectFor } from '../src/engine/fog'
 import type { TravelMode } from '../src/engine/types'
+import type { Gender } from '../src/engine/persona'
 
 export interface Env {
   GAMES: DurableObjectNamespace
@@ -42,7 +43,7 @@ export interface GameMeta {
 
 /** Wire protocol. Small, versioned by shape rather than a number. */
 type ClientMessage =
-  | { t: 'hello'; token?: string; name?: string }
+  | { t: 'hello'; token?: string; name?: string; gender?: Gender }
   | { t: 'action'; action: GameAction }
   | { t: 'start' }
   | { t: 'ping' }
@@ -333,7 +334,15 @@ export class GameRoom {
         // A new arrival with a name takes a seat, if the table allows it.
         if (message.name) {
           const playerId = `p${this.state.players.length + 1}-${makeCode(3).toLowerCase()}`
-          const applied = await this.commit({ type: 'join', playerId, name: message.name })
+          const applied = await this.commit({
+            type: 'join',
+            playerId,
+            name: message.name,
+            // Only 'w' and 'm' are personas; anything else lets the name decide.
+            ...(message.gender === 'w' || message.gender === 'm'
+              ? { gender: message.gender }
+              : {}),
+          })
           if (!applied.ok) return this.send(socket, { t: 'error', reason: applied.reason })
 
           const token = crypto.randomUUID()

@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { CLASSIC_PACK } from '@content/maps/classic'
 import { createContext, type EngineContext } from '@engine/context'
-import { createGame, openingActions } from '@engine/setup'
+import { createGame, openingActions, type Seat } from '@engine/setup'
+import type { Gender } from '@engine/persona'
 import { applyAction, replay } from '@engine/reducer'
 import type { GameAction, GameEvent } from '@engine/actions'
 import type { GameState, JoinPolicy } from '@engine/state'
@@ -80,12 +81,12 @@ interface Store {
    */
   localActing: string | null
 
-  begin: (names: string[], options?: BeginOptions) => void
+  begin: (seats: readonly Seat[], options?: BeginOptions) => void
   host: (
-    name: string,
+    seat: Seat,
     options: BeginOptions & { joinPolicy: JoinPolicy; sicht?: 'normal' | 'realistisch' },
   ) => Promise<string>
-  join: (code: string, name: string) => void
+  join: (code: string, name: string, gender?: Gender) => void
   dispatch: (action: GameAction) => void
   resume: () => boolean
   abandon: () => void
@@ -204,7 +205,8 @@ export const useGame = create<Store>((set, get) => ({
   net: null,
   localActing: null,
 
-  begin(names, options = {}) {
+  begin(seats, options = {}) {
+    const names = seats.map((s) => (typeof s === 'string' ? s : s.name))
     const totalRounds = options.totalRounds ?? 30
     const startingCapital = options.startingCapital ?? ctx.pack.config.startingCapital
     const realSeed = options.seed ?? `${Date.now().toString(36)}-${names.join('|')}`
@@ -214,8 +216,8 @@ export const useGame = create<Store>((set, get) => ({
     const realtime = travel === 'echtzeit'
     // A real-time table needs a first stroke of the clock to reckon from.
     const opening: GameAction[] = realtime
-      ? [{ type: 'tick', at: Date.now() }, ...openingActions(names)]
-      : openingActions(names)
+      ? [{ type: 'tick', at: Date.now() }, ...openingActions(seats)]
+      : openingActions(seats)
 
     const state = replay(
       ctx,
@@ -259,7 +261,8 @@ export const useGame = create<Store>((set, get) => ({
     if (realtime) startLocalClock(get)
   },
 
-  async host(name, options) {
+  async host(seat, options) {
+    const who = typeof seat === 'string' ? { name: seat } : seat
     const { code } = await createOnlineGame({
       totalRounds: options.totalRounds ?? 30,
       startingCapital: options.startingCapital ?? ctx.pack.config.startingCapital,
@@ -270,17 +273,17 @@ export const useGame = create<Store>((set, get) => ({
       durationHours: options.durationHours ?? 24,
       maxFleetSize: options.maxFleetSize ?? 1,
     })
-    get().join(code, name)
+    get().join(code, who.name, who.gender)
     return code
   },
 
-  join(code, name) {
+  join(code, name, gender) {
     session?.close()
     // A networked game is never saved locally; the server holds the log.
     saved = null
     set({ state: null, log: [], lastEvents: [], notice: null, net: { code, status: 'verbindet', playerId: null, online: [] } })
 
-    session = new Session(code, name, {
+    session = new Session(code, name, gender, {
       onStatus: (status) =>
         set((s) => ({ net: s.net ? { ...s.net, status } : s.net })),
 

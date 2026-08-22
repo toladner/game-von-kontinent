@@ -1098,7 +1098,7 @@ function applyJoin(
   const player: PlayerState = {
     id: action.playerId,
     name,
-    persona: makePersona(name, ctx.pack.id),
+    persona: makePersona(name, ctx.pack.id, action.gender),
     colorIndex: state.players.length,
     cash: draft.config.startingCapital,
     fleet: [firstShip],

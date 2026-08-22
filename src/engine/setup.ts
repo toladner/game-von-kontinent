@@ -2,6 +2,7 @@ import type { EngineContext } from './context'
 import type { GameAction } from './actions'
 import type { GameState, JoinPolicy } from './state'
 import type { Sicht, TravelMode } from './types'
+import type { Gender } from './persona'
 import { seedFrom, shuffle, type RngState } from './rng'
 
 export interface NewGameOptions {
@@ -91,16 +92,26 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
 }
 
 /**
+ * A place at the table. A bare string is a name and nothing more, which is
+ * the zero-friction path; the object form carries a chosen gender.
+ */
+export type Seat = string | { readonly name: string; readonly gender?: Gender }
+
+/**
  * The opening moves for a table that is filled and started in one go, which
  * is every local game.
  */
-export function openingActions(names: readonly string[]): GameAction[] {
+export function openingActions(seats: readonly Seat[]): GameAction[] {
   return [
-    ...names.map((name, i) => ({
-      type: 'join' as const,
-      playerId: `p${i + 1}`,
-      name: name.trim() || `Kaufmann ${i + 1}`,
-    })),
+    ...seats.map((seat, i) => {
+      const { name, gender } = typeof seat === 'string' ? { name: seat, gender: undefined } : seat
+      return {
+        type: 'join' as const,
+        playerId: `p${i + 1}`,
+        name: name.trim() || `Haus ${i + 1}`,
+        ...(gender ? { gender } : {}),
+      }
+    }),
     { type: 'start' as const },
   ]
 }

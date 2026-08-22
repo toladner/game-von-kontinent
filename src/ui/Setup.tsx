@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { makePersona } from '@engine/persona'
+import { makePersona, type Gender } from '@engine/persona'
+import type { Seat } from '@engine/setup'
 import { Portrait } from './Portrait'
 import { hasSavedGame, PLAYER_COLORS, useGame } from '@app/store'
 import {
@@ -14,6 +15,16 @@ import {
 } from '@app/options'
 
 type Step = 'modus' | 'optionen' | 'tisch' | 'namen' | 'beitreten'
+
+/**
+ * A row on the names screen. `gender` stays undefined until someone taps the
+ * ♀/♂ switch — until then the name itself decides, which is what keeps the
+ * zero-friction path to one field and one button.
+ */
+interface Trader {
+  readonly name: string
+  readonly gender?: Gender
+}
 
 /**
  * Setup as a short walk, not a form.
@@ -31,7 +42,7 @@ export function Setup() {
 
   const [step, setStep] = useState<Step>('modus')
   const [options, setOptions] = useState<GameOptions>(DEFAULT_OPTIONS)
-  const [names, setNames] = useState<string[]>(['', ''])
+  const [names, setNames] = useState<Trader[]>([{ name: '' }, { name: '' }])
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
@@ -47,14 +58,16 @@ export function Setup() {
   const set = <K extends keyof GameOptions>(key: K, value: GameOptions[K]) =>
     setOptions((o) => ({ ...o, [key]: value }))
 
-  const filled = names.map((n) => n.trim()).filter(Boolean)
+  const filled: Seat[] = names
+    .map((t) => ({ ...t, name: t.name.trim() }))
+    .filter((t) => t.name)
 
   const startGame = async () => {
     setProblem(null)
     if (options.table === 'online-eroeffnen') {
       setBusy(true)
       try {
-        await host(filled[0] ?? 'Kaufmann', {
+        await host(filled[0] ?? { name: 'Handelshaus' }, {
           totalRounds: options.totalRounds,
           startingCapital: options.startingCapital,
           joinPolicy: options.joinPolicy,
@@ -157,7 +170,7 @@ export function Setup() {
             <StepBeitreten
               initialCode={invited}
               onBack={() => setStep('modus')}
-              onJoin={(code, name) => join(code, name)}
+              onJoin={(code, trader) => join(code, trader.name, trader.gender)}
             />
           )}
         </div>
@@ -560,29 +573,29 @@ function StepNamen({
   onStart,
 }: {
   options: GameOptions
-  names: string[]
-  setNames: React.Dispatch<React.SetStateAction<string[]>>
+  names: Trader[]
+  setNames: React.Dispatch<React.SetStateAction<Trader[]>>
   busy: boolean
   problem: string | null
   onBack: () => void
   onStart: () => void
 }) {
   const online = options.table === 'online-eroeffnen'
-  const setName = (i: number, value: string) =>
-    setNames((prev) => prev.map((n, j) => (j === i ? value : n)))
-  const ready = names.some((n) => n.trim())
+  const setTrader = (i: number, value: Trader) =>
+    setNames((prev) => prev.map((t, j) => (j === i ? value : t)))
+  const ready = names.some((t) => t.name.trim())
   const slots = online ? names.slice(0, 1) : names
 
   return (
     <div className="anim-fade">
       <Legend>{online ? 'Ihr Name' : 'Die Mitspieler'}</Legend>
       <div className="stagger grid gap-2.5 sm:grid-cols-2">
-        {slots.map((name, i) => (
+        {slots.map((trader, i) => (
           <TraderSlot
             key={i}
             index={i}
-            name={name}
-            onChange={(v) => setName(i, v)}
+            trader={trader}
+            onChange={(v) => setTrader(i, v)}
             onRemove={
               !online && names.length > 1
                 ? () => setNames((p) => p.filter((_, j) => j !== i))
@@ -593,8 +606,8 @@ function StepNamen({
       </div>
 
       {!online && names.length < 6 && (
-        <button className="btn mt-3 w-full" onClick={() => setNames((p) => [...p, ''])}>
-          Weiteren Kaufmann eintragen
+        <button className="btn mt-3 w-full" onClick={() => setNames((p) => [...p, { name: '' }])}>
+          Noch jemanden eintragen
         </button>
       )}
 
@@ -635,12 +648,12 @@ function StepBeitreten({
 }: {
   initialCode: string
   onBack: () => void
-  onJoin: (code: string, name: string) => void
+  onJoin: (code: string, trader: Trader) => void
 }) {
   const [code, setCode] = useState(initialCode)
-  const [name, setName] = useState('')
+  const [trader, setTrader] = useState<Trader>({ name: '' })
   const clean = code.trim().toUpperCase()
-  const ready = clean.length >= 3 && name.trim().length > 0
+  const ready = clean.length >= 3 && trader.name.trim().length > 0
 
   return (
     <div className="anim-fade">
@@ -658,11 +671,11 @@ function StepBeitreten({
       />
 
       <Legend>Ihr Name</Legend>
-      <TraderSlot index={0} name={name} onChange={setName} />
+      <TraderSlot index={0} trader={trader} onChange={setTrader} />
 
       <Nav
         onBack={onBack}
-        onNext={() => onJoin(clean, name.trim())}
+        onNext={() => onJoin(clean, { ...trader, name: trader.name.trim() })}
         nextLabel="Beitreten"
         nextDisabled={!ready}
       />
@@ -672,17 +685,20 @@ function StepBeitreten({
 
 function TraderSlot({
   index,
-  name,
+  trader,
   onChange,
   onRemove,
 }: {
   index: number
-  name: string
-  onChange: (v: string) => void
+  trader: Trader
+  onChange: (v: Trader) => void
   onRemove?: () => void
 }) {
-  const trimmed = name.trim()
-  const persona = useMemo(() => (trimmed ? makePersona(trimmed, 'classic') : null), [trimmed])
+  const trimmed = trader.name.trim()
+  const persona = useMemo(
+    () => (trimmed ? makePersona(trimmed, 'classic', trader.gender) : null),
+    [trimmed, trader.gender],
+  )
   const color = PLAYER_COLORS[index % PLAYER_COLORS.length]!
 
   return (
@@ -700,11 +716,11 @@ function TraderSlot({
       <div className="min-w-0 flex-1">
         <input
           className="focusable placeholder:text-ink-faint border-ink-soft/50 w-full border-0 border-b border-dashed bg-transparent px-0 py-1 text-base outline-none"
-          placeholder={`${index + 1}. Kaufmann`}
-          value={name}
+          placeholder={`${index + 1}. Name`}
+          value={trader.name}
           maxLength={22}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={`Name des ${index + 1}. Kaufmanns`}
+          onChange={(e) => onChange({ ...trader, name: e.target.value })}
+          aria-label={`Name der ${index + 1}. Person`}
         />
         {persona ? (
           <p className="text-ink-soft mt-1 truncate text-[11px]">
@@ -715,7 +731,25 @@ function TraderSlot({
         )}
       </div>
 
-      <div className="flex shrink-0 flex-col items-center gap-1">
+      <div className="flex shrink-0 flex-col items-center gap-1.5">
+        {/* Bis hier getippt wird, entscheidet der Name selbst. */}
+        {persona && (
+          <div className="flex overflow-hidden rounded-sm border border-black/20">
+            {(['w', 'm'] as const).map((g) => (
+              <button
+                key={g}
+                className={`btn-sm px-1.5 py-0.5 text-[13px] leading-none ${
+                  persona.gender === g ? 'bg-ink/85 text-paper' : 'text-ink-soft hover:bg-black/5'
+                }`}
+                aria-pressed={persona.gender === g}
+                aria-label={g === 'w' ? 'Kauffrau' : 'Kaufmann'}
+                onClick={() => onChange({ ...trader, gender: g })}
+              >
+                {g === 'w' ? '♀' : '♂'}
+              </button>
+            ))}
+          </div>
+        )}
         <span
           className="block h-4 w-4 rounded-full border border-black/30"
           style={{ background: color.ink }}

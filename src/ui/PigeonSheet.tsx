@@ -3,6 +3,7 @@ import { Sheet, type SheetSnap } from './Sheet'
 import { clockText } from './useNow'
 import { portAt } from '@engine/selectors'
 import { flagship, type GameState, type PlayerState } from '@engine/state'
+import { makeShipIdentity } from '@engine/persona'
 import type { EngineContext } from '@engine/context'
 
 /**
@@ -48,6 +49,9 @@ export function PigeonSheet({
   const [replyTo, setReplyTo] = useState(herePort ?? '')
 
   if (!vessel) return null
+  // The same seed the reducer uses when she signs her answer, so the letter
+  // is addressed to the person who replies to it.
+  const master = makeShipIdentity(`${vessel.id}:${state.packId}`)
   const cost = state.config.pigeon.price
   const ready = toPort && destination && toPort !== destination
 
@@ -56,7 +60,7 @@ export function PigeonSheet({
       snap={snap}
       onSnap={onSnap}
       title="Brieftaube"
-      subtitle={`An den Kapitän der ${vessel.name}`}
+      subtitle={`An ${master.captainGender === 'w' ? 'die Kapitänin' : 'den Kapitän'} der ${vessel.name} — ${master.captain.replace(/^Kapitänin |^Kapitän /, '')}`}
       footer={
         <button
           className="btn btn-primary w-full"
@@ -94,7 +98,7 @@ export function PigeonSheet({
 
       <PortChoice
         label="Order: fahre nach"
-        hint="Was der Kapitän tun soll, wenn er den Brief bekommt."
+        hint={`Was ${master.captainGender === 'w' ? 'sie' : 'er'} tun soll, wenn der Brief ankommt.`}
         ports={ports}
         value={destination}
         onChange={setDestination}
@@ -113,7 +117,7 @@ export function PigeonSheet({
       {wantReply && (
         <PortChoice
           label="Antwort nach"
-          hint="Dorthin schickt der Kapitän seine Taube. Sie müssen selbst dort sein, um den Brief zu holen."
+          hint={`Dorthin schickt ${master.captainGender === 'w' ? 'sie ihre' : 'er seine'} Taube. Sie müssen selbst dort sein, um den Brief zu holen.`}
           ports={ports}
           value={replyTo}
           onChange={setReplyTo}

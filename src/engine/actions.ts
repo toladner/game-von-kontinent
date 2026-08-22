@@ -1,4 +1,5 @@
 import type { GoodId, Money, NodeId, PortId } from './types'
+import type { Gender } from './persona'
 
 /**
  * Everything a player can do, as plain serialisable data.
@@ -13,7 +14,13 @@ export type GameAction =
    * latecomer is simply another entry in the log - the same mechanism that
    * makes replay, saving and network sync work.
    */
-  | { readonly type: 'join'; readonly playerId: string; readonly name: string }
+  | {
+      readonly type: 'join'
+      readonly playerId: string
+      readonly name: string
+      /** Omitted means "whatever the name rolls" — see makePersona. */
+      readonly gender?: Gender
+    }
   /** The host opens the season. */
   | { readonly type: 'start' }
   | { readonly type: 'roll' }

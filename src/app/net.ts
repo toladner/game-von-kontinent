@@ -1,3 +1,4 @@
+import type { Gender } from '@engine/persona'
 import type { GameAction } from '@engine/actions'
 import type { GameState, JoinPolicy } from '@engine/state'
 
@@ -100,6 +101,8 @@ export class Session {
   constructor(
     readonly code: string,
     private readonly name: string,
+    /** Undefined lets the server derive a persona from the name alone. */
+    private readonly gender: Gender | undefined,
     private readonly handlers: SessionHandlers,
   ) {}
 
@@ -116,7 +119,11 @@ export class Session {
       this.handlers.onStatus('verbunden')
       const token = storedToken(this.code)
       // A remembered token returns to the same seat; otherwise ask for one.
-      socket.send(JSON.stringify(token ? { t: 'hello', token } : { t: 'hello', name: this.name }))
+      socket.send(
+        JSON.stringify(
+          token ? { t: 'hello', token } : { t: 'hello', name: this.name, gender: this.gender },
+        ),
+      )
     })
 
     socket.addEventListener('message', (event) => {

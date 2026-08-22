@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from '@app/App'
 import { useGame } from '@app/store'
-import { legalSteps, portAt, routeTo } from '@engine/selectors'
+import { buyOffers, legalSteps, portAt, routeTo } from '@engine/selectors'
 import { flagship } from '@engine/state'
 import { createGame } from '@engine/setup'
 import { applyAction, replay } from '@engine/reducer'
@@ -29,7 +29,7 @@ describe('the front page', () => {
 
     fireEvent.click(screen.getByText('Klassisch'))
 
-    const input = screen.getByLabelText('Name des 1. Kaufmanns') as HTMLInputElement
+    const input = screen.getByLabelText('Name der 1. Person') as HTMLInputElement
     expect((screen.getByText('An Bord gehen') as HTMLButtonElement).disabled).toBe(true)
 
     fireEvent.change(input, { target: { value: 'Tobias' } })
@@ -81,7 +81,7 @@ describe('the board', () => {
     })
 
     // Starts in harbour: the sheet is open and the board is drawn behind it.
-    expect(screen.getByText('Ablegen')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
     expect(screen.getByText('Angebot')).toBeTruthy()
     expect(document.querySelector('svg[aria-label]')).toBeTruthy()
     // The HUD answers "who am I and what can I spend" at all times.
@@ -241,7 +241,7 @@ describe('the map on a touch screen', () => {
     fireEvent.pointerUp(svg, { pointerId: 1, clientX: 220, clientY: 180 })
 
     expect(board()).toBeTruthy()
-    expect(screen.getByText('Ablegen')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
   })
 
   it('survives two fingers arriving and leaving in any order', () => {
@@ -269,7 +269,7 @@ describe('the map on a touch screen', () => {
     // While the harbour is open, the bar underneath it must not be mounted:
     // it sits at bottom:0 under a sheet that covers the lower half, where it
     // can be seen sliding past but never touched.
-    expect(screen.getByText('Ablegen')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
     expect(screen.queryByText('Hafen öffnen')).toBeNull()
   })
 
@@ -278,19 +278,19 @@ describe('the map on a touch screen', () => {
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'reopen' }))
 
     // The harbour opens itself on arrival.
-    expect(screen.getByText('Ablegen')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
 
     // Drag it away.
     const grip = screen.getAllByLabelText(/Vergrößern|Verkleinern/)[0]!
     fireEvent.pointerDown(grip, { pointerId: 1, clientY: 100 })
     fireEvent.pointerMove(grip, { pointerId: 1, clientY: 400 })
     fireEvent.pointerUp(grip, { pointerId: 1, clientY: 400 })
-    expect(screen.queryByText('Ablegen')).toBeNull()
+    expect(screen.queryByRole('button', { name: /ablegen/i })).toBeNull()
 
     // The button that offers it back must actually bring it back.
     const reopen = screen.getByText('Hafen öffnen')
     fireEvent.click(reopen)
-    expect(screen.getByText('Ablegen')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
   })
 
   it('puts no unstyled wrapper above the screen', () => {
@@ -475,5 +475,69 @@ describe('saving', () => {
     expect(ok).toBe(true)
     expect(useGame.getState().state!.activeIndex).toBe(expected.activeIndex)
     expect(useGame.getState().state!.players[0]!.cash).toBe(expected.players[0]!.cash)
+  })
+})
+
+describe('the Makler on the quay', () => {
+  it('greets the merchant, points at the Angebot and gets there in one tap', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'makler' }))
+
+    // Somebody who works here is standing in the panel, and says something.
+    expect(screen.getByText(/Kontormakler(in)?/)).toBeTruthy()
+    expect(screen.getByText(/Laderaum ist leer/)).toBeTruthy()
+
+    // The harbour opens on the tab the Makler is pointing at, and the button
+    // beside them goes there too.
+    const go = screen.getByRole('button', { name: /Angebot ansehen/ })
+    act(() => {
+      fireEvent.click(screen.getByRole('tab', { name: /Ladung/ }))
+    })
+    act(() => {
+      fireEvent.click(go)
+    })
+    expect(
+      (screen.getByRole('tab', { name: /Angebot/ }) as HTMLElement).getAttribute('aria-selected'),
+    ).toBe('true')
+  })
+
+  it('makes casting off with an empty hold take a second tap', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'leer' }))
+
+    const leave = () => screen.getByRole('button', { name: /ablegen/i })
+    const active = () => useGame.getState().state!.activeIndex
+    expect(leave().textContent).toMatch(/Ohne Ladung ablegen/)
+    expect(active()).toBe(0)
+
+    // The first tap warns rather than hands the turn over.
+    act(() => {
+      fireEvent.click(leave())
+    })
+    expect(active()).toBe(0)
+    expect(leave().textContent).toMatch(/Wirklich/)
+
+    // The second goes through — a warning, never a refusal.
+    act(() => {
+      fireEvent.click(leave())
+    })
+    expect(active()).toBe(1)
+  })
+
+  it('drops the warning as soon as something is loaded', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'geladen' }))
+
+    const state = useGame.getState().state!
+    const player = state.players[0]!
+    const offer = buyOffers(
+      useGame.getState().ctx,
+      state,
+      player,
+      portAt(useGame.getState().ctx, flagship(player).nodeId)!,
+    ).find((o) => o.status === 'ok')!
+
+    act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+    expect(screen.getByRole('button', { name: /ablegen/i }).textContent).toBe('Ablegen')
   })
 })
