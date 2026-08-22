@@ -17,3 +17,7 @@ Thumbs.db
 
 # wrangler local state
 .wrangler/
+
+# Scans of the printed game. Kept locally as the reference the content was
+# transcribed from; not ours to redistribute. See docs/rules.md instead.
+based/
