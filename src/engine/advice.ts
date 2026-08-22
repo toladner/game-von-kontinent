@@ -117,7 +117,7 @@ export function harbourAdvice(
   if (left > 0 && affordable.length > 0) {
     return {
       id: 'nachladen',
-      text: `Sie haben noch ${left === 1 ? 'einen Posten' : `${left} Posten`} frei. Voll fährt sich dieselbe Strecke einträglicher.`,
+      text: `In diesem Hafen dürfen Sie noch ${left === 1 ? 'eine Ware' : `${left} Waren`} kaufen — der Laderaum selbst hat keine Grenze.`,
       tab: 'kaufen',
       cta: 'Angebot ansehen',
       urgency: 'ruhig',

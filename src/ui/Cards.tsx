@@ -32,7 +32,7 @@ export function Warenkarte({
     <Tag
       className={`paper-card focusable relative block w-full rounded-[2px] px-3 py-2 text-left transition ${
         onClick && !disabled ? 'hover:-translate-y-0.5 hover:shadow-md' : ''
-      } ${disabled ? 'opacity-45' : ''}`}
+      } ${disabled ? 'opacity-60 grayscale' : ''}`}
       onClick={onClick}
       disabled={disabled}
       type={onClick ? 'button' : undefined}
@@ -55,7 +55,15 @@ export function Warenkarte({
         </div>
       </dl>
 
-      {sublabel && <p className="text-ink-soft mt-1 text-[10px] leading-tight">{sublabel}</p>}
+      {sublabel && (
+        <p
+          className={`mt-1 text-[10px] leading-tight ${
+            disabled ? 'text-rot font-semibold' : 'text-ink-soft'
+          }`}
+        >
+          {sublabel}
+        </p>
+      )}
 
       {action && (
         <span className="smallcaps text-ink-soft absolute right-2 bottom-1.5 text-[10px]">

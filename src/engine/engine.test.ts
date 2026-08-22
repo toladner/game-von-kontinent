@@ -7,6 +7,7 @@ import { buyOffers, legalSteps, portAt, routeTo, standings } from './selectors'
 import { isPort } from './mapbuild'
 import { flagship, netWorth } from './state'
 import type { GameAction } from './actions'
+import type { GameState } from './state'
 
 const ctx = createContext(CLASSIC_PACK)
 
@@ -298,5 +299,93 @@ describe('the shipyard', () => {
 
     expect(prices[0]).toBeGreaterThan(capital * 0.8)
     for (const price of prices.slice(1)) expect(price).toBeGreaterThan(capital * 2)
+  })
+})
+
+describe('what a hold may carry', () => {
+  /** Move the merchant's ship, the way a completed voyage would. */
+  function moveTo(state: GameState, portId: string): GameState {
+    const p = state.players[0]!
+    return {
+      ...state,
+      players: [
+        {
+          ...p,
+          fleet: p.fleet.map((v, i) =>
+            i === 0 ? { ...v, nodeId: portId, purchasesThisVisit: [] } : v,
+          ),
+        },
+        ...state.players.slice(1),
+      ],
+    }
+  }
+
+  it('sets no limit on the hold — the Anleitung names none', () => {
+    // "Jeder Spieler kann in jedem angelaufenen Hafen Waren dieses Landes
+    // kaufen um sie auf seiner Weiterfahrt in einem späteren Hafen ... zu
+    // verkaufen." No capacity appears anywhere in the rules.
+    expect(CLASSIC_PACK.config.startingVehicle.capacity).toBeNull()
+
+    let state = seated(['Ada'], { seed: 'stapeln', startingCapital: 5_000_000 })
+    let bought = 0
+    for (const portId of [...ctx.portsById.keys()].slice(0, 12)) {
+      state = moveTo(state, portId)
+      // Recompute after each purchase: two per harbour is the standing limit.
+      for (;;) {
+        const offer = buyOffers(ctx, state, state.players[0]!, portId).find(
+          (o) => o.status === 'ok',
+        )
+        if (!offer) break
+        const after = applyAction(ctx, state, { type: 'buy', goodId: offer.goodId })
+        expect(after.events.some((e) => e.type === 'rejected')).toBe(false)
+        state = after.state
+        bought += 1
+      }
+    }
+
+    expect(bought).toBeGreaterThan(8)
+    expect(flagship(state.players[0]!).cargo).toHaveLength(bought)
+  })
+
+  it('allows two per harbour, and only one card of a kind while you are there', () => {
+    const state = seated(['Ada'], { seed: 'zwei' })
+    const port = portAt(ctx, flagship(state.players[0]!).nodeId)!
+    const offers = buyOffers(ctx, state, state.players[0]!, port).filter((o) => o.status === 'ok')
+
+    const first = applyAction(ctx, state, { type: 'buy', goodId: offers[0]!.goodId }).state
+    // The same kind is shut here, but the harbour is not.
+    const again = buyOffers(ctx, first, first.players[0]!, port)
+    expect(again.find((o) => o.goodId === offers[0]!.goodId)!.status).toBe('schon-geladen')
+    expect(again.some((o) => o.status === 'ok')).toBe(true)
+
+    const second = applyAction(ctx, first, { type: 'buy', goodId: offers[1]!.goodId }).state
+    // Now the harbour is shut too.
+    for (const offer of buyOffers(ctx, second, second.players[0]!, port)) {
+      expect(['ladeschluss', 'schon-geladen']).toContain(offer.status)
+    }
+  })
+
+  it('lets the same good be bought again in the next port that exports it', () => {
+    // "von einer Warengattung nur eine Karte" binds per harbour, and the bank
+    // holds two copies — so a second is legitimately obtainable elsewhere.
+    let state = seated(['Ada'], { seed: 'nochmal', startingCapital: 5_000_000 })
+    const port = portAt(ctx, flagship(state.players[0]!).nodeId)!
+    const goodId = buyOffers(ctx, state, state.players[0]!, port).find(
+      (o) => o.status === 'ok',
+    )!.goodId
+
+    state = applyAction(ctx, state, { type: 'buy', goodId }).state
+
+    const elsewhere = [...ctx.portsById.keys()].find(
+      (id) => id !== port && ctx.exportsOf(id).includes(goodId),
+    )
+    if (!elsewhere) return // this good has a single source; nothing to prove
+
+    state = moveTo(state, elsewhere)
+    const after = applyAction(ctx, state, { type: 'buy', goodId })
+    expect(after.events.some((e) => e.type === 'rejected')).toBe(false)
+    expect(flagship(after.state.players[0]!).cargo.filter((c) => c.goodId === goodId)).toHaveLength(
+      2,
+    )
   })
 })

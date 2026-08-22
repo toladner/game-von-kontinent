@@ -19,11 +19,16 @@ import { PLAYER_COLORS } from '@app/store'
 
 type Tab = 'kaufen' | 'verkaufen' | 'kai' | 'wohin'
 
+/**
+ * Why a card cannot be taken. "Von einer Warengattung nur eine Karte" binds
+ * per harbour, not per hold — the same good is yours again two ports on, so
+ * the wording must not suggest the hold is the obstacle.
+ */
 const BLOCK_TEXT: Record<string, string> = {
   'nicht-im-angebot': 'wird hier nicht geführt',
-  ausverkauft: 'Exportbank ausverkauft',
+  ausverkauft: 'Exportbank ausverkauft — beide Karten im Umlauf',
   'kein-geld': 'Barmittel reichen nicht',
-  'schon-geladen': 'bereits an Bord',
+  'schon-geladen': 'in diesem Hafen bereits gekauft',
   ladeschluss: 'Ladeschluß — zwei Waren je Hafen',
   'laderaum-voll': 'Laderaum voll',
 }
@@ -216,6 +221,7 @@ export function PortSheet({
           <div className="stagger space-y-2">
             {offers.map((offer) => {
               const good = goodOf(ctx, offer.goodId)
+              const short = good.buy - player.cash
               return (
                 <Warenkarte
                   key={offer.goodId}
@@ -223,7 +229,11 @@ export function PortSheet({
                   disabled={offer.status !== 'ok'}
                   action={offer.status === 'ok' ? 'kaufen' : undefined}
                   sublabel={
-                    offer.status === 'ok' ? undefined : (BLOCK_TEXT[offer.status] ?? offer.status)
+                    offer.status === 'ok'
+                      ? undefined
+                      : offer.status === 'kein-geld'
+                        ? `Barmittel reichen nicht — es fehlen ${short.toLocaleString('de-DE')}`
+                        : (BLOCK_TEXT[offer.status] ?? offer.status)
                   }
                   onClick={offer.status === 'ok' ? () => onBuy(offer.goodId) : undefined}
                 />
