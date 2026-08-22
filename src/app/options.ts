@@ -14,6 +14,15 @@ export type Travel = 'wuerfel' | 'echtzeit'
 export type Table = 'lokal' | 'online-eroeffnen' | 'online-beitreten'
 export type JoinPolicy = 'nur-zu-beginn' | 'jederzeit'
 
+/**
+ * How much of the world a player may see.
+ *
+ * 'normal' is the identity projection: everything, always, orders instant.
+ * 'realistisch' shows only what a player stands next to or has been told, and
+ * orders to distant captains travel by carrier pigeon.
+ */
+export type Sicht = 'normal' | 'realistisch'
+
 export interface GameOptions {
   readonly mode: GameMode
   readonly packId: string
@@ -25,6 +34,7 @@ export interface GameOptions {
   readonly durationHours: number
   readonly startingCapital: number
   readonly table: Table
+  readonly sicht: Sicht
   readonly joinPolicy: JoinPolicy
   /** Only for joining: the code of a running game. */
   readonly joinCode: string
@@ -39,6 +49,7 @@ export const DEFAULT_OPTIONS: GameOptions = {
   durationHours: 24,
   startingCapital: 500_000,
   table: 'lokal',
+  sicht: 'normal',
   joinPolicy: 'nur-zu-beginn',
   joinCode: '',
 }
@@ -86,6 +97,11 @@ export interface Capability {
 export const CAPABILITIES: Record<string, Capability> = {
   'travel:wuerfel': { ready: true, note: '' },
   'travel:echtzeit': { ready: true, note: '' },
+  'sicht:normal': { ready: true, note: '' },
+  'sicht:realistisch': {
+    ready: false,
+    note: 'Braucht eine eigene Sicht je Mitspieler — auch auf dem Server, sonst kennt das Gerät die Wahrheit doch. Die Echtzeitfahrt dafür steht bereits.',
+  },
   'table:lokal': { ready: true, note: '' },
   'table:online-eroeffnen': { ready: true, note: '' },
   'table:online-beitreten': { ready: true, note: '' },

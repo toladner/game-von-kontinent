@@ -212,10 +212,36 @@ Deliberate deviations, all reversible in `RuleConfig`:
 
 ---
 
-## Not built yet: Brieftauben, or trading under fog
+## Not built yet: Sicht — "normal" or "realistisch"
 
-An idea worth writing down properly, because it changes what the game *is*
-rather than adding to it.
+A table option, chosen at setup beside the map and the pace:
+
+| Sicht | What a player sees | Giving an order |
+| --- | --- | --- |
+| **normal** | Everything: every vehicle, everywhere, always | Instant |
+| **realistisch** | Only what they are standing next to, or have been told | By carrier pigeon, and you never learn whether it arrived |
+
+Framing it as a mode is what makes it buildable, because **"normal" is the
+identity projection**. Both modes read the world through one seam:
+
+```
+projectFor(playerId, state) -> what that player may see
+   normal        => state, unchanged
+   realistisch   => a fold over only the events that player witnessed
+```
+
+So the work is not "add a fog system with an escape hatch". It is: introduce
+the seam, have the interface read through it instead of from `GameState`
+directly, and ship it with only the identity implementation. The fog variant
+is then a second implementation of one function, plus the pigeons themselves.
+
+The same applies on the wire. The server today broadcasts every action to
+everyone; under `realistisch` it must send each seat only its own view. That is
+the one genuinely new piece of machinery, and it is why this cannot be done
+client-side — a client that receives the truth has the truth, whatever it
+chooses to draw.
+
+### The premise, in detail
 
 **The premise.** You may own several vehicles, but you only ever *know* where
 the one you are travelling with is. The others are wherever you last heard

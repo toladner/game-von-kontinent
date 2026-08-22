@@ -8,6 +8,7 @@ import {
   PACKS,
   type GameOptions,
   type JoinPolicy,
+  type Sicht,
   type Table,
   type Travel,
 } from '@app/options'
@@ -374,6 +375,23 @@ function StepOptionen({
           disabled={!CAPABILITIES['travel:echtzeit']!.ready}
           note={CAPABILITIES['travel:echtzeit']!.note}
           onClick={() => set('travel', 'echtzeit' as Travel)}
+        />
+      </div>
+
+      <Legend>Sicht</Legend>
+      <div className="space-y-2">
+        <Choice
+          title="Normal"
+          blurb="Sie sehen jederzeit, wo jedes Fahrzeug steht, und Befehle wirken sofort."
+          selected={options.sicht === 'normal'}
+          onClick={() => set('sicht', 'normal' as Sicht)}
+        />
+        <Choice
+          title="Realistisch"
+          blurb="Sie wissen nur, wo Sie selbst sind. Befehle an entfernte Kapitäne gehen per Brieftaube — ob sie ankommt, erfahren Sie nie."
+          selected={options.sicht === 'realistisch'}
+          disabled={!CAPABILITIES['sicht:realistisch']!.ready}
+          note={CAPABILITIES['sicht:realistisch']!.note}
         />
       </div>
 
