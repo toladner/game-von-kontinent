@@ -4,6 +4,7 @@ import {
   harbourGreeting,
   harbourPlan,
   leavingEmptyHanded,
+  type HarbourStep,
   type Stage,
 } from '@engine/advice'
 import {
@@ -23,7 +24,15 @@ import { Portrait } from './Portrait'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
 import { PLAYER_COLORS } from '@app/store'
 
-type Tab = 'kaufen' | 'verkaufen' | 'kai' | 'wohin'
+/**
+ * The tabs are the Makler's round, and nothing else.
+ *
+ * Keeping them one list rather than two is what stops the button losing its
+ * place: a tab that is not a step in the round can be stood on, and then
+ * "what comes next" has no answer — which is how the foot of the sheet came
+ * to offer a departure while standing in the Angebot.
+ */
+type Tab = HarbourStep
 
 /**
  * Why a card cannot be taken. "Von einer Warengattung nur eine Karte" binds
@@ -85,13 +94,16 @@ export function PortSheet({
   // shrink underfoot — buying the last affordable good drops the Angebot from
   // the walk — without the button ever pointing at a step that is gone.
   const at = plan.findIndex((s) => s.step === tab)
-  const stage: Stage | undefined = at >= 0 ? plan[at] : undefined
-  const next: Stage | undefined = at >= 0 ? plan[at + 1] : undefined
+  const stage: Stage = plan[Math.max(at, 0)] ?? plan[0]!
+  const next: Stage | undefined = plan[Math.max(at, 0) + 1]
 
-  const folk = useMemo(
-    () => harbourCharacters(portId, state.round, 2, ctx.pack.id),
-    [portId, state.round, ctx.pack.id],
-  )
+  // The round shortens underfoot — buying the harbour out drops the Angebot
+  // from it. Step back onto it rather than standing on a panel that is no
+  // longer part of the walk.
+  useEffect(() => {
+    if (at < 0 && plan[0]) setTab(plan[0].step)
+  }, [at, plan])
+
   const report = useMemo(
     () => marketReport(ctx, player, 6),
     [ctx, player],
@@ -198,12 +210,15 @@ export function PortSheet({
       <Tabs
         value={tab}
         onChange={setTab}
-        items={[
-          { id: 'verkaufen', label: 'Ladung', badge: flagship(player).cargo.length },
-          { id: 'kaufen', label: 'Angebot', badge: affordable },
-          { id: 'wohin', label: 'Wohin?' },
-          { id: 'kai', label: 'Am Kai' },
-        ]}
+        items={plan.map((s) => ({
+          id: s.step,
+          label: s.label,
+          ...(s.step === 'verkaufen'
+            ? { badge: flagship(player).cargo.length }
+            : s.step === 'kaufen'
+              ? { badge: affordable }
+              : {}),
+        }))}
       />
 
       {tab === 'verkaufen' && (
@@ -293,24 +308,6 @@ export function PortSheet({
 
       {tab === 'wohin' && <MarketReport ctx={ctx} report={report} cargo={flagship(player).cargo.length} />}
 
-      {tab === 'kai' && (
-        <div className="stagger anim-fade space-y-3">
-          {folk.map((person) => (
-            <div key={person.name} className="flex items-start gap-2.5">
-              <Portrait traits={person.portrait} size={40} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[12px] leading-tight">
-                  <span className="smallcaps text-ink-soft">{person.role}</span>{' '}
-                  <span className="font-semibold">{person.name}</span>
-                </p>
-                <p className="text-ink-soft text-[14px] leading-snug italic break-words">
-                  „{person.line}“
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </Sheet>
   )
 }
@@ -336,16 +333,29 @@ function Landfall({
   guide: HarbourCharacter
 }) {
   const { headline, body } = harbourGreeting(ctx, state, player, portId)
+  // One voice overheard on the quay, so a harbour is somewhere and not just
+  // a name. The Makler does the talking; this is the room behind them.
+  const passerby = harbourCharacters(portId, state.round, 1, ctx.pack.id)[0]
+
   return (
     <div className="anim-fade flex h-full flex-col items-center justify-center px-2 text-center">
       <Portrait traits={guide.portrait} size={104} />
       <p className="smallcaps text-ink-soft mt-3 text-[11px]">{guide.role}</p>
       <p className="display text-xl leading-tight">{guide.name}</p>
-      <hr className="rule my-3 w-24" />
-      <h3 className="display letterpress text-2xl leading-tight">{headline}</h3>
-      <p className="text-ink-soft mx-auto mt-2.5 max-w-sm text-[15px] leading-relaxed italic">
-        „<Emph text={body} />“
-      </p>
+      <h3 className="display letterpress mt-3 text-2xl leading-tight">{headline}</h3>
+
+      {/* The same green slip the Makler speaks from all through the harbour. */}
+      <div className="paper-slip mx-auto mt-3 max-w-sm rounded-sm px-3.5 py-3">
+        <p className="text-press text-[15px] leading-relaxed font-semibold">
+          <Emph text={body} strong="press-dark font-bold" />
+        </p>
+      </div>
+
+      {passerby && (
+        <p className="text-ink-faint mx-auto mt-4 max-w-sm text-[12px] leading-snug italic">
+          {passerby.role} {passerby.name}, im Vorbeigehen: „{passerby.line}“
+        </p>
+      )}
     </div>
   )
 }
@@ -357,12 +367,20 @@ function Landfall({
  * and the button beside them opens the panel that acts on it. This is the
  * whole tutorial: no rules screen, just somebody who works here.
  */
+/**
+ * The Makler always speaks in the same voice.
+ *
+ * Green on green: the same press ink the Warenkarten are printed with, so the
+ * figures named here look like the figures on the cards below rather than a
+ * different kind of writing. Urgency shows as a heavier rule around the slip,
+ * never as a change of colour — a voice that turns red when it matters is a
+ * voice you stop reading when it does not.
+ */
 function GuideNote({ guide, stage }: { guide: HarbourCharacter; stage: Stage }) {
-  const loud = stage.urgency === 'dringend'
   return (
     <div
       className={`paper-slip anim-fade mb-3 flex items-start gap-2.5 rounded-sm px-2.5 py-2.5 ${
-        loud ? 'ring-rot/45 ring-2' : ''
+        stage.urgency === 'dringend' ? 'ring-2 ring-[#12452f]/45' : ''
       }`}
     >
       <Portrait traits={guide.portrait} size={44} />
@@ -371,15 +389,8 @@ function GuideNote({ guide, stage }: { guide: HarbourCharacter; stage: Stage }) 
           <span className="smallcaps text-black/55">{guide.role}</span>{' '}
           <span className="font-semibold text-black/75">{guide.name}</span>
         </p>
-        {/* Green on green: the same press ink the Warenkarten are printed
-            with, so the figures the Makler names look like the figures on
-            the cards below rather than like a different kind of writing. */}
-        <p
-          className={`mt-1 text-[15px] leading-snug font-semibold ${
-            loud ? 'text-rot' : 'text-press'
-          }`}
-        >
-          <Emph text={stage.text} strong={loud ? 'text-rot font-bold' : 'press-dark font-bold'} />
+        <p className="text-press mt-1 text-[15px] leading-snug font-semibold">
+          <Emph text={stage.text} strong="press-dark font-bold" />
         </p>
       </div>
     </div>

@@ -815,3 +815,76 @@ describe('the guided round', () => {
     expect((button as HTMLButtonElement).disabled).toBe(true)
   })
 })
+
+describe('the round and the tabs are one list', () => {
+  const tabs = () => screen.getAllByRole('tab').map((t) => t.textContent?.replace(/\d+$/, ''))
+
+  it('shows a tab for every step of the round and nothing else', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'listen' }))
+    enterHarbour()
+
+    // Empty hold: hold and quay, no chart to plan with, and no Am Kai.
+    expect(tabs()).toEqual(['Ladung', 'Angebot'])
+    expect(screen.queryByRole('tab', { name: /Am Kai/ })).toBeNull()
+  })
+
+  it('drops the Angebot tab with the round when the harbour is spent', () => {
+    // The bug this replaces: the tab stayed while the step went, so standing
+    // on it left the foot of the sheet with no idea what came next — it
+    // offered a departure from the middle of the round.
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'verbraucht' }))
+    enterHarbour()
+
+    for (let i = 0; i < 2; i++) {
+      const s = useGame.getState().state!
+      const gameCtx = useGame.getState().ctx
+      const player = s.players[0]!
+      const offer = buyOffers(gameCtx, s, player, portAt(gameCtx, flagship(player).nodeId)!).find(
+        (o) => o.status === 'ok',
+      )
+      if (!offer) break
+      act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+    }
+
+    expect(tabs()).toEqual(['Ladung', 'Wohin?'])
+    // And the button names the tab that is actually there.
+    expect(footer().textContent).toBe('Weiter zu Wohin?')
+  })
+
+  it('offers a departure only from the last tab of the round', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'letzter' }))
+    enterHarbour()
+
+    const names = tabs()
+    for (let i = 0; i < names.length; i++) {
+      const last = i === names.length - 1
+      const label = footer().textContent ?? ''
+      expect(/ablegen/i.test(label), `tab ${names[i]}`).toBe(last)
+      if (!last) {
+        expect(label, `tab ${names[i]}`).toBe(`Weiter zu ${names[i + 1]}`)
+        act(() => {
+          fireEvent.click(footer())
+        })
+      }
+    }
+  })
+
+  it('keeps the Makler in one colour whatever the news', () => {
+    // A voice that turns red when it matters is one you stop reading when it
+    // does not, so the slip never changes ink.
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'stimme' }))
+    enterHarbour()
+
+    const slip = () => document.querySelector('.paper-slip')!
+    // An empty hold is the loudest thing the Makler says.
+    act(() => {
+      fireEvent.click(footer())
+    })
+    expect(slip().innerHTML).toContain('text-press')
+    expect(slip().innerHTML).not.toContain('text-rot')
+  })
+})
