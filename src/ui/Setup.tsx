@@ -700,48 +700,73 @@ function TraderSlot({
     [trimmed, trader.gender],
   )
   const color = PLAYER_COLORS[index % PLAYER_COLORS.length]!
+  // Before a name is typed there is nobody yet, but the switch still holds a
+  // preference — so it never appears out of nowhere and never sits dead.
+  const chosen = persona?.gender ?? trader.gender ?? null
 
   return (
-    <div className="paper-card flex items-center gap-3 rounded-md p-3">
-      <div className="shrink-0">
-        {persona ? (
-          <Portrait traits={persona.portrait} size={52} />
-        ) : (
-          <div className="border-ink-soft/40 grid h-13 w-13 place-items-center rounded-full border border-dashed p-4">
-            <span className="text-ink-faint text-xs">?</span>
-          </div>
-        )}
+    <div className="paper-card relative flex items-center gap-3 rounded-md p-3">
+      {/* Bildnis mit dem Farbsiegel des Hauses */}
+      <div className="relative shrink-0">
+        {/* Der Schlüssel wechselt nur beim ersten Buchstaben, nicht bei
+            jedem — das Bildnis blendet einmal auf und zappelt nicht. */}
+        <div key={persona ? 'wer' : 'niemand'} className="anim-fade grid h-13 w-13 place-items-center">
+          {persona ? (
+            <Portrait traits={persona.portrait} size={52} />
+          ) : (
+            <div className="border-ink-soft/40 grid h-12 w-12 place-items-center rounded-full border border-dashed">
+              <span className="text-ink-faint text-xs">?</span>
+            </div>
+          )}
+        </div>
+        <span
+          className="border-paper absolute right-0 bottom-0 block h-3.5 w-3.5 rounded-full border-2 shadow-[0_0_0_1px_rgb(0_0_0/0.25)]"
+          style={{ background: color.ink }}
+          title={color.name}
+        />
       </div>
 
       <div className="min-w-0 flex-1">
         <input
-          className="focusable placeholder:text-ink-faint border-ink-soft/50 w-full border-0 border-b border-dashed bg-transparent px-0 py-1 text-base outline-none"
+          className="focusable placeholder:text-ink-faint border-ink-soft/50 w-full border-0 border-b border-dashed bg-transparent py-1 pr-6 pl-0 text-base outline-none"
           placeholder={`${index + 1}. Name`}
           value={trader.name}
           maxLength={22}
           onChange={(e) => onChange({ ...trader, name: e.target.value })}
           aria-label={`Name der ${index + 1}. Person`}
         />
-        {persona ? (
-          <p className="text-ink-soft mt-1 truncate text-[11px]">
-            {persona.rank} · {persona.house}
-          </p>
-        ) : (
-          <p className="text-ink-faint mt-1 text-[11px]">Tragen Sie sich ein.</p>
-        )}
-      </div>
 
-      <div className="flex shrink-0 flex-col items-center gap-1.5">
-        {/* Bis hier getippt wird, entscheidet der Name selbst. */}
-        {persona && (
-          <div className="flex overflow-hidden rounded-sm border border-black/20">
+        <div className="mt-1.5 flex items-center gap-2">
+          <p className="min-w-0 flex-1 truncate text-[11px] leading-tight">
+            {persona ? (
+              <>
+                <span className="smallcaps text-ink-soft">{persona.rank}</span>
+                <span className="text-ink-faint"> · </span>
+                <span className="text-ink-soft">{persona.house}</span>
+              </>
+            ) : (
+              <span className="text-ink-faint italic">Tragen Sie sich ein.</span>
+            )}
+          </p>
+
+          {/* Immer da, damit beim Tippen nichts aufspringt — nur blasser,
+              solange noch niemand eingetragen ist. */}
+          <div
+            className={`flex shrink-0 overflow-hidden rounded-sm border border-black/20 transition-opacity duration-300 ${
+              persona ? 'opacity-100' : 'opacity-40'
+            }`}
+            role="group"
+            aria-label="Kauffrau oder Kaufmann"
+          >
             {(['w', 'm'] as const).map((g) => (
               <button
                 key={g}
-                className={`btn-sm px-1.5 py-0.5 text-[13px] leading-none ${
-                  persona.gender === g ? 'bg-ink/85 text-paper' : 'text-ink-soft hover:bg-black/5'
+                className={`btn-sm px-2 py-0.5 text-[12px] leading-none transition-colors ${
+                  chosen === g
+                    ? 'bg-ink/85 text-paper'
+                    : 'text-ink-soft hover:bg-black/5'
                 }`}
-                aria-pressed={persona.gender === g}
+                aria-pressed={chosen === g}
                 aria-label={g === 'w' ? 'Kauffrau' : 'Kaufmann'}
                 onClick={() => onChange({ ...trader, gender: g })}
               >
@@ -749,22 +774,18 @@ function TraderSlot({
               </button>
             ))}
           </div>
-        )}
-        <span
-          className="block h-4 w-4 rounded-full border border-black/30"
-          style={{ background: color.ink }}
-          title={color.name}
-        />
-        {onRemove && (
-          <button
-            className="text-ink-faint hover:text-rot btn-sm text-xs"
-            onClick={onRemove}
-            aria-label="Streichen"
-          >
-            ✕
-          </button>
-        )}
+        </div>
       </div>
+
+      {onRemove && (
+        <button
+          className="text-ink-faint hover:text-rot btn-sm absolute top-1.5 right-1.5 px-1 text-xs leading-none"
+          onClick={onRemove}
+          aria-label="Streichen"
+        >
+          ✕
+        </button>
+      )}
     </div>
   )
 }
