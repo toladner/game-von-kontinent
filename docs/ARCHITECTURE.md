@@ -105,6 +105,49 @@ Konjunktur cards are already declarative: a card is `{title, lines, effects[]}`
 where each effect is a tagged union member. A new effect type is one variant in
 `KonjunkturEffect` plus one `case` in `applyEffect`.
 
+### 4. Land routes and bigger vehicles
+
+The graph and the traveller are already separate concepts:
+
+- `Lane.mode` is `'see' | 'land' | 'schiene'`. The classic board only draws sea
+  lanes, but the movement code walks edges, not water.
+- `Vehicle` carries `{capacity, modes, kmPerPip}` and lives on `PlayerState`.
+  The classic steamer is `capacity: null` (the Anleitung sets no limit) and
+  `modes: ['see']`.
+
+So "start in a small town with a handcart and trade your way up" needs:
+
+1. Inland nodes and `mode: 'land'` lanes in a map pack.
+2. A vehicle catalogue plus a `buyVehicle` action — the reducer already
+   enforces `capacity` on every purchase, so a bigger hold immediately means
+   more cargo.
+3. Filtering `legalSteps` by `player.vehicle.modes`, which is a one-line
+   change in `selectors.ts`.
+
+The cargo hold is drawn from `capacity`: give a vehicle a limit and the UI
+grows empty crate slots on its own.
+
+### 5. Playing together, across devices and across days
+
+This is the one extension that needs something the browser cannot provide
+alone: a place to keep the game while nobody is looking at it.
+
+The design already fits it. A game is `{seed, options, actions[]}` — a couple
+of kilobytes. A server does not need the rules at all; it stores the action
+list, checks whose turn it is, and broadcasts. Suggested shape:
+
+- **Cloudflare Worker + one Durable Object per game.** The object holds the
+  action log and the connected sockets, and survives between visits. Free tier
+  covers a game night comfortably, and it deploys next to the static site.
+- The client gains a `transport` behind the same `dispatch()` the local game
+  uses: local play appends to an array, online play sends the action and waits
+  for the echo. Nothing above the store changes.
+- **Late joiners** (`joinPolicy: 'jederzeit'`) work because a new player is
+  just an action — `joinGame` appended to the log, replayed by everyone.
+- **Real-time sailing and asynchronous play are the same feature.** Once a
+  ship's position is a function of wall-clock time, "check back this evening"
+  is the natural way to play, and the turn order stops being a queue.
+
 ## Fidelity notes
 
 Transcribed from the originals in `based/`:

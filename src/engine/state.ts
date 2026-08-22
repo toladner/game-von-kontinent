@@ -1,4 +1,4 @@
-import type { GoodId, Money, NodeId, PortId, RuleConfig } from './types'
+import type { GoodId, Money, NodeId, PortId, RuleConfig, Vehicle } from './types'
 import type { RngState } from './rng'
 import type { Persona } from './persona'
 
@@ -30,6 +30,7 @@ export interface PlayerState {
   readonly cash: Money
   readonly cargo: readonly CargoItem[]
   readonly ship: ShipState
+  readonly vehicle: Vehicle
   readonly homePort: PortId
   /** Goods bought during the current port visit; max 2, never twice the same. */
   readonly purchasesThisVisit: readonly GoodId[]

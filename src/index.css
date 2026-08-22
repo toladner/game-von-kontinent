@@ -50,10 +50,33 @@ html,
 body,
 #root {
   height: 100%;
+  height: 100dvh;
+}
+
+/* Respect the notch and the home indicator. */
+:root {
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+/* Touch targets never smaller than a thumb. */
+button,
+[role='button'] {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+.btn-sm {
+  min-height: 32px;
 }
 
 body {
   margin: 0;
+  position: fixed;
+  inset: 0;
+  width: 100%;
   background-color: #3b3227;
   color: var(--color-ink);
   font-family: var(--font-body);
@@ -74,7 +97,7 @@ body {
     radial-gradient(120% 90% at 50% 0%, rgb(255 250 235 / 0.55), transparent 60%),
     linear-gradient(180deg, rgb(0 0 0 / 0), rgb(90 70 40 / 0.09));
   box-shadow:
-    inset 0 0 40px rgb(120 95 55 / 0.18),
+    inset 0 0 40px rgb(120 95 55 / 0.10),
     0 1px 0 rgb(255 255 255 / 0.35);
 }
 
@@ -84,7 +107,7 @@ body {
   inset: 0;
   background-image: var(--paper-grain);
   mix-blend-mode: multiply;
-  opacity: 0.5;
+  opacity: 0.26;
   pointer-events: none;
 }
 
@@ -103,11 +126,32 @@ body {
   border: 1px solid rgb(70 90 40 / 0.4);
 }
 
-/* Deckle edge for the Konjunktur slips, like scissor-cut perforation. */
-.deckle {
-  --d: 5px;
-  -webkit-mask-image: radial-gradient(var(--d) at var(--d) 50%, transparent 98%, #000 100%);
-  mask-image: none;
+/*
+ * The Konjunktur slips came on perforated strips and were cut apart with
+ * scissors. Scalloped top and bottom edges, masked out of the element itself
+ * so the paper texture shows through the notches.
+ */
+.coupon-edge {
+  --r: 6px;
+  -webkit-mask:
+    radial-gradient(var(--r) at 50% 0, #0000 98%, #000) 0 0 / calc(2 * var(--r)) 100% repeat-x,
+    radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% / calc(2 * var(--r)) 100%
+      repeat-x;
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(var(--r) at 50% 0, #0000 98%, #000) 0 0 / calc(2 * var(--r)) 100% repeat-x,
+    radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% / calc(2 * var(--r)) 100%
+      repeat-x;
+  mask-composite: intersect;
+}
+
+/* A single torn edge, for receipts and tickets. */
+.torn-bottom {
+  --r: 5px;
+  -webkit-mask: radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% /
+    calc(2 * var(--r)) 100% repeat-x;
+  mask: radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 0 100% / calc(2 * var(--r)) 100%
+    repeat-x;
 }
 
 /* --------------------------------------------------------------------------
@@ -260,3 +304,138 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgb(120 95 55 / 0.5) transparent;
 }
+
+/* --------------------------------------------------------------------------
+   Bewegung
+   -------------------------------------------------------------------------- */
+
+@keyframes rise {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes deal-in {
+  from {
+    transform: translateY(-24px) rotate(6deg) scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) rotate(-1.2deg) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes stamp-down {
+  0% {
+    transform: rotate(-7deg) scale(2.1);
+    opacity: 0;
+  }
+  55% {
+    transform: rotate(-7deg) scale(0.94);
+    opacity: 1;
+  }
+  70% {
+    transform: rotate(-7deg) scale(1.04);
+  }
+  100% {
+    transform: rotate(-7deg) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes tumble {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  30% {
+    transform: rotate(220deg) scale(1.18);
+  }
+  60% {
+    transform: rotate(430deg) scale(0.94);
+  }
+  100% {
+    transform: rotate(540deg) scale(1);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    r: 5.5;
+    opacity: 0.9;
+  }
+  70% {
+    r: 11;
+    opacity: 0;
+  }
+  100% {
+    r: 11;
+    opacity: 0;
+  }
+}
+
+@keyframes coin-flash {
+  0% {
+    background-color: rgb(169 134 63 / 0.45);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.anim-rise {
+  animation: rise 240ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.anim-sheet {
+  animation: sheet-up 280ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+.anim-fade {
+  animation: fade-in 200ms ease both;
+}
+.anim-deal {
+  animation: deal-in 380ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.anim-stamp {
+  animation: stamp-down 420ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.anim-tumble {
+  animation: tumble 620ms cubic-bezier(0.25, 0.9, 0.3, 1) both;
+}
+.anim-flash {
+  animation: coin-flash 900ms ease-out both;
+}
+
+/* Staggered list entrances without a library. */
+.stagger > * {
+  animation: rise 260ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 35ms; }
+.stagger > *:nth-child(3) { animation-delay: 70ms; }
+.stagger > *:nth-child(4) { animation-delay: 105ms; }
+.stagger > *:nth-child(5) { animation-delay: 140ms; }
+.stagger > *:nth-child(6) { animation-delay: 175ms; }
+.stagger > *:nth-child(n + 7) { animation-delay: 210ms; }

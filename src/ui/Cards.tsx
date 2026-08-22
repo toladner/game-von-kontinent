@@ -69,7 +69,7 @@ export function Warenkarte({
 /** A Konjunkturkarte: pale green slip, typewriter face, scissor-cut edge. */
 export function KonjunkturSlip({ card }: { card: KonjunkturCard }) {
   return (
-    <div className="paper-slip mx-auto w-full max-w-xs rotate-[-1.2deg] rounded-[2px] px-4 py-3 shadow-md">
+    <div className="paper-slip coupon-edge mx-auto w-full max-w-xs rotate-[-1.2deg] px-4 py-5">
       <p className="smallcaps text-center text-[10px] tracking-[0.3em] text-black/55">
         Konjunkturkarte
       </p>

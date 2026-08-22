@@ -401,6 +401,10 @@ export function applyAction(
       if (player.purchasesThisVisit.includes(action.goodId)) {
         return reject(state, 'Von einer Warengattung nur eine Karte.')
       }
+      const capacity = player.vehicle.capacity
+      if (capacity !== null && player.cargo.length >= capacity) {
+        return reject(state, `Der Laderaum faßt nur ${capacity} Posten.`)
+      }
       if ((draft.bankStock[action.goodId] ?? 0) <= 0) {
         return reject(state, 'Die Exportbank hat keine Karte mehr davon.')
       }

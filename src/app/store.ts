@@ -12,7 +12,14 @@ interface SaveFile {
   readonly names: string[]
   readonly seed: string
   readonly totalRounds: number
+  readonly startingCapital?: number
   readonly actions: GameAction[]
+}
+
+export interface BeginOptions {
+  readonly totalRounds?: number
+  readonly startingCapital?: number
+  readonly seed?: string
 }
 
 export interface LogLine {
@@ -29,7 +36,7 @@ interface Store {
   lastEvents: readonly GameEvent[]
   notice: string | null
 
-  begin: (names: string[], totalRounds: number, seed?: string) => void
+  begin: (names: string[], options?: BeginOptions) => void
   dispatch: (action: GameAction) => void
   resume: () => boolean
   abandon: () => void
@@ -137,17 +144,19 @@ export const useGame = create<Store>((set, get) => ({
   lastEvents: [],
   notice: null,
 
-  begin(names, totalRounds, seed) {
-    const realSeed = seed ?? `${Date.now().toString(36)}-${names.join('|')}`
-    saved = { names, seed: realSeed, totalRounds, actions: [] }
+  begin(names, options = {}) {
+    const totalRounds = options.totalRounds ?? 30
+    const startingCapital = options.startingCapital ?? ctx.pack.config.startingCapital
+    const realSeed = options.seed ?? `${Date.now().toString(36)}-${names.join('|')}`
+    saved = { names, seed: realSeed, totalRounds, startingCapital, actions: [] }
     persist()
-    const state = createGame(ctx, { names, seed: realSeed, totalRounds })
+    const state = createGame(ctx, { names, seed: realSeed, totalRounds, startingCapital })
     set({
       state,
       log: [
         {
           id: ++logId,
-          text: 'Die Exportbank kreditiert jedem Mitspieler 500.000 Einheiten Betriebskapital.',
+          text: `Die Exportbank kreditiert jedem Mitspieler ${startingCapital.toLocaleString('de-DE')} Einheiten Betriebskapital.`,
           tone: 'wichtig',
         },
       ],
@@ -194,6 +203,7 @@ export const useGame = create<Store>((set, get) => ({
         names: file.names,
         seed: file.seed,
         totalRounds: file.totalRounds,
+        ...(file.startingCapital ? { startingCapital: file.startingCapital } : {}),
       })
       const state = replay(ctx, initial, file.actions ?? [])
       saved = file

@@ -33,6 +33,12 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    host: true,
+    // Cloudflare quick tunnels hand out a random *.trycloudflare.com name;
+    // without this Vite refuses the request as an unknown host.
+    allowedHosts: ['.trycloudflare.com', '.ngrok-free.app', '.loca.lt'],
+  },
   resolve: {
     alias: {
       '@engine': r('./src/engine'),

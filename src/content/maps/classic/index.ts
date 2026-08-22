@@ -29,6 +29,13 @@ export const CLASSIC_CONFIG: RuleConfig = {
   collisionPenaltyTurns: 1,
   levyGracePeriodRounds: 5,
   diceSides: 6,
+  startingVehicle: {
+    id: 'frachtdampfer',
+    name: 'Frachtdampfer',
+    // The Anleitung sets no limit on the hold.
+    capacity: null,
+    modes: ['see'],
+  },
 }
 
 export const CLASSIC_MAP = buildMap({

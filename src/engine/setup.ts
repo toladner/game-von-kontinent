@@ -9,6 +9,8 @@ export interface NewGameOptions {
   readonly seed?: string
   /** The rules allow a shorter game, "z. B. nur 30 statt 50". */
   readonly totalRounds?: number
+  /** Overrides the 500.000 the Exportbank normally credits. */
+  readonly startingCapital?: number
 }
 
 /**
@@ -21,9 +23,11 @@ export function createGame(ctx: EngineContext, options: NewGameOptions): GameSta
   const names = options.names.map((n, i) => n.trim() || `Kaufmann ${i + 1}`)
   if (names.length < 1) throw new Error('Es braucht mindestens einen Mitspieler.')
 
-  const config = options.totalRounds
-    ? { ...ctx.pack.config, totalRounds: options.totalRounds }
-    : ctx.pack.config
+  const config = {
+    ...ctx.pack.config,
+    ...(options.totalRounds ? { totalRounds: options.totalRounds } : {}),
+    ...(options.startingCapital ? { startingCapital: options.startingCapital } : {}),
+  }
 
   let rng: RngState = seedFrom(options.seed ?? `partie:${names.join('|')}`)
 
@@ -45,6 +49,7 @@ export function createGame(ctx: EngineContext, options: NewGameOptions): GameSta
       cash: config.startingCapital,
       cargo: [],
       ship: { nodeId: homePort, cameFrom: null, skipTurns: 0 },
+      vehicle: config.startingVehicle,
       homePort,
       purchasesThisVisit: [],
       hasDeparted: false,

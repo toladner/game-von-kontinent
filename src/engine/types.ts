@@ -95,14 +95,39 @@ export interface SeaNode extends MapNode {
 export type AnyNode = Port | SeaNode
 
 /**
- * An undirected sea lane between two adjacent nodes. One edge is exactly one
+ * How a leg is travelled. The classic board knows only sea lanes; land and
+ * rail exist here so a future map can carry them without reshaping the graph.
+ */
+export type TransportMode = 'see' | 'land' | 'schiene'
+
+/**
+ * An undirected lane between two adjacent nodes. One edge is exactly one
  * "pip" of movement, mirroring the printed dots on the board.
  */
 export interface Lane {
   readonly a: NodeId
   readonly b: NodeId
+  /** Defaults to 'see'. */
+  readonly mode?: TransportMode
   /** Optional curvature for drawing (0 = straight great-circle-ish line). */
   readonly bow?: number
+}
+
+/**
+ * What the player travels in.
+ *
+ * The original game gives everyone one identical steamer with an unlimited
+ * hold, so the classic vehicle has `capacity: null`. Trading your way up from
+ * a handcart to a freighter is a matter of swapping this object.
+ */
+export interface Vehicle {
+  readonly id: string
+  readonly name: string
+  /** null = no limit, as in the original rules. */
+  readonly capacity: number | null
+  readonly modes: readonly TransportMode[]
+  /** Kilometres per pip; lets a lorry and a steamer share one map. */
+  readonly kmPerPip?: number
 }
 
 export interface GameMap {
@@ -179,6 +204,8 @@ export interface RuleConfig {
   /** A Steuer/Versicherung demand is only settled once per this many rounds. */
   readonly levyGracePeriodRounds: number
   readonly diceSides: number
+  /** What every player starts out travelling in. */
+  readonly startingVehicle: Vehicle
 }
 
 // ---------------------------------------------------------------------------

@@ -71,6 +71,7 @@ export type BuyBlock =
   | 'kein-geld'
   | 'schon-geladen'
   | 'ladeschluss'
+  | 'laderaum-voll'
 
 export interface BuyOffer {
   readonly goodId: GoodId
@@ -91,7 +92,9 @@ export function buyOffers(
     const g = goodOf(ctx, goodId)
     const stock = state.bankStock[goodId] ?? 0
     let status: BuyBlock = 'ok'
+    const capacity = player.vehicle.capacity
     if (player.purchasesThisVisit.includes(goodId)) status = 'schon-geladen'
+    else if (capacity !== null && player.cargo.length >= capacity) status = 'laderaum-voll'
     else if (player.purchasesThisVisit.length >= max) status = 'ladeschluss'
     else if (stock <= 0) status = 'ausverkauft'
     else if (player.cash < g.buy) status = 'kein-geld'
@@ -112,6 +115,105 @@ export function verkaufszwangOpen(
 ): boolean {
   if (!state.mustSellForeign) return false
   return player.cargo.some((item) => !ctx.exportsOf(portId).includes(item.goodId))
+}
+
+// ---------------------------------------------------------------------------
+// Marktbericht — "where should I sail?"
+// ---------------------------------------------------------------------------
+
+export interface Destination {
+  readonly portId: PortId
+  readonly name: string
+  /** Sea miles in pips, i.e. how many dice points away. */
+  readonly distance: number
+  /** What the hold would fetch there at market prices. */
+  readonly proceeds: Money
+  /** Proceeds minus what was paid for the goods that would sell. */
+  readonly profit: Money
+  /** How many pieces of cargo this port would take at market price. */
+  readonly sellable: number
+  /** Goods this port exports that are not already in the hold. */
+  readonly offers: number
+}
+
+/** Distance in pips from a node to every other node, honouring the no-turn rule. */
+export function distancesFrom(
+  ctx: EngineContext,
+  from: NodeId,
+  cameFrom: NodeId | null,
+): ReadonlyMap<NodeId, number> {
+  const all = ctx.graph.neighbours.get(from) ?? []
+  const forward = all.filter((n) => n !== cameFrom)
+  const seeds = forward.length > 0 ? forward : all
+
+  const dist = new Map<NodeId, number>([[from, 0]])
+  let frontier = seeds.filter((n) => !dist.has(n))
+  for (const n of frontier) dist.set(n, 1)
+
+  let step = 1
+  while (frontier.length > 0) {
+    step += 1
+    const next: NodeId[] = []
+    for (const node of frontier) {
+      for (const neighbour of ctx.graph.neighbours.get(node) ?? []) {
+        if (dist.has(neighbour)) continue
+        dist.set(neighbour, step)
+        next.push(neighbour)
+      }
+    }
+    frontier = next
+  }
+  return dist
+}
+
+/**
+ * The Kontor's advice: which harbours are worth steering for, given what is
+ * in the hold right now. Sorted by yield per point of sailing, because a fat
+ * profit twenty pips away is worth less than a fair one next door.
+ */
+export function marketReport(
+  ctx: EngineContext,
+  player: PlayerState,
+  limit = 6,
+): readonly Destination[] {
+  const dist = distancesFrom(ctx, player.ship.nodeId, player.ship.cameFrom)
+  const held = new Set(player.cargo.map((c) => c.goodId))
+
+  const rows: Destination[] = []
+  for (const port of ctx.portsById.values()) {
+    const distance = dist.get(port.id)
+    if (distance === undefined || distance === 0) continue
+
+    const exports = ctx.exportsOf(port.id)
+    let proceeds = 0
+    let profit = 0
+    let sellable = 0
+    for (const item of player.cargo) {
+      if (exports.includes(item.goodId)) continue // only a loss price there
+      const price = goodOf(ctx, item.goodId).sell
+      proceeds += price
+      profit += price - item.pricePaid
+      sellable += 1
+    }
+
+    rows.push({
+      portId: port.id,
+      name: port.name,
+      distance,
+      proceeds,
+      profit,
+      sellable,
+      offers: exports.filter((g) => !held.has(g)).length,
+    })
+  }
+
+  const score = (d: Destination) =>
+    player.cargo.length > 0 ? d.profit / (d.distance + 2) : d.offers / (d.distance + 2)
+
+  return rows
+    .filter((d) => (player.cargo.length > 0 ? d.sellable > 0 : d.offers > 0))
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, limit)
 }
 
 export interface Standing {

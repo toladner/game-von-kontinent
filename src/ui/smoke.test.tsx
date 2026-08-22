@@ -18,16 +18,40 @@ beforeEach(() => {
 })
 
 describe('the front page', () => {
-  it('renders the title and takes a name', () => {
+  it('offers the two modes and walks the classic path to the names', () => {
     render(<App />)
     expect(screen.getByText(/Von Kontinent/)).toBeTruthy()
+    expect(screen.getByText('Klassisch')).toBeTruthy()
+    expect(screen.getByText('Vollständig')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Klassisch'))
 
     const input = screen.getByLabelText('Name des 1. Kaufmanns') as HTMLInputElement
+    expect((screen.getByText('An Bord gehen') as HTMLButtonElement).disabled).toBe(true)
+
     fireEvent.change(input, { target: { value: 'Tobias' } })
 
     // Typing a name conjures a trading house on the spot.
-    expect(screen.getByText(/aus /)).toBeTruthy()
+    expect(screen.getByText(/Kontor|Reederei|Handelshaus|& Söhne|& Co\.|Compagnie|Überseehandel/)).toBeTruthy()
     expect((screen.getByText('An Bord gehen') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('opens the option page on the full path', () => {
+    render(<App />)
+    fireEvent.click(screen.getByText('Vollständig'))
+    expect(screen.getByText('Spielplan')).toBeTruthy()
+    expect(screen.getByText('Originalplan')).toBeTruthy()
+    // Unbuilt features are shown, but never offered as working buttons.
+    expect((screen.getByText('In Echtzeit').closest('button') as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+    fireEvent.click(screen.getByText('Weiter'))
+    expect(
+      (screen.getByText('Partie eröffnen').closest('button') as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(
+      (screen.getByText('An einem Gerät').closest('button') as HTMLButtonElement).disabled,
+    ).toBe(false)
   })
 })
 
@@ -36,13 +60,15 @@ describe('the board', () => {
     render(<App />)
 
     act(() => {
-      useGame.getState().begin(['Ada', 'Bo'], 20, 'smoke-seed')
+      useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'smoke-seed' })
     })
 
-    // Starts in harbour: the port panel and its quay characters are up.
+    // Starts in harbour: the sheet is open and the board is drawn behind it.
     expect(screen.getByText('Ablegen')).toBeTruthy()
-    expect(screen.getByText(/Ausfuhrgüter dieses Landes/)).toBeTruthy()
+    expect(screen.getByText('Angebot')).toBeTruthy()
     expect(document.querySelector('svg[aria-label]')).toBeTruthy()
+    // The HUD answers "who am I and what can I spend" at all times.
+    expect(screen.getAllByText(/Posten an Bord|Laderaum leer/).length).toBeGreaterThan(0)
 
     // Both players provision, then the first one puts to sea.
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
@@ -50,7 +76,7 @@ describe('the board', () => {
     expect(useGame.getState().state!.phase).toBe('roll')
 
     act(() => useGame.getState().dispatch({ type: 'roll' }))
-    expect(screen.getAllByText(/Punkte/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/grünen Punkt antippen/)).toBeTruthy()
 
     // Sail the whole throw.
     for (let guard = 0; guard < 8; guard++) {
@@ -69,7 +95,7 @@ describe('the board', () => {
 
   it('shows a buy as a change of cash and cargo', () => {
     render(<App />)
-    act(() => useGame.getState().begin(['Ada'], 20, 'buy-seed'))
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'buy-seed' }))
 
     const before = useGame.getState().state!.players[0]!
     const ctx = useGame.getState().ctx
@@ -81,12 +107,15 @@ describe('the board', () => {
     const after = useGame.getState().state!.players[0]!
     expect(after.cargo).toHaveLength(1)
     expect(after.cash).toBeLessThan(before.cash)
-    expect(screen.getByText(/Ihre Ladung/)).toBeTruthy()
+    expect(screen.getAllByText('Ladung').length).toBeGreaterThan(0)
+    // The hold is drawn as crates, one per posten, stencilled with the card number.
+    expect(document.querySelectorAll(`svg[aria-label="${ctx.goodsById.get(goodId)!.name}"]`).length)
+      .toBeGreaterThan(0)
   })
 
   it('reaches the final reckoning and ranks the houses', () => {
     render(<App />)
-    act(() => useGame.getState().begin(['Ada', 'Bo'], 1, 'end-seed'))
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 1, seed: 'end-seed' }))
 
     // One-round game: both provision, and the wrap past the last round settles up.
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
@@ -94,13 +123,14 @@ describe('the board', () => {
 
     expect(useGame.getState().state!.phase).toBe('over')
     expect(screen.getByText(/Wer hat den Handel gemacht/)).toBeTruthy()
+    expect(screen.getByText('Schlußabrechnung')).toBeTruthy()
   })
 })
 
 describe('saving', () => {
   it('resumes a game from the action log alone', () => {
     render(<App />)
-    act(() => useGame.getState().begin(['Ada', 'Bo'], 20, 'resume-seed'))
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'resume-seed' }))
     act(() => useGame.getState().dispatch({ type: 'endTurn' }))
     const expected = useGame.getState().state!
 

@@ -27,9 +27,18 @@ export interface BoardProps {
   readonly legalTargets: readonly string[]
   readonly onPick: (nodeId: string) => void
   readonly focusNode?: string | null
+  /** Harbours the Kontor suggests steering for; drawn with a green ring. */
+  readonly highlightPorts?: readonly string[]
 }
 
-export function Board({ ctx, state, legalTargets, onPick, focusNode }: BoardProps) {
+export function Board({
+  ctx,
+  state,
+  legalTargets,
+  onPick,
+  focusNode,
+  highlightPorts = [],
+}: BoardProps) {
   const map = ctx.pack.map
   const { bounds } = map
 
@@ -163,6 +172,7 @@ export function Board({ ctx, state, legalTargets, onPick, focusNode }: BoardProp
   }
 
   const targetSet = useMemo(() => new Set(legalTargets), [legalTargets])
+  const hintSet = useMemo(() => new Set(highlightPorts), [highlightPorts])
   const showAllLabels = view.k >= 1.9
 
   const ships = state.players.map((p) => ({
@@ -266,6 +276,7 @@ export function Board({ ctx, state, legalTargets, onPick, focusNode }: BoardProp
                     fill="none"
                     stroke="#1c6b4d"
                     strokeWidth={1.8}
+                    style={{ animation: 'pulse-ring 1.6s ease-out infinite' }}
                   />
                   <circle cx={p.x} cy={p.y} r={11} fill="transparent" className="cursor-pointer" />
                 </g>
@@ -277,9 +288,25 @@ export function Board({ ctx, state, legalTargets, onPick, focusNode }: BoardProp
           <g>
             {ports.map(({ port, x, y }) => {
               const here = state.players.some((p) => p.ship.nodeId === port.id)
-              const labelled = showAllLabels || here || targetSet.has(port.id) || port.id === focusNode
+              const labelled =
+                showAllLabels ||
+                here ||
+                targetSet.has(port.id) ||
+                hintSet.has(port.id) ||
+                port.id === focusNode
               return (
                 <g key={port.id}>
+                  {hintSet.has(port.id) && (
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={6}
+                      fill="none"
+                      stroke="#1c6b4d"
+                      strokeWidth={1.2}
+                      opacity={0.75}
+                    />
+                  )}
                   <circle cx={x} cy={y} r={2.6} fill="var(--color-rot)" stroke="#5a2018" strokeWidth={0.5} />
                   {labelled && (
                     <text
@@ -306,6 +333,7 @@ export function Board({ ctx, state, legalTargets, onPick, focusNode }: BoardProp
                 y={pos.y}
                 heading={from ? Math.atan2(pos.y - from.y, pos.x - from.x) : 0}
                 active={state.players[state.activeIndex]?.id === player.id}
+                laden={player.cargo.length}
                 nudge={(occupied.get(player.ship.nodeId) ?? 1) > 1 ? i * 5 - 2 : 0}
               />
             ))}
@@ -352,6 +380,7 @@ const Ship = memo(function Ship({
   heading,
   active,
   nudge,
+  laden,
 }: {
   player: PlayerState
   x: number
@@ -359,6 +388,7 @@ const Ship = memo(function Ship({
   heading: number
   active: boolean
   nudge: number
+  laden: number
 }) {
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!.ink
   const deg = (heading * 180) / Math.PI
@@ -374,6 +404,19 @@ const Ship = memo(function Ship({
         <path d="M8 21V8h14l7 7v6z" fill={color} opacity={0.85} />
         <rect x="12" y="0" width="2.5" height="9" fill={color} />
         <rect x="19" y="2" width="2.5" height="7" fill={color} />
+        {/* Deckslast: sichtbare Kisten, so viele wie geladen */}
+        {Array.from({ length: Math.min(laden, 4) }, (_, i) => (
+          <rect
+            key={i}
+            x={2.5 + i * 6}
+            y={16}
+            width="5"
+            height="5"
+            fill="#c8a877"
+            stroke="#4a3520"
+            strokeWidth="1"
+          />
+        ))}
         <path d="M2 22h30l-5 8H7z" fill="none" stroke="#2a2118" strokeWidth="1.4" />
       </g>
     </g>
