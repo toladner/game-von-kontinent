@@ -196,7 +196,7 @@ nichts davon eingeschaltet.
 | Kontormakler | Eine Figur im Hafen, die durch den Rundgang führt |
 
 Die Regelzahlen selbst stehen alle in
-[`src/content/maps/classic/index.ts`](../src/content/maps/classic/index.ts)
+[`src/content/maps/classic/index.ts`](src/content/maps/classic/index.ts)
 als `CLASSIC_CONFIG` — eine Variante ist eine Kopie dieses Objekts mit anderen
 Werten.
 
@@ -205,7 +205,7 @@ Werten.
 ## Offene Punkte
 
 Vier Verkaufspreise waren auf den Scans nicht zweifelsfrei zu lesen und sind in
-[`src/content/goods.ts`](../src/content/goods.ts) mit `NOTE verify` markiert:
+[`src/content/goods.ts`](src/content/goods.ts) mit `NOTE verify` markiert:
 **Fleischwaren** (20), **Korinthen** (36), **Kunstdünger** (39) und
 **Schokolade** (57). Wer die Karten zur Hand hat, möge nachsehen.
 

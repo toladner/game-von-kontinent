@@ -192,7 +192,7 @@ drives two clients through a real game without a browser.
 
 ## Fidelity notes
 
-Transcribed from the originals; see [rules.md](rules.md):
+Transcribed from the originals; see [rules.md](../rules.md):
 
 - 72 Warenkarten; buy prices cross-checked against the Warenverzeichnis, which
   is the legible source. Four sell prices carry a `NOTE verify` comment where

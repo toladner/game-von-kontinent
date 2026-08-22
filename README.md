@@ -6,7 +6,7 @@ installierbar als PWA, offline spielbar.
 
 Die Spielsprache ist Deutsch. Regeln, Warenverzeichnis und Kartensätze sind
 den Originalen entnommen; die Regeln stehen zusammengefaßt in
-[`docs/rules.md`](docs/rules.md).
+[`rules.md`](rules.md).
 
 ## Loslegen
 
@@ -105,7 +105,7 @@ src/content/   Waren, Konjunkturkarten, Spielpläne
 src/ui/        Darstellung
 src/app/       Store, Speicherstand, Verbindung
 server/        Partieserver (Cloudflare Worker + Durable Object)
-docs/rules.md  Die Regeln des Originals, zusammengefaßt
+rules.md       Die Regeln des Originals, zusammengefaßt
 ```
 
 ## Quellen
