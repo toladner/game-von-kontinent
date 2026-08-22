@@ -1,0 +1,262 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   Von Kontinent zu Kontinent — Ausstattung
+   A 1950s export-trade parlour game: pressed board colours, tan Warenkarten
+   printed in green, pale-green Konjunktur slips, and a lot of honest paper.
+   ========================================================================== */
+
+@theme {
+  /* Paper and ink */
+  --color-paper: #efe4c8;
+  --color-paper-2: #e5d7b6;
+  --color-paper-3: #d8c69f;
+  --color-card: #d9c9a3;
+  --color-slip: #cfe0a4;
+  --color-ink: #2a2118;
+  --color-ink-soft: #6b5942;
+  --color-ink-faint: #9c8a6d;
+  --color-press: #1c6b4d;
+  --color-rot: #c33a2b;
+  --color-gold: #a9863f;
+
+  /* Board */
+  --color-ocean: #a9d6df;
+  --color-ocean-2: #93cad6;
+  --color-eu: #eda3b7;
+  --color-af: #bcc95a;
+  --color-na: #f0a98d;
+  --color-sa: #f0b455;
+  --color-as: #f2d451;
+  --color-oc: #ddcd93;
+  --color-route: #b4368a;
+  --color-coast: #6e6146;
+
+  --font-display: 'Bodoni MT', 'Didot', 'Hoefler Text', Garamond, Georgia, serif;
+  --font-body: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  --font-teletype: 'Courier New', 'Nimbus Mono PS', monospace;
+}
+
+:root {
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+  color-scheme: light;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #3b3227;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  overscroll-behavior: none;
+  text-rendering: optimizeLegibility;
+}
+
+/* --------------------------------------------------------------------------
+   Paper surfaces
+   -------------------------------------------------------------------------- */
+
+.paper {
+  position: relative;
+  background-color: var(--color-paper);
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgb(255 250 235 / 0.55), transparent 60%),
+    linear-gradient(180deg, rgb(0 0 0 / 0), rgb(90 70 40 / 0.09));
+  box-shadow:
+    inset 0 0 40px rgb(120 95 55 / 0.18),
+    0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+.paper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--paper-grain);
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.paper-card {
+  background-color: var(--color-card);
+  background-image: linear-gradient(175deg, rgb(255 250 230 / 0.5), rgb(120 90 40 / 0.12));
+  border: 1px solid rgb(90 70 40 / 0.35);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    0 2px 3px rgb(40 30 15 / 0.25);
+}
+
+.paper-slip {
+  background-color: var(--color-slip);
+  background-image: linear-gradient(170deg, rgb(255 255 240 / 0.55), rgb(80 100 40 / 0.14));
+  border: 1px solid rgb(70 90 40 / 0.4);
+}
+
+/* Deckle edge for the Konjunktur slips, like scissor-cut perforation. */
+.deckle {
+  --d: 5px;
+  -webkit-mask-image: radial-gradient(var(--d) at var(--d) 50%, transparent 98%, #000 100%);
+  mask-image: none;
+}
+
+/* --------------------------------------------------------------------------
+   Type
+   -------------------------------------------------------------------------- */
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.letterpress {
+  text-shadow:
+    0 1px 0 rgb(255 250 235 / 0.5),
+    0 -1px 0 rgb(60 45 20 / 0.15);
+}
+
+.smallcaps {
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.14em;
+}
+
+.teletype {
+  font-family: var(--font-teletype);
+  letter-spacing: 0.02em;
+}
+
+.press-green {
+  color: var(--color-press);
+}
+
+.rule {
+  border: 0;
+  border-top: 1px solid rgb(90 70 40 / 0.32);
+}
+
+.rule-double {
+  border: 0;
+  border-top: 3px double rgb(90 70 40 / 0.4);
+}
+
+/* Numerals should line up in the ledger. */
+.tnum {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Controls
+   -------------------------------------------------------------------------- */
+
+.btn {
+  font-family: var(--font-body);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.1em;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid rgb(70 55 30 / 0.5);
+  border-radius: 2px;
+  background-image: linear-gradient(180deg, rgb(255 250 235 / 0.6), rgb(120 95 55 / 0.14));
+  background-color: var(--color-paper-2);
+  color: var(--color-ink);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.5),
+    0 2px 0 rgb(60 45 20 / 0.25);
+  cursor: pointer;
+  transition: transform 90ms ease, box-shadow 90ms ease, filter 120ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 2px rgb(60 45 20 / 0.35);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: #2f5f4a;
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.22), rgb(0 0 0 / 0.18));
+  color: #f3ecd8;
+  border-color: #21432f;
+}
+
+.btn-danger {
+  background-color: #a8382b;
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.2), rgb(0 0 0 / 0.2));
+  color: #f6e9dc;
+  border-color: #7d281e;
+}
+
+.btn:focus-visible,
+.focusable:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+/* Rubber stamp, used for status flashes like VERKAUFT or ZOLL */
+.stamp {
+  font-family: var(--font-display);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.18em;
+  border: 3px solid currentColor;
+  border-radius: 3px;
+  padding: 0.1em 0.45em;
+  transform: rotate(-7deg);
+  opacity: 0.85;
+}
+
+/* --------------------------------------------------------------------------
+   Board
+   -------------------------------------------------------------------------- */
+
+.board-shell {
+  background:
+    radial-gradient(120% 120% at 50% -20%, #4a4032, #2b2419 70%);
+}
+
+.sea-lane {
+  stroke: var(--color-route);
+  stroke-linecap: round;
+  fill: none;
+}
+
+.port-label {
+  font-family: var(--font-body);
+  font-size: 7px;
+  fill: var(--color-ink);
+  paint-order: stroke;
+  stroke: rgb(255 252 240 / 0.95);
+  stroke-width: 2.4px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Thin, unobtrusive scrollbars that suit the paper. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(120 95 55 / 0.5) transparent;
+}
