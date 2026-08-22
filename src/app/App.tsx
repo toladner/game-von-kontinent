@@ -1,9 +1,18 @@
+import { ErrorBoundary } from '@ui/ErrorBoundary'
 import { Setup } from '@ui/Setup'
 import { Lobby } from '@ui/Lobby'
 import { GameScreen } from '@ui/GameScreen'
 import { useGame } from './store'
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <Screen />
+    </ErrorBoundary>
+  )
+}
+
+function Screen() {
   const state = useGame((s) => s.state)
   const net = useGame((s) => s.net)
 

@@ -209,3 +209,59 @@ Deliberate deviations, all reversible in `RuleConfig`:
   from the printed board by one or two.
 - The final round is resolved automatically (sail to the next port in the
   direction of travel, liquidate) rather than played out by hand.
+
+---
+
+## Not built yet: Brieftauben, or trading under fog
+
+An idea worth writing down properly, because it changes what the game *is*
+rather than adding to it.
+
+**The premise.** You may own several vehicles, but you only ever *know* where
+the one you are travelling with is. The others are wherever you last heard
+they were. To give a distant captain an order you send a carrier pigeon to the
+place you believe them to be. Then:
+
+- The pigeon takes real time to fly there.
+- It may never arrive — rarely, pigeons die.
+- You are never told whether it arrived. The only evidence is the ship moving,
+  which you cannot see either.
+- The captain may write back, but their pigeon flies to the place *you* said
+  you would be, and you must physically be there to collect the letter.
+- Every letter is signed with a date and a place, so old news is
+  distinguishable from new — but only by reading carefully.
+- You keep track of all this in a per-player notebook with a character limit.
+  The game does not remember for you.
+
+**Why it fits what is already here.** The engine is a log of actions folded
+into one authoritative state. That state is *global truth* — and this feature
+is about players never seeing global truth. So the shape it needs is:
+
+```
+GameState          global truth: where every vehicle really is
+PlayerKnowledge    per player: what they have been told, and when
+```
+
+A `knowledge` slice per player, derived by folding only the events that player
+has actually witnessed or received. That is the same fold, over a filtered
+event stream. The reducer already emits `GameEvent`s; this needs each event to
+carry *who could observe it*, and the UI to render from knowledge rather than
+from truth.
+
+**What must be true for it to work:**
+
+- Pigeon flight and death must come from the seeded RNG in the log, never from
+  a local roll, or two devices would disagree about a dead pigeon.
+- The server must not leak truth: today it broadcasts every action to every
+  client. Under fog it has to send each player only their own view. That is the
+  one genuinely new piece of machinery — a per-seat projection on the server,
+  and it is why this cannot be bolted on client-side.
+- Real-time travel is a prerequisite, and it is done: pigeons are just another
+  thing with an ETA, and the alarm scheduler already wakes for the next event.
+- The notebook is per-player free text, capped, stored with the seat.
+
+**Risk to weigh before building it.** Uncertainty is only fun if the player
+feels clever, not merely blind. Worth prototyping with generous pigeon
+reliability and a short flight time first, then tightening. The character-
+limited notebook is the part most likely to delight or infuriate; it should
+probably be optional at the table level, like `joinPolicy`.

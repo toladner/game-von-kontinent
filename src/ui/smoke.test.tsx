@@ -222,6 +222,60 @@ describe('real-time play in the interface', () => {
   })
 })
 
+describe('the map on a touch screen', () => {
+  const board = () => document.querySelector('svg[aria-label]') as SVGSVGElement
+
+  it('survives a gesture that is cancelled mid-drag', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'touch' }))
+
+    const svg = board()
+    expect(svg).toBeTruthy()
+
+    // The browser routinely cancels a pointer when a second finger lands or
+    // the system takes over the gesture. That used to throw and blank the app.
+    fireEvent.pointerDown(svg, { pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerCancel(svg, { pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 220, clientY: 180 })
+    fireEvent.pointerUp(svg, { pointerId: 1, clientX: 220, clientY: 180 })
+
+    expect(board()).toBeTruthy()
+    expect(screen.getByText('Ablegen')).toBeTruthy()
+  })
+
+  it('survives two fingers arriving and leaving in any order', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'pinch' }))
+    const svg = board()
+
+    fireEvent.pointerDown(svg, { pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerDown(svg, { pointerId: 2, clientX: 200, clientY: 200 })
+    fireEvent.pointerMove(svg, { pointerId: 2, clientX: 260, clientY: 260 })
+    // The first finger leaves while the second stays down.
+    fireEvent.pointerUp(svg, { pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(svg, { pointerId: 2, clientX: 280, clientY: 280 })
+    fireEvent.pointerCancel(svg, { pointerId: 2, clientX: 280, clientY: 280 })
+    // A stray move from a pointer nobody is tracking must be ignored.
+    fireEvent.pointerMove(svg, { pointerId: 9, clientX: 10, clientY: 10 })
+
+    expect(board()).toBeTruthy()
+  })
+
+  it('recentres on the ship when the turn passes', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'focus' }))
+
+    const layer = () => board().querySelector('g[style]') as SVGGElement
+    const before = layer().style.transform
+
+    act(() => useGame.getState().dispatch({ type: 'endTurn' }))
+
+    // Bo's harbour is elsewhere, so the camera must have moved.
+    expect(layer().style.transform).not.toBe(before)
+    expect(layer().style.transform).toMatch(/scale\(/)
+  })
+})
+
 describe('saving', () => {
   it('resumes a game from the action log alone', () => {
     render(<App />)

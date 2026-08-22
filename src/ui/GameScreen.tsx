@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Board } from './Board'
 import { PortSheet, MarketReport } from './PortPanel'
 import { KonjunkturSlip } from './Cards'
@@ -89,6 +89,13 @@ export function GameScreen() {
     [ctx, player],
   )
 
+  // Recentre the plan whenever the turn passes or another ship takes the helm,
+  // so nobody has to go looking for their own vessel.
+  const focusKey = realtime
+    ? `${player.id}:${portId ?? 'see'}`
+    : `${state.round}:${state.activeIndex}`
+  const focusNonce = useFocusNonce(focusKey)
+
   return (
     <div className="relative h-full w-full overflow-hidden">
       <Board
@@ -99,6 +106,7 @@ export function GameScreen() {
         focusNode={player.ship.nodeId}
         highlightPorts={state.phase === 'move' ? [] : highlights}
         now={now}
+        focusNonce={focusNonce}
         course={voyage ? [player.ship.nodeId, ...voyage.route] : []}
         {...(realtime && portId
           ? { onPickPort: (to: string) => to !== portId && dispatch({ type: 'setCourse', to }) }
@@ -222,6 +230,19 @@ export function GameScreen() {
 }
 
 // ---------------------------------------------------------------------------
+
+/** Counts up whenever the key changes, to trigger a one-off camera move. */
+function useFocusNonce(key: string): number {
+  const [nonce, setNonce] = useState(0)
+  const previous = useRef(key)
+  useEffect(() => {
+    if (previous.current !== key) {
+      previous.current = key
+      setNonce((n) => n + 1)
+    }
+  }, [key])
+  return nonce
+}
 
 function ActionBar({
   state,
