@@ -60,6 +60,8 @@ export function PortSheet({
   onLeave,
   greeting,
   onEnter,
+  onLookAt,
+  markedPort,
 }: {
   ctx: EngineContext
   state: GameState
@@ -73,6 +75,9 @@ export function PortSheet({
   /** The gangway is down but nobody has stepped ashore yet. */
   greeting: boolean
   onEnter: () => void
+  /** Asked to look at a harbour on the plan; the sheet gets out of the way. */
+  onLookAt: (portId: string) => void
+  markedPort: string | null
 }) {
   const port = portOf(ctx, portId)
   const country = ctx.pack.map.countries.find((c) => c.id === port.country)
@@ -303,7 +308,15 @@ export function PortSheet({
         </div>
       )}
 
-      {tab === 'wohin' && <MarketReport ctx={ctx} report={report} cargo={flagship(player).cargo.length} />}
+      {tab === 'wohin' && (
+        <MarketReport
+          ctx={ctx}
+          report={report}
+          cargo={flagship(player).cargo.length}
+          onLookAt={onLookAt}
+          markedPort={markedPort}
+        />
+      )}
 
     </Sheet>
   )
@@ -398,10 +411,14 @@ export function MarketReport({
   ctx,
   report,
   cargo,
+  onLookAt,
+  markedPort = null,
 }: {
   ctx?: EngineContext
   report: readonly import('@engine/selectors').Destination[]
   cargo: number
+  onLookAt?: (portId: string) => void
+  markedPort?: string | null
 }) {
   if (cargo === 0) {
     return (
@@ -421,13 +438,20 @@ export function MarketReport({
       <p className="text-ink-soft mb-2 text-[12px] leading-snug italic">
         Diese Häfen führen Ihre Ware <em>nicht</em> selbst und zahlen daher den vollen Preis.
         Der Betrag ist der Gewinn gegenüber Ihrem Einkauf, die Punkte sind die Entfernung.
+        {onLookAt && ' Antippen zeigt den Hafen auf dem Plan.'}
       </p>
       <ol className="stagger space-y-1">
         {report.map((d) => (
-          <li
-            key={d.portId}
-            className="paper-card flex items-center gap-2 rounded-[2px] px-2.5 py-1.5"
-          >
+          <li key={d.portId}>
+            <button
+              type="button"
+              disabled={!onLookAt}
+              onClick={() => onLookAt?.(d.portId)}
+              aria-pressed={d.portId === markedPort}
+              className={`paper-card flex w-full items-center gap-2 rounded-[2px] px-2.5 py-2 text-left transition ${
+                onLookAt ? 'hover:-translate-y-0.5 hover:shadow-md' : ''
+              } ${d.portId === markedPort ? 'ring-gold ring-2' : ''}`}
+            >
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[14px] font-bold">{d.name}</span>
               <span className="text-ink-soft block text-[12px] leading-snug">
@@ -450,6 +474,7 @@ export function MarketReport({
                 {Math.abs(d.profit).toLocaleString('de-DE')}
               </span>
             )}
+            </button>
           </li>
         ))}
       </ol>

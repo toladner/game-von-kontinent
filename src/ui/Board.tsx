@@ -48,6 +48,13 @@ export interface BoardProps {
    * usual reason: you should never have to hunt for your own ship.
    */
   readonly focusNonce?: number
+  /**
+   * A single harbour the player has asked to look at, from the Wohin? list.
+   * Drawn apart from the green hints, and worth going to find.
+   */
+  readonly markedPort?: string | null
+  /** Bumping this glides the plan to `markedPort`. */
+  readonly markNonce?: number
 }
 
 export function Board({
@@ -61,6 +68,8 @@ export function Board({
   onPickPort,
   course = [],
   focusNonce = 0,
+  markedPort = null,
+  markNonce = 0,
 }: BoardProps) {
   const map = ctx.pack.map
   const { bounds } = map
@@ -241,14 +250,21 @@ export function Board({
     [clampCam, coverScale, toBoard],
   )
 
-  /** Glide the camera to a node. */
+  /**
+   * Glide the camera to a node.
+   *
+   * `lift` pushes the camera centre below the node so the node itself rides
+   * higher on screen — which is what you want when the lower part of the
+   * screen is about to be a sheet.
+   */
   const centreOn = useCallback(
-    (nodeId: string | null | undefined, zoom?: number) => {
+    (nodeId: string | null | undefined, zoom?: number, lift = 0) => {
       const p = at(nodeId)
       if (!p) return
       stopAnimation()
       const from = { ...camRef.current }
-      const to = clampCam({ k: zoom ?? Math.max(camRef.current.k, 2.6), cx: p.x, cy: p.y })
+      const k = zoom ?? Math.max(camRef.current.k, 2.6)
+      const to = clampCam({ k, cx: p.x, cy: p.y + (lift * (size.h || H)) / (coverScale * k) })
       const started = performance.now()
       const step = (t: number) => {
         const e = Math.min(1, (t - started) / 480)
@@ -262,7 +278,7 @@ export function Board({
       }
       animation.current = requestAnimationFrame(step)
     },
-    [at, clampCam],
+    [at, clampCam, coverScale, size.h, H],
   )
 
   useEffect(() => stopAnimation, [])
@@ -280,6 +296,13 @@ export function Board({
     centreOn(focusNode)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusNonce, size.w, size.h])
+
+  // Asked to look at a harbour: go there, and leave it above the sheet.
+  useEffect(() => {
+    if (!markNonce || !markedPort) return
+    centreOn(markedPort, 2.2, 0.16)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markNonce])
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     stopAnimation()
@@ -521,15 +544,41 @@ export function Board({
           })}
 
           {ports.map(({ port, p }) => {
+            const marked = port.id === markedPort
             const labelled =
               scale >= LABEL_ZOOM ||
               occupiedPorts.has(port.id) ||
               targetSet.has(port.id) ||
               hintSet.has(port.id) ||
+              marked ||
               port.id === focusNode
             return (
               <g key={port.id} className={onPickPort ? 'cursor-pointer' : undefined}>
-                {hintSet.has(port.id) && (
+                {/* The one the player asked about: gold, and breathing, so it
+                    is findable on a plan with a hundred harbours on it. */}
+                {marked && (
+                  <>
+                    <circle cx={p.x} cy={p.y} r={11} fill="#a9863f" opacity={0.22} />
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={8}
+                      fill="none"
+                      stroke="#a9863f"
+                      strokeWidth={2.2}
+                    />
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={8}
+                      fill="none"
+                      stroke="#a9863f"
+                      strokeWidth={1.4}
+                      style={{ animation: 'pulse-ring 1.8s ease-out infinite' }}
+                    />
+                  </>
+                )}
+                {hintSet.has(port.id) && !marked && (
                   <circle
                     cx={p.x}
                     cy={p.y}

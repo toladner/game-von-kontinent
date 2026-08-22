@@ -946,3 +946,69 @@ describe('the sheet on a wide screen', () => {
     expect(screen.queryByRole('tab', { name: /Ladung/ })).toBeNull()
   })
 })
+
+describe('looking a harbour up on the plan', () => {
+  /** Reach the Wohin? step with something in the hold to plan for. */
+  function loaded(seed: string) {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed }))
+    enterHarbour()
+    const s = useGame.getState().state!
+    const gameCtx = useGame.getState().ctx
+    const player = s.players[0]!
+    const offer = buyOffers(gameCtx, s, player, portAt(gameCtx, flagship(player).nodeId)!).find(
+      (o) => o.status === 'ok',
+    )!
+    act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+    act(() => {
+      fireEvent.click(screen.getByRole('tab', { name: /Wohin/ }))
+    })
+  }
+
+  it('drops the sheet to a peek so the plan can be seen', () => {
+    loaded('nachschauen')
+    const sheet = () => document.querySelector('aside.sheet') as HTMLElement
+    expect(sheet().style.getPropertyValue('--sheet-h')).toBe('86dvh')
+
+    const rows = screen.getAllByRole('button', { pressed: false })
+    const destination = rows.find((r) => /Punkte? Fahrt/.test(r.textContent ?? ''))!
+    act(() => {
+      fireEvent.click(destination)
+    })
+
+    // Out of the way, but not gone: the list is still there to pick from.
+    expect(sheet().style.getPropertyValue('--sheet-h')).toBe('42dvh')
+    expect(screen.getByRole('tab', { name: /Wohin/ })).toBeTruthy()
+  })
+
+  it('marks the harbour it was asked about, in the list and on the plan', () => {
+    loaded('markieren')
+    const rows = screen.getAllByRole('button', { pressed: false })
+    const destination = rows.find((r) => /Punkte? Fahrt/.test(r.textContent ?? ''))!
+    const name = destination.textContent!.split('\n')[0]
+
+    act(() => {
+      fireEvent.click(destination)
+    })
+
+    expect(destination.getAttribute('aria-pressed')).toBe('true')
+    void name
+
+    // Gold on the plan, and only ever one of them — the green hint rings
+    // would have labelled this harbour anyway, so the label proves nothing.
+    const gold = document.querySelectorAll('circle[stroke="#a9863f"]')
+    expect(gold.length).toBe(2)
+  })
+
+  it('forgets the mark when the ship moves on', () => {
+    loaded('vergessen')
+    const rows = screen.getAllByRole('button', { pressed: false })
+    act(() => {
+      fireEvent.click(rows.find((r) => /Punkte? Fahrt/.test(r.textContent ?? ''))!)
+    })
+    expect(screen.getAllByRole('button', { pressed: true }).length).toBeGreaterThan(0)
+
+    act(() => useGame.getState().dispatch({ type: 'endTurn' }))
+    expect(screen.queryAllByRole('button', { pressed: true })).toHaveLength(0)
+  })
+})

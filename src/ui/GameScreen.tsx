@@ -51,6 +51,7 @@ export function GameScreen() {
   const [snap, setSnap] = useState<SheetSnap>('peek')
   const [pigeonFor, setPigeonFor] = useState<string | null>(null)
   const [greeting, setGreeting] = useState(true)
+  const [marked, setMarked] = useState<{ portId: string; nonce: number } | null>(null)
 
   /**
    * A new harbour under the keel, or the wheel in somebody else's hands: the
@@ -60,6 +61,7 @@ export function GameScreen() {
    */
   useEffect(() => {
     setGreeting(portId !== null)
+    setMarked(null)
   }, [portId, player.id])
 
   // The harbour opens itself; everything else waits to be asked for.
@@ -131,6 +133,8 @@ export function GameScreen() {
         now={now}
         focusNonce={focusNonce}
         course={voyage ? [flagship(player).nodeId, ...voyage.route] : []}
+        markedPort={marked?.portId ?? null}
+        markNonce={marked?.nonce ?? 0}
         {...(realtime && portId
           ? { onPickPort: (to: string) => to !== portId && dispatch({ type: 'setCourse', to }) }
           : {})}
@@ -214,6 +218,13 @@ export function GameScreen() {
           onLeave={() => dispatch({ type: 'endTurn' })}
           greeting={greeting}
           onEnter={() => setGreeting(false)}
+          markedPort={marked?.portId ?? null}
+          onLookAt={(to) => {
+            // Get out of the way first, then go and find it: the sheet slides
+            // to a peek while the plan glides across, and both settle together.
+            setMarked((m) => ({ portId: to, nonce: (m?.nonce ?? 0) + 1 }))
+            setSnap('peek')
+          }}
         />
       )}
 
