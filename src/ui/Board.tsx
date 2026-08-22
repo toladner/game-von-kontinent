@@ -11,8 +11,8 @@ import { PLAYER_COLORS } from '@app/store'
 const BOARD_W = 1200
 const MIN_K = 0.8
 const MAX_K = 8
-/** Below this the sea pips are noise; above it they help you judge distance. */
-const PIP_ZOOM = 2.2
+/** Below this the sea pips crowd together; above it they read as steps. */
+const PIP_ZOOM = 1.15
 const LABEL_ZOOM = 1.9
 
 interface LandFile {
@@ -473,10 +473,19 @@ export function Board({
         <g>
           <SeaAndLand H={H} landPaths={landPaths} lanePath={lanePath} xy={xy} />
 
-          {scale >= PIP_ZOOM * 0.9 && (
+          {scale >= PIP_ZOOM && (
             <g fill="var(--color-route)">
               {seaDots.map((d) => (
-                <circle key={d.id} cx={d.p.x} cy={d.p.y} r={1.4} opacity={0.8} />
+                <circle
+                  key={d.id}
+                  cx={d.p.x}
+                  cy={d.p.y}
+                  // Keep a steady size on screen however far one is zoomed in.
+                  r={Math.min(3.4, Math.max(1.8, 2.6 / scale))}
+                  stroke="#ffffff"
+                  strokeWidth={Math.min(0.9, 0.6 / scale)}
+                  opacity={0.95}
+                />
               ))}
             </g>
           )}
@@ -665,9 +674,9 @@ const SeaAndLand = memo(function SeaAndLand({
       <path
         className="sea-lane"
         d={lanePath}
-        strokeWidth={1.3}
-        strokeDasharray="0.1 3.4"
-        opacity={0.75}
+        strokeWidth={1.8}
+        strokeDasharray="0.1 3.2"
+        opacity={0.85}
       />
     </>
   )

@@ -198,9 +198,7 @@ export function PortSheet({
                   disabled={offer.status !== 'ok'}
                   action={offer.status === 'ok' ? 'kaufen' : undefined}
                   sublabel={
-                    offer.status === 'ok'
-                      ? `Kasse danach ${(player.cash - good.buy).toLocaleString('de-DE')} · anderswo ${good.sell.toLocaleString('de-DE')}`
-                      : (BLOCK_TEXT[offer.status] ?? offer.status)
+                    offer.status === 'ok' ? undefined : (BLOCK_TEXT[offer.status] ?? offer.status)
                   }
                   onClick={offer.status === 'ok' ? () => onBuy(offer.goodId) : undefined}
                 />

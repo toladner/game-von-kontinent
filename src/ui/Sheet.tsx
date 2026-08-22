@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 
 export type SheetSnap = 'closed' | 'peek' | 'full'
 
@@ -26,8 +26,8 @@ export function Sheet({
   children: ReactNode
   footer?: ReactNode
 }) {
-  const [drag, setDrag] = useState<number | null>(null)
-  const start = useRef<{ y: number; snap: SheetSnap } | null>(null)
+  const asideRef = useRef<HTMLElement | null>(null)
+  const drag = useRef<{ y: number; from: SheetSnap; moved: boolean } | null>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -39,52 +39,78 @@ export function Sheet({
 
   const height = snap === 'full' ? '86dvh' : snap === 'peek' ? '42dvh' : '0dvh'
 
+  /**
+   * The gesture is driven straight at the element rather than through React
+   * state: a re-render per pointermove is both janky and easy to get wrong,
+   * and the previous version read a stale value on release.
+   */
   const onPointerDown = (e: React.PointerEvent) => {
-    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
-    start.current = { y: e.clientY, snap }
-    setDrag(0)
+    try {
+      ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    } catch {
+      /* capture is a nicety, not a requirement */
+    }
+    drag.current = { y: e.clientY, from: snap, moved: false }
+    if (asideRef.current) asideRef.current.style.transition = 'none'
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!start.current) return
-    setDrag(e.clientY - start.current.y)
+    const d = drag.current
+    if (!d) return
+    const dy = e.clientY - d.y
+    if (Math.abs(dy) > 6) d.moved = true
+    if (asideRef.current) {
+      asideRef.current.style.transform = `translateY(${Math.max(-70, dy)}px)`
+    }
   }
 
-  const onPointerUp = () => {
-    if (start.current && drag !== null) {
-      const from = start.current.snap
-      if (drag < -40) onSnap('full')
-      else if (drag > 40) onSnap(from === 'full' ? 'peek' : 'closed')
+  const onPointerUp = (e: React.PointerEvent) => {
+    const d = drag.current
+    if (!d) return
+    drag.current = null
+    const dy = e.clientY - d.y
+
+    if (asideRef.current) {
+      asideRef.current.style.transform = ''
+      asideRef.current.style.transition = ''
     }
-    start.current = null
-    setDrag(null)
+
+    // A tap on the grip is a perfectly good way to ask for more room.
+    if (!d.moved) {
+      onSnap(d.from === 'full' ? 'peek' : 'full')
+      return
+    }
+    if (dy < -40) onSnap('full')
+    else if (dy > 40) onSnap(d.from === 'full' ? 'peek' : 'closed')
   }
 
   if (snap === 'closed') return null
 
   return (
     <aside
-      className="paper anim-sheet fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-xl border-t border-black/25 shadow-[0_-8px_28px_rgb(0_0_0/0.35)] lg:inset-y-0 lg:right-0 lg:left-auto lg:w-[400px] lg:rounded-none lg:rounded-l-xl lg:border-t-0 lg:border-l lg:shadow-[-8px_0_28px_rgb(0_0_0/0.3)]"
-      style={{
-        height,
-        transform: drag !== null ? `translateY(${Math.max(-60, drag)}px)` : undefined,
-        transition: drag !== null ? 'none' : 'height 260ms cubic-bezier(0.2,0.9,0.25,1)',
-        paddingBottom: 'var(--safe-b)',
-      }}
+      ref={asideRef}
+      className="paper anim-sheet sheet fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-xl border-t border-black/25 shadow-[0_-8px_28px_rgb(0_0_0/0.35)] lg:inset-y-0 lg:right-0 lg:left-auto lg:w-[400px] lg:rounded-none lg:rounded-l-xl lg:border-t-0 lg:border-l lg:shadow-[-8px_0_28px_rgb(0_0_0/0.3)]"
+      style={{ height, paddingBottom: 'var(--safe-b)' }}
       aria-label={title}
     >
-      {/* Griff */}
+      {/* Griff — groß genug für einen Daumen, und ein Tippen genügt auch. */}
       <div
-        className="shrink-0 cursor-grab touch-none px-4 pt-2 pb-1 active:cursor-grabbing lg:hidden"
+        role="button"
+        tabIndex={0}
+        aria-label={snap === 'full' ? 'Verkleinern' : 'Vergrößern'}
+        className="grid shrink-0 cursor-grab touch-none place-items-center px-4 py-3 active:cursor-grabbing lg:hidden"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') onSnap(snap === 'full' ? 'peek' : 'full')
+        }}
       >
-        <span className="mx-auto block h-1.5 w-11 rounded-full bg-black/25" />
+        <span className="block h-1.5 w-12 rounded-full bg-black/30" />
       </div>
 
-      <header className="flex shrink-0 items-center gap-3 px-4 pt-1 pb-2 lg:pt-4">
+      <header className="flex shrink-0 items-center gap-3 px-4 pt-0 pb-2 lg:pt-4">
         {accent && (
           <span
             className="h-8 w-1.5 shrink-0 rounded-full"

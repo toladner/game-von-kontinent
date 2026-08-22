@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Component, Fragment, type ErrorInfo, type ReactNode } from 'react'
 
 /**
  * A white screen tells the player nothing and tells us less.
@@ -42,7 +42,9 @@ export class ErrorBoundary extends Component<Props, State> {
 
   override render() {
     const { error } = this.state
-    if (!error) return <div key={this.state.attempt}>{this.props.children}</div>
+    // A Fragment, not a div: a wrapper element with height:auto would break
+    // the height:100% chain the whole layout hangs from.
+    if (!error) return <Fragment key={this.state.attempt}>{this.props.children}</Fragment>
 
     return (
       <div className="board-shell grid h-full place-items-center p-5">

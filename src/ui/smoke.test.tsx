@@ -262,6 +262,19 @@ describe('the map on a touch screen', () => {
     expect(board()).toBeTruthy()
   })
 
+  it('puts no unstyled wrapper above the screen', () => {
+    // The whole layout hangs off height:100%. A wrapper element with
+    // height:auto anywhere in the chain collapses it, and the map falls back
+    // to its intrinsic aspect ratio — half a screen of dark board.
+    const { container } = render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'chain' }))
+
+    const first = container.firstElementChild as HTMLElement
+    expect(first).toBeTruthy()
+    expect(first.className).not.toBe('')
+    expect(first.className).toMatch(/h-full|board-shell/)
+  })
+
   it('moves the ship when a green dot is tapped', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'tap' }))
