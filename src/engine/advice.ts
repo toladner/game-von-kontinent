@@ -13,8 +13,10 @@ import type { PortId } from './types'
  * simply the end of the walk, so there is no way out that skips what is worth
  * seeing.
  *
- * Steps with nothing to say drop out: a shut harbour has no Angebot, an empty
- * hold has no destination to plan for. What is left is always worth a look.
+ * The round is always the same three steps, even where one has nothing to
+ * offer. "Nothing for you here today" is worth hearing too, and a step that
+ * comes and goes is a step nobody learns to expect — the tabs are this list,
+ * so anything that vanishes from it vanishes from under the player's thumb.
  *
  * Kept out of the UI because it is exactly the kind of thing worth testing:
  * "an empty hold in a port that exports something must be walked past the
@@ -59,61 +61,56 @@ export function harbourPlan(
   const offers = buyOffers(ctx, state, player, portId)
   const affordable = offers.filter((o) => o.status === 'ok')
   const left = state.config.maxPurchasesPerPort - ship.purchasesThisVisit.length
-  const stages: Stage[] = []
+  const zwang = verkaufszwangOpen(ctx, state, player, portId)
 
   // --- 1. The hold. Always first: it is the question every port opens with.
-  if (verkaufszwangOpen(ctx, state, player, portId)) {
-    // Nothing else may happen until the Börse has its sale, so the walk stops
-    // here and the sheet cannot reach a departure at all.
-    return [
-      {
+  const best = saleQuotes(ctx, state, player, portId)
+    .filter((q) => q.kind === 'markt' && q.profit > 0)
+    .sort((a, b) => b.profit - a.profit)[0]
+
+  const laden: Stage = zwang
+    ? {
         step: 'verkaufen',
         label: 'Ladung',
         id: 'verkaufszwang',
         text: `Die Börse verlangt einen Abschluß: Sie müssen hier ${key('eine Ware absetzen')}, die dieser Hafen nicht selbst führt. Vorher kommen Sie nicht hinaus.`,
         urgency: 'dringend',
-      },
-    ]
-  }
+      }
+    : best
+      ? {
+          step: 'verkaufen',
+          label: 'Ladung',
+          id: 'hier-verkaufen',
+          text: `${key(goodOf(ctx, best.item.goodId).name)} nimmt man Ihnen hier ab — ${key(money(best.price))}, das sind ${key(money(best.profit))} über Ihrem Einkauf.`,
+          urgency: 'hinweis',
+        }
+      : cargo.length > 0
+        ? {
+            step: 'verkaufen',
+            label: 'Ladung',
+            id: 'nichts-abzusetzen',
+            text: `Für Ihre ${key(`${cargo.length} ${cargo.length === 1 ? 'Ware' : 'Posten'}`)} zahlt hier niemand den vollen Preis. Heben Sie sie auf.`,
+            urgency: 'ruhig',
+          }
+        : {
+            step: 'verkaufen',
+            label: 'Ladung',
+            id: 'nichts-an-bord',
+            text: `Ihr ${key('Laderaum ist leer')} — abzusetzen gibt es hier also nichts.`,
+            urgency: 'ruhig',
+          }
 
-  const best = saleQuotes(ctx, state, player, portId)
-    .filter((q) => q.kind === 'markt' && q.profit > 0)
-    .sort((a, b) => b.profit - a.profit)[0]
-
-  if (best) {
-    stages.push({
-      step: 'verkaufen',
-      label: 'Ladung',
-      id: 'hier-verkaufen',
-      text: `${key(goodOf(ctx, best.item.goodId).name)} nimmt man Ihnen hier ab — ${key(money(best.price))}, das sind ${key(money(best.profit))} über Ihrem Einkauf.`,
-      urgency: 'hinweis',
-    })
-  } else if (cargo.length > 0) {
-    stages.push({
-      step: 'verkaufen',
-      label: 'Ladung',
-      id: 'nichts-abzusetzen',
-      text: `Für Ihre ${key(`${cargo.length} ${cargo.length === 1 ? 'Ware' : 'Posten'}`)} zahlt hier niemand den vollen Preis. Heben Sie sie auf.`,
-      urgency: 'ruhig',
-    })
-  } else {
-    stages.push({
-      step: 'verkaufen',
-      label: 'Ladung',
-      id: 'nichts-an-bord',
-      text: `Ihr ${key('Laderaum ist leer')} — abzusetzen gibt es hier also nichts.`,
-      urgency: 'ruhig',
-    })
-  }
-
-  // --- 2. The quay. Dropped when there is nothing a house could take.
+  // --- 2. The quay. Kept even when shut: "nothing for you here today" is
+  //        itself worth hearing, and a step that comes and goes is a step
+  //        nobody learns to expect.
+  let angebot: Stage
   if (left > 0 && affordable.length > 0) {
     const cheapest = [...affordable].sort(
       (a, b) => goodOf(ctx, a.goodId).buy - goodOf(ctx, b.goodId).buy,
     )[0]!
     const name = goodOf(ctx, cheapest.goodId).name
     const ab = money(goodOf(ctx, cheapest.goodId).buy)
-    stages.push(
+    angebot =
       cargo.length === 0
         ? {
             step: 'kaufen',
@@ -128,34 +125,62 @@ export function harbourPlan(
             id: 'nachladen',
             text: `Hier dürfen Sie noch ${key(left === 1 ? 'eine Ware' : `${left} Waren`)} laden — der Laderaum selbst hat keine Grenze.`,
             urgency: 'ruhig',
-          },
-    )
-  } else if (left > 0 && offers.length > 0 && cargo.length === 0) {
-    const billigste = money(Math.min(...offers.map((o) => goodOf(ctx, o.goodId).buy)))
-    stages.push({
+          }
+  } else if (offers.length === 0) {
+    angebot = {
       step: 'kaufen',
       label: 'Angebot',
-      id: 'leer-kein-geld',
+      id: 'kein-angebot',
+      text: `Dieser Hafen führt ${key('nichts aus')}. Zu laden gibt es hier nichts — anderswo schon.`,
+      urgency: 'ruhig',
+    }
+  } else if (left <= 0) {
+    angebot = {
+      step: 'kaufen',
+      label: 'Angebot',
+      id: 'ladeschluss',
+      text: `${key('Ladeschluß')} — zwei Waren je Hafen, und die haben Sie. Mehr geht hier nicht an Bord.`,
+      urgency: 'ruhig',
+    }
+  } else {
+    const billigste = money(Math.min(...offers.map((o) => goodOf(ctx, o.goodId).buy)))
+    angebot = {
+      step: 'kaufen',
+      label: 'Angebot',
+      id: 'zu-teuer',
       text: `Was hier verladen wird, ist Ihnen heute zu teuer — das Billigste kostet ${key(billigste)}, Ihre Kasse hält ${key(money(player.cash))}.`,
       urgency: 'hinweis',
-    })
+    }
   }
 
-  // --- 3. The chart. Only worth opening with something in the hold.
-  if (cargo.length > 0) {
-    const target = marketReport(ctx, player, 1)[0]
-    stages.push({
-      step: 'wohin',
-      label: 'Wohin?',
-      id: target ? 'weiterfahren' : 'kein-markt',
-      text: target
-        ? `${key(target.name)} führt Ihre Ware nicht selbst und zahlt voll — ${key(money(target.profit))} bei ${key(`${target.distance} ${target.distance === 1 ? 'Punkt' : 'Punkten'}`)} Fahrt.`
-        : 'Für diese Ladung findet sich von hier aus kein Markt. Fahren Sie trotzdem — anderswo sieht es anders aus.',
-      urgency: 'hinweis',
-    })
-  }
+  // --- 3. The chart.
+  const target = cargo.length > 0 ? marketReport(ctx, player, 1)[0] : undefined
+  const wohin: Stage =
+    cargo.length === 0
+      ? {
+          step: 'wohin',
+          label: 'Wohin?',
+          id: 'nichts-zu-planen',
+          text: `Ohne Ladung ist ${key('jeder Hafen gleich weit')}. Kaufen Sie erst etwas, dann lohnt der Blick auf die Karte.`,
+          urgency: 'ruhig',
+        }
+      : target
+        ? {
+            step: 'wohin',
+            label: 'Wohin?',
+            id: 'weiterfahren',
+            text: `${key(target.name)} führt Ihre Ware nicht selbst und zahlt voll — ${key(money(target.profit))} bei ${key(`${target.distance} ${target.distance === 1 ? 'Punkt' : 'Punkten'}`)} Fahrt.`,
+            urgency: 'hinweis',
+          }
+        : {
+            step: 'wohin',
+            label: 'Wohin?',
+            id: 'kein-markt',
+            text: 'Für diese Ladung findet sich von hier aus kein Markt. Fahren Sie trotzdem — anderswo sieht es anders aus.',
+            urgency: 'hinweis',
+          }
 
-  return stages
+  return [laden, angebot, wohin]
 }
 
 /** The first thing the Makler has to say — the head of the walk. */

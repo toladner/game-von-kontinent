@@ -20,13 +20,14 @@ const here = (s: GameState) => portAt(ctx, flagship(s.players[0]!).nodeId)!
 const walk = (s: GameState) => harbourPlan(ctx, s, s.players[0]!, here(s))
 
 describe('the Kontormakler', () => {
-  it('walks a merchant with an empty hold past the Angebot', () => {
+  it('walks the same three steps whatever the harbour holds', () => {
     const s = table()
     const plan = walk(s)
 
-    // Hold first, then the quay. Nowhere to plan for with nothing aboard.
-    expect(plan.map((p) => p.step)).toEqual(['verkaufen', 'kaufen'])
+    // Hold, quay, chart — always, so the tabs never move under a thumb.
+    expect(plan.map((p) => p.step)).toEqual(['verkaufen', 'kaufen', 'wohin'])
     expect(plan[0]!.id).toBe('nichts-an-bord')
+    expect(plan[2]!.id).toBe('nichts-zu-planen')
 
     const angebot = plan[1]!
     expect(angebot.id).toBe('leer-nachladen')
@@ -36,23 +37,26 @@ describe('the Kontormakler', () => {
     expect(goods.some((name) => plain(angebot.text).includes(name))).toBe(true)
   })
 
-  it('adds the chart to the walk once there is cargo to place', () => {
+  it('gives the chart something to say once there is cargo to place', () => {
     const s = table()
     const offer = buyOffers(ctx, s, s.players[0]!, here(s)).find((o) => o.status === 'ok')!
     const after = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
 
-    expect(walk(after).map((p) => p.step)).toContain('wohin')
     expect(walk(after).at(-1)!.step).toBe('wohin')
+    expect(walk(after).at(-1)!.id).not.toBe('nichts-zu-planen')
   })
 
-  it('drops the Angebot from the walk once the harbour is shut', () => {
+  it('keeps the Angebot in the round and says why it is shut', () => {
+    // A step that comes and goes is one nobody learns to expect, so the quay
+    // stays in the round and explains itself instead of disappearing.
     let s = table()
     for (let i = 0; i < 2; i++) {
       const offer = buyOffers(ctx, s, s.players[0]!, here(s)).find((o) => o.status === 'ok')
       if (!offer) break
       s = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
     }
-    expect(walk(s).map((p) => p.step)).toEqual(['verkaufen', 'wohin'])
+    expect(walk(s).map((p) => p.step)).toEqual(['verkaufen', 'kaufen', 'wohin'])
+    expect(walk(s)[1]!.id).toBe('ladeschluss')
   })
 
   it('stops nagging once something is aboard', () => {
@@ -87,12 +91,12 @@ describe('the Kontormakler', () => {
       ],
     }
 
+    // The round is still walkable — the Börse holds the ship, not the round —
+    // but it opens on the demand and says so in the loudest voice it has.
     const plan = harbourPlan(ctx, moved, moved.players[0]!, elsewhere)
-    // The walk stops dead: no Angebot, no chart, and so no way to the exit.
-    expect(plan).toHaveLength(1)
+    expect(plan.map((p) => p.step)).toEqual(['verkaufen', 'kaufen', 'wohin'])
     expect(plan[0]!.id).toBe('verkaufszwang')
     expect(plan[0]!.urgency).toBe('dringend')
-    expect(plan[0]!.step).toBe('verkaufen')
   })
 
   it('always offers somewhere to go', () => {
@@ -112,9 +116,8 @@ describe('the Kontormakler', () => {
         ],
       }
       const plan = harbourPlan(ctx, moved, moved.players[0]!, portId)
-      // The hold is always the first word, and there is always a first word.
-      expect(plan.length, portId).toBeGreaterThan(0)
-      expect(plan[0]!.step, portId).toBe('verkaufen')
+      // Three steps, always, and every one of them has something to say.
+      expect(plan.map((p) => p.step), portId).toEqual(['verkaufen', 'kaufen', 'wohin'])
       for (const stage of plan) {
         expect(stage.text.length, portId).toBeGreaterThan(20)
         expect(stage.label, portId).toBeTruthy()
@@ -146,9 +149,7 @@ describe('casting off', () => {
     expect(leavingEmptyHanded(ctx, broke, broke.players[0]!, here(broke))).toBe(false)
     // The Makler still walks them past the quay, to say why it is shut.
     expect(harbourAdvice(ctx, broke, broke.players[0]!, here(broke)).id).toBe('nichts-an-bord')
-    expect(harbourPlan(ctx, broke, broke.players[0]!, here(broke)).at(-1)!.id).toBe(
-      'leer-kein-geld',
-    )
+    expect(harbourPlan(ctx, broke, broke.players[0]!, here(broke))[1]!.id).toBe('zu-teuer')
   })
 })
 

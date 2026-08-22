@@ -46,12 +46,14 @@ const noFooter = () =>
 function walkToDeparture(): HTMLElement {
   for (let guard = 0; guard < 6; guard++) {
     const button = footer()
-    if (/ablegen/i.test(button.textContent ?? '')) return button
+    // The last step is whatever is not another "Weiter zu" — usually Ablegen,
+    // but a Verkaufszwang parks a refusal there instead.
+    if (!/^Weiter zu /.test(button.textContent ?? '')) return button
     act(() => {
       fireEvent.click(button)
     })
   }
-  throw new Error('the Makler never walked us to a departure')
+  throw new Error('the Makler never walked us to a last step')
 }
 
 describe('the front page', () => {
@@ -810,7 +812,9 @@ describe('the guided round', () => {
     })
     enterHarbour()
 
-    const button = footer()
+    // The round is still walkable — you may look at the quay and the chart —
+    // but its last step will not open until the Börse has its sale.
+    const button = walkToDeparture()
     expect(button.textContent).toMatch(/Verkaufszwang/)
     expect((button as HTMLButtonElement).disabled).toBe(true)
   })
@@ -824,15 +828,16 @@ describe('the round and the tabs are one list', () => {
     act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'listen' }))
     enterHarbour()
 
-    // Empty hold: hold and quay, no chart to plan with, and no Am Kai.
-    expect(tabs()).toEqual(['Ladung', 'Angebot'])
+    // The same three, always — and Am Kai is gone for good.
+    expect(tabs()).toEqual(['Ladung', 'Angebot', 'Wohin?'])
     expect(screen.queryByRole('tab', { name: /Am Kai/ })).toBeNull()
   })
 
-  it('drops the Angebot tab with the round when the harbour is spent', () => {
-    // The bug this replaces: the tab stayed while the step went, so standing
-    // on it left the foot of the sheet with no idea what came next — it
-    // offered a departure from the middle of the round.
+  it('keeps all three tabs when the harbour is spent, and explains itself', () => {
+    // The bug this replaces: the tab list and the round were two lists that
+    // had to agree. They are one now, and it never shortens — standing on a
+    // step that had vanished was what left the foot of the sheet offering a
+    // departure from the middle of the round.
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'verbraucht' }))
     enterHarbour()
@@ -848,8 +853,15 @@ describe('the round and the tabs are one list', () => {
       act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
     }
 
-    expect(tabs()).toEqual(['Ladung', 'Wohin?'])
-    // And the button names the tab that is actually there.
+    expect(tabs()).toEqual(['Ladung', 'Angebot', 'Wohin?'])
+    expect(footer().textContent).toBe('Weiter zu Angebot')
+
+    // The quay is still a step; it just has bad news.
+    act(() => {
+      fireEvent.click(footer())
+    })
+    // The Makler says it, not just the cards.
+    expect(document.querySelector('.paper-slip')!.textContent).toMatch(/Ladeschluß/)
     expect(footer().textContent).toBe('Weiter zu Wohin?')
   })
 

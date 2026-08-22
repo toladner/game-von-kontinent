@@ -162,12 +162,14 @@ export function PortSheet({
             if (empty && !confirmEmpty) return setConfirmEmpty(true)
             onLeave()
           }}
-          disabled={zwang}
+          // A Verkaufszwang holds the ship, not the round: walk it all you
+          // like, but the last step will not open until the Börse is paid.
+          disabled={zwang && !next}
         >
-          {zwang
-            ? 'Erst absetzen — Verkaufszwang'
-            : next
-              ? `Weiter zu ${next.label}`
+          {next
+            ? `Weiter zu ${next.label}`
+            : zwang
+              ? 'Erst absetzen — Verkaufszwang'
               : confirmEmpty
                 ? 'Wirklich ohne Ladung ablegen?'
                 : empty
@@ -276,11 +278,6 @@ export function PortSheet({
 
       {tab === 'kaufen' && (
         <div className="anim-fade">
-          {left === 0 && (
-            <p className="text-ink-soft mb-2 text-center text-[13px] italic">
-              Ladeschluß — in einem Hafen dürfen nur zwei Waren gekauft werden.
-            </p>
-          )}
           <div className="stagger space-y-2">
             {offers.map((offer) => {
               const good = goodOf(ctx, offer.goodId)
