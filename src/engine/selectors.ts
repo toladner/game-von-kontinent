@@ -132,8 +132,53 @@ export interface Destination {
   readonly profit: Money
   /** How many pieces of cargo this port would take at market price. */
   readonly sellable: number
+  /** Exactly which of your goods it takes, and for what. */
+  readonly sells: readonly { readonly goodId: GoodId; readonly price: Money; readonly profit: Money }[]
   /** Goods this port exports that are not already in the hold. */
   readonly offers: number
+}
+
+/** Where one particular piece of cargo fetches the most, per point of sailing. */
+export interface SellDestination {
+  readonly portId: PortId
+  readonly name: string
+  readonly distance: number
+  readonly price: Money
+  readonly profit: Money
+}
+
+/**
+ * The best harbours for a single good.
+ *
+ * This is the question a player actually asks after buying something: not
+ * "which ports are near" but "who wants this, and is it worth the voyage".
+ */
+export function sellDestinations(
+  ctx: EngineContext,
+  player: PlayerState,
+  item: CargoItem,
+  limit = 3,
+): readonly SellDestination[] {
+  const ship = flagship(player)
+  const dist = distancesFrom(ctx, ship.nodeId, ship.cameFrom)
+  const price = goodOf(ctx, item.goodId).sell
+
+  const rows: SellDestination[] = []
+  for (const port of ctx.portsById.values()) {
+    const distance = dist.get(port.id)
+    if (distance === undefined || distance === 0) continue
+    // A port that grows it itself will only pay a loss price.
+    if (ctx.exportsOf(port.id).includes(item.goodId)) continue
+    rows.push({
+      portId: port.id,
+      name: port.name,
+      distance,
+      price,
+      profit: price - item.pricePaid,
+    })
+  }
+  // Same price everywhere, so nearness is the whole of it.
+  return rows.sort((a, b) => a.distance - b.distance).slice(0, limit)
 }
 
 /** How long one pip takes this vessel, in milliseconds. */
@@ -236,13 +281,13 @@ export function marketReport(
     const exports = ctx.exportsOf(port.id)
     let proceeds = 0
     let profit = 0
-    let sellable = 0
+    const sells: { goodId: GoodId; price: Money; profit: Money }[] = []
     for (const item of flagship(player).cargo) {
       if (exports.includes(item.goodId)) continue // only a loss price there
       const price = goodOf(ctx, item.goodId).sell
       proceeds += price
       profit += price - item.pricePaid
-      sellable += 1
+      sells.push({ goodId: item.goodId, price, profit: price - item.pricePaid })
     }
 
     rows.push({
@@ -251,7 +296,8 @@ export function marketReport(
       distance,
       proceeds,
       profit,
-      sellable,
+      sellable: sells.length,
+      sells,
       offers: exports.filter((g) => !held.has(g)).length,
     })
   }

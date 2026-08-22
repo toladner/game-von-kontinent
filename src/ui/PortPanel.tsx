@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react'
 import { harbourCharacters } from '@engine/persona'
-import { buyOffers, marketReport, saleQuotes, verkaufszwangOpen } from '@engine/selectors'
+import {
+  buyOffers,
+  marketReport,
+  saleQuotes,
+  sellDestinations,
+  verkaufszwangOpen,
+} from '@engine/selectors'
 import { goodOf, portOf } from '@engine/context'
 import type { EngineContext } from '@engine/context'
 import { flagship, type GameState, type PlayerState } from '@engine/state'
@@ -132,22 +138,44 @@ export function PortSheet({
           {quotes.length === 0 ? (
             <Empty>Der Laderaum ist leer. Kaufen Sie, was hier wächst.</Empty>
           ) : (
-            <div className="stagger grid grid-cols-2 gap-2">
-              {quotes.map((q) => (
-                <Warenkarte
-                  key={q.item.uid}
-                  good={goodOf(ctx, q.item.goodId)}
-                  price={q.price}
-                  tone={q.profit >= 0 ? 'gut' : 'schlecht'}
-                  action="verkaufen"
-                  sublabel={
-                    q.kind === 'ueberfluss'
-                      ? 'Hier selbst geführt — Verlustpreis'
-                      : `${q.profit >= 0 ? '+' : '−'}${Math.abs(q.profit).toLocaleString('de-DE')}`
-                  }
-                  onClick={() => onSell(q.item.uid)}
-                />
-              ))}
+            <div className="stagger space-y-2">
+              {quotes.map((q) => {
+                const elsewhere = sellDestinations(ctx, player, q.item, 2)
+                return (
+                  <div key={q.item.uid} className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Warenkarte
+                        good={goodOf(ctx, q.item.goodId)}
+                        price={q.price}
+                        tone={q.profit >= 0 ? 'gut' : 'schlecht'}
+                        action="hier verkaufen"
+                        sublabel={
+                          q.kind === 'ueberfluss'
+                            ? 'Hier selbst geführt — nur Verlustpreis'
+                            : `${q.profit >= 0 ? '+' : '−'}${Math.abs(q.profit).toLocaleString('de-DE')} gegenüber Einkauf`
+                        }
+                        onClick={() => onSell(q.item.uid)}
+                      />
+                      {q.kind === 'ueberfluss' && elsewhere.length > 0 && (
+                        <p className="text-ink-soft mt-1 text-[11px] leading-snug">
+                          Besser anderswo:{' '}
+                          {elsewhere.map((d, i) => (
+                            <span key={d.portId}>
+                              {i > 0 && ' · '}
+                              <span className="font-semibold">{d.name}</span>{' '}
+                              <span className={d.profit >= 0 ? 'text-press' : 'text-rot'}>
+                                {d.profit >= 0 ? '+' : '−'}
+                                {Math.abs(d.profit).toLocaleString('de-DE')}
+                              </span>{' '}
+                              <span className="text-ink-faint">({d.distance} Pkt.)</span>
+                            </span>
+                          ))}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -171,7 +199,7 @@ export function PortSheet({
                   action={offer.status === 'ok' ? 'kaufen' : undefined}
                   sublabel={
                     offer.status === 'ok'
-                      ? `danach ${(player.cash - good.buy).toLocaleString('de-DE')}`
+                      ? `Kasse danach ${(player.cash - good.buy).toLocaleString('de-DE')} · anderswo ${good.sell.toLocaleString('de-DE')}`
                       : (BLOCK_TEXT[offer.status] ?? offer.status)
                   }
                   onClick={offer.status === 'ok' ? () => onBuy(offer.goodId) : undefined}
@@ -182,7 +210,7 @@ export function PortSheet({
         </div>
       )}
 
-      {tab === 'wohin' && <MarketReport report={report} cargo={flagship(player).cargo.length} />}
+      {tab === 'wohin' && <MarketReport ctx={ctx} report={report} cargo={flagship(player).cargo.length} />}
 
       {tab === 'kai' && (
         <div className="stagger anim-fade space-y-3">
@@ -205,21 +233,32 @@ export function PortSheet({
 }
 
 export function MarketReport({
+  ctx,
   report,
   cargo,
 }: {
+  ctx?: EngineContext
   report: readonly import('@engine/selectors').Destination[]
   cargo: number
 }) {
+  if (cargo === 0) {
+    return (
+      <div className="anim-fade">
+        <Empty>
+          Ihr Laderaum ist leer. Kaufen Sie zuerst unter „Angebot“ — danach steht hier, wer
+          Ihre Ware nimmt und was sie einbringt.
+        </Empty>
+      </div>
+    )
+  }
   if (report.length === 0) {
-    return <Empty>Von hier aus ist nichts zu holen. Fahren Sie weiter.</Empty>
+    return <Empty>Von hier aus ist nichts abzusetzen. Fahren Sie weiter.</Empty>
   }
   return (
     <div className="anim-fade">
-      <p className="text-ink-soft mb-2 text-[11px] italic">
-        {cargo > 0
-          ? 'Wo Ihre Ladung zum vollen Preis abgesetzt werden kann:'
-          : 'Häfen mit reichlich Ausfuhrgütern in der Nähe:'}
+      <p className="text-ink-soft mb-2 text-[11px] leading-snug italic">
+        Diese Häfen führen Ihre Ware <em>nicht</em> selbst und zahlen daher den vollen Preis.
+        Der Betrag ist der Gewinn gegenüber Ihrem Einkauf, die Punkte sind die Entfernung.
       </p>
       <ol className="stagger space-y-1">
         {report.map((d) => (
@@ -229,9 +268,14 @@ export function MarketReport({
           >
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px] font-semibold">{d.name}</span>
-              <span className="text-ink-soft text-[10px]">
-                {d.distance} {d.distance === 1 ? 'Punkt' : 'Punkte'} Fahrt
-                {cargo > 0 ? ` · ${d.sellable} Posten` : ` · ${d.offers} Waren`}
+              <span className="text-ink-soft block text-[10px] leading-snug">
+                {d.distance} {d.distance === 1 ? 'Punkt' : 'Punkte'} Fahrt · nimmt{' '}
+                {ctx
+                  ? d.sells
+                      .map((x) => ctx.goodsById.get(x.goodId)?.name ?? '')
+                      .filter(Boolean)
+                      .join(', ')
+                  : `${d.sellable} Posten`}
               </span>
             </span>
             {cargo > 0 && (

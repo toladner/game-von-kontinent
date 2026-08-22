@@ -137,75 +137,141 @@ export function Board({
     [map.nodes, positions],
   )
 
-  // --- pan & zoom ----------------------------------------------------------
+  // --- the camera ----------------------------------------------------------
+  //
+  // The plan is shown through a viewBox computed from the container's own
+  // shape, so it always *covers* the screen. A fixed viewBox would be letter-
+  // boxed: on a tall telephone a 1200x816 board fits to the width and leaves
+  // dead bands above and below.
 
+  const hostRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
-  const [view, setView] = useState({ k: 1, tx: 0, ty: 0 })
-  const [smooth, setSmooth] = useState(false)
-  const viewRef = useRef(view)
-  viewRef.current = view
+  const [size, setSize] = useState({ w: 0, h: 0 })
 
-  /** Live pointers on the surface. One pans, two pinch. */
-  const pointers = useRef(new Map<number, Point>())
-  const panFrom = useRef<{ pointer: Point; tx: number; ty: number } | null>(null)
-  const pinchFrom = useRef<{ dist: number; k: number; mid: Point } | null>(null)
-  const moved = useRef(false)
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const measure = () => setSize({ w: host.clientWidth || 1, h: host.clientHeight || 1 })
+    measure()
 
-  const clamp = useCallback(
-    (v: { k: number; tx: number; ty: number }) => {
-      const k = Math.min(MAX_K, Math.max(MIN_K, v.k))
-      const maxX = Math.max(0, BOARD_W * (k - 1))
-      const maxY = Math.max(0, H * (k - 1))
-      return {
-        k,
-        tx: Math.min(0, Math.max(-maxX, v.tx)),
-        ty: Math.min(0, Math.max(-maxY, v.ty)),
+    // ResizeObserver is not everywhere — older browsers and jsdom lack it —
+    // and a plain resize listener is a perfectly good fallback.
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure)
+      window.addEventListener('orientationchange', measure)
+      return () => {
+        window.removeEventListener('resize', measure)
+        window.removeEventListener('orientationchange', measure)
       }
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [])
+
+  /** Pixels per board unit at which the plan just fills the container. */
+  const coverScale = Math.max(size.w / BOARD_W, size.h / H) || 1
+
+  const [cam, setCam] = useState({ k: 1, cx: BOARD_W / 2, cy: H / 2 })
+  const camRef = useRef(cam)
+  camRef.current = cam
+  const animation = useRef(0)
+
+  const clampCam = useCallback(
+    (next: { k: number; cx: number; cy: number }) => {
+      const k = Math.min(MAX_K, Math.max(MIN_K, next.k))
+      const scale = coverScale * k
+      const vw = size.w / scale
+      const vh = size.h / scale
+      // Keep the window on the board, unless the board is smaller than it.
+      const cx =
+        vw >= BOARD_W ? BOARD_W / 2 : Math.min(BOARD_W - vw / 2, Math.max(vw / 2, next.cx))
+      const cy = vh >= H ? H / 2 : Math.min(H - vh / 2, Math.max(vh / 2, next.cy))
+      return { k, cx, cy }
     },
-    [H],
+    [coverScale, size.w, size.h],
   )
 
-  const toLocal = useCallback(
+  const scale = coverScale * cam.k
+  const viewW = (size.w || BOARD_W) / scale
+  const viewH = (size.h || H) / scale
+  const viewX = cam.cx - viewW / 2
+  const viewY = cam.cy - viewH / 2
+
+  /** Client pixels to board units. */
+  const toBoard = useCallback(
     (clientX: number, clientY: number): Point => {
       const rect = svgRef.current?.getBoundingClientRect()
-      if (!rect || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 }
+      if (!rect || rect.width === 0) return { x: camRef.current.cx, y: camRef.current.cy }
+      const s = coverScale * camRef.current.k
+      const w = rect.width / s
+      const h = rect.height / s
       return {
-        x: ((clientX - rect.left) / rect.width) * BOARD_W,
-        y: ((clientY - rect.top) / rect.height) * H,
+        x: camRef.current.cx - w / 2 + (clientX - rect.left) / s,
+        y: camRef.current.cy - h / 2 + (clientY - rect.top) / s,
       }
     },
-    [H],
+    [coverScale],
   )
 
-  const zoomAround = useCallback(
-    (factor: number, centre: Point) => {
-      setSmooth(false)
-      setView((v) => {
-        const k = Math.min(MAX_K, Math.max(MIN_K, v.k * factor))
-        const scale = k / v.k
-        return clamp({
+  const stopAnimation = () => {
+    if (animation.current) cancelAnimationFrame(animation.current)
+    animation.current = 0
+  }
+
+  /** Zoom while holding one board point still under the finger. */
+  const zoomAt = useCallback(
+    (factor: number, clientX: number, clientY: number) => {
+      stopAnimation()
+      const rect = svgRef.current?.getBoundingClientRect()
+      const anchor = toBoard(clientX, clientY)
+      setCam((c) => {
+        const k = Math.min(MAX_K, Math.max(MIN_K, c.k * factor))
+        if (!rect) return clampCam({ ...c, k })
+        const s = coverScale * k
+        const w = rect.width / s
+        const h = rect.height / s
+        return clampCam({
           k,
-          tx: centre.x - (centre.x - v.tx) * scale,
-          ty: centre.y - (centre.y - v.ty) * scale,
+          cx: anchor.x - (clientX - rect.left) / s + w / 2,
+          cy: anchor.y - (clientY - rect.top) / s + h / 2,
         })
       })
     },
-    [clamp],
+    [clampCam, coverScale, toBoard],
   )
 
-  /** Put a node in the middle of the viewport, smoothly. */
+  /** Glide the camera to a node. */
   const centreOn = useCallback(
     (nodeId: string | null | undefined, zoom?: number) => {
       const p = at(nodeId)
       if (!p) return
-      setSmooth(true)
-      setView((v) => {
-        const k = Math.min(MAX_K, Math.max(MIN_K, zoom ?? Math.max(v.k, 2.4)))
-        return clamp({ k, tx: BOARD_W / 2 - k * p.x, ty: H / 2 - k * p.y })
-      })
+      stopAnimation()
+      const from = { ...camRef.current }
+      const to = clampCam({ k: zoom ?? Math.max(camRef.current.k, 2.6), cx: p.x, cy: p.y })
+      const started = performance.now()
+      const step = (t: number) => {
+        const e = Math.min(1, (t - started) / 480)
+        const ease = 1 - (1 - e) ** 3
+        setCam({
+          k: from.k + (to.k - from.k) * ease,
+          cx: from.cx + (to.cx - from.cx) * ease,
+          cy: from.cy + (to.cy - from.cy) * ease,
+        })
+        if (e < 1) animation.current = requestAnimationFrame(step)
+      }
+      animation.current = requestAnimationFrame(step)
     },
-    [at, clamp, H],
+    [at, clampCam],
   )
+
+  useEffect(() => stopAnimation, [])
+
+  /** Live pointers on the surface. One pans, two pinch. */
+  const pointers = useRef(new Map<number, Point>())
+  const panFrom = useRef<{ client: Point; cx: number; cy: number } | null>(null)
+  const pinchFrom = useRef<{ dist: number; k: number } | null>(null)
+  const moved = useRef(false)
 
   // At the start of a turn, go and find the ship rather than making the
   // player hunt for it.
@@ -213,38 +279,26 @@ export function Board({
     if (!focusNode) return
     centreOn(focusNode)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusNonce])
-
-  const releasePointer = useCallback((pointerId: number) => {
-    pointers.current.delete(pointerId)
-    if (pointers.current.size < 2) pinchFrom.current = null
-    if (pointers.current.size === 0) panFrom.current = null
-  }, [])
+  }, [focusNonce, size.w, size.h])
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    const local = toLocal(e.clientX, e.clientY)
-    pointers.current.set(e.pointerId, local)
+    stopAnimation()
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     moved.current = false
-    // Capture on the surface itself: a child may unmount mid-gesture.
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {
-      /* capture is a nicety, not a requirement */
-    }
 
     if (pointers.current.size === 1) {
-      panFrom.current = { pointer: local, tx: viewRef.current.tx, ty: viewRef.current.ty }
+      panFrom.current = {
+        client: { x: e.clientX, y: e.clientY },
+        cx: camRef.current.cx,
+        cy: camRef.current.cy,
+      }
       pinchFrom.current = null
       return
     }
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()]
       if (a && b) {
-        pinchFrom.current = {
-          dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
-          k: viewRef.current.k,
-          mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-        }
+        pinchFrom.current = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, k: camRef.current.k }
       }
       panFrom.current = null
     }
@@ -252,8 +306,7 @@ export function Board({
 
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!pointers.current.has(e.pointerId)) return
-    const local = toLocal(e.clientX, e.clientY)
-    pointers.current.set(e.pointerId, local)
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
     if (pointers.current.size >= 2) {
       const [a, b] = [...pointers.current.values()]
@@ -261,44 +314,72 @@ export function Board({
       if (!a || !b || !start) return
       const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1
       moved.current = true
-      setSmooth(false)
-      setView((v) => {
-        const k = Math.min(MAX_K, Math.max(MIN_K, start.k * (dist / start.dist)))
-        const scale = k / v.k
-        return clamp({
-          k,
-          tx: start.mid.x - (start.mid.x - v.tx) * scale,
-          ty: start.mid.y - (start.mid.y - v.ty) * scale,
-        })
-      })
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+      const wanted = Math.min(MAX_K, Math.max(MIN_K, start.k * (dist / start.dist)))
+      zoomAt(wanted / camRef.current.k, mid.x, mid.y)
       return
     }
 
     const start = panFrom.current
     if (!start) return
-    const dx = local.x - start.pointer.x
-    const dy = local.y - start.pointer.y
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true
-    setSmooth(false)
-    setView((v) => clamp({ ...v, tx: start.tx + dx, ty: start.ty + dy }))
+    const dxPx = e.clientX - start.client.x
+    const dyPx = e.clientY - start.client.y
+    if (Math.abs(dxPx) > 6 || Math.abs(dyPx) > 6) moved.current = true
+    const s = coverScale * camRef.current.k
+    setCam((c) => clampCam({ ...c, cx: start.cx - dxPx / s, cy: start.cy - dyPx / s }))
   }
 
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
-    releasePointer(e.pointerId)
-    // A remaining finger takes the pan over cleanly.
+    const wasTap = !moved.current && pointers.current.size === 1
+    pointers.current.delete(e.pointerId)
+    if (pointers.current.size < 2) pinchFrom.current = null
+    if (pointers.current.size === 0) panFrom.current = null
+
     const rest = [...pointers.current.values()][0]
     if (rest) {
-      panFrom.current = { pointer: rest, tx: viewRef.current.tx, ty: viewRef.current.ty }
+      panFrom.current = { client: rest, cx: camRef.current.cx, cy: camRef.current.cy }
     }
+
+    if (wasTap) handleTap(e.clientX, e.clientY)
   }
 
   const onWheel = (e: React.WheelEvent<SVGSVGElement>) => {
-    zoomAround(e.deltaY < 0 ? 1.15 : 1 / 1.15, toLocal(e.clientX, e.clientY))
+    zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY)
   }
 
-  const tapped = (handler: () => void) => () => {
-    if (moved.current) return
-    handler()
+  /**
+   * Taps are resolved here rather than on each dot.
+   *
+   * Per-element handlers cannot work while the surface holds a pointer
+   * capture, and a fingertip is far wider than a three-pixel circle anyway.
+   * Picking the nearest candidate within a thumb's reach is both more robust
+   * and much easier to hit.
+   */
+  const handleTap = (clientX: number, clientY: number) => {
+    const point = toBoard(clientX, clientY)
+    const s = coverScale * camRef.current.k
+    const reach = 26 / s // about a fingertip, whatever the zoom
+
+    const candidates: { id: string; x: number; y: number }[] = []
+    if (legalTargets.length > 0) {
+      for (const id of legalTargets) {
+        const p = positions.get(id)
+        if (p) candidates.push({ id, ...p })
+      }
+    } else if (onPickPort) {
+      for (const { port, p } of ports) candidates.push({ id: port.id, ...p })
+    }
+    if (candidates.length === 0) return
+
+    let best: { id: string; d: number } | null = null
+    for (const c of candidates) {
+      const d = Math.hypot(c.x - point.x, c.y - point.y)
+      if (!best || d < best.d) best = { id: c.id, d }
+    }
+    if (!best || best.d > reach) return
+
+    if (legalTargets.length > 0) onPick(best.id)
+    else onPickPort?.(best.id)
   }
 
   // --- derived, cheap ------------------------------------------------------
@@ -339,6 +420,16 @@ export function Board({
       }
     })
 
+  /** Centre of the surface in client pixels, for the zoom buttons. */
+  const midX = () => {
+    const r = svgRef.current?.getBoundingClientRect()
+    return r ? r.left + r.width / 2 : 0
+  }
+  const midY = () => {
+    const r = svgRef.current?.getBoundingClientRect()
+    return r ? r.top + r.height / 2 : 0
+  }
+
   const coursePath = useMemo(() => {
     if (course.length < 2) return ''
     let d = ''
@@ -353,11 +444,12 @@ export function Board({
   }, [course, positions])
 
   return (
-    <div className="board-shell relative h-full w-full overflow-hidden">
+    <div ref={hostRef} className="board-shell relative h-full w-full overflow-hidden">
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${BOARD_W} ${H}`}
-        className="h-full w-full touch-none select-none"
+        viewBox={`${viewX} ${viewY} ${viewW} ${viewH}`}
+        preserveAspectRatio="xMidYMid slice"
+        className="block h-full w-full touch-none select-none"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -378,16 +470,10 @@ export function Board({
           </linearGradient>
         </defs>
 
-        <g
-          style={{
-            transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.k})`,
-            transformOrigin: '0 0',
-            transition: smooth ? 'transform 520ms cubic-bezier(0.25,0.9,0.3,1)' : 'none',
-          }}
-        >
+        <g>
           <SeaAndLand H={H} landPaths={landPaths} lanePath={lanePath} xy={xy} />
 
-          {view.k >= PIP_ZOOM && (
+          {scale >= PIP_ZOOM * 0.9 && (
             <g fill="var(--color-route)">
               {seaDots.map((d) => (
                 <circle key={d.id} cx={d.p.x} cy={d.p.y} r={1.4} opacity={0.8} />
@@ -410,7 +496,7 @@ export function Board({
             const p = positions.get(id)
             if (!p) return null
             return (
-              <g key={`t-${id}`} onPointerUp={tapped(() => onPick(id))} className="cursor-pointer">
+              <g key={`t-${id}`} className="cursor-pointer">
                 <circle cx={p.x} cy={p.y} r={12} fill="#ffffff" opacity={0.25} />
                 <circle
                   cx={p.x}
@@ -427,18 +513,13 @@ export function Board({
 
           {ports.map(({ port, p }) => {
             const labelled =
-              view.k >= LABEL_ZOOM ||
+              scale >= LABEL_ZOOM ||
               occupiedPorts.has(port.id) ||
               targetSet.has(port.id) ||
               hintSet.has(port.id) ||
               port.id === focusNode
             return (
-              <g
-                key={port.id}
-                onPointerUp={onPickPort ? tapped(() => onPickPort(port.id)) : undefined}
-                className={onPickPort ? 'cursor-pointer' : undefined}
-              >
-                {onPickPort && <circle cx={p.x} cy={p.y} r={11} fill="transparent" />}
+              <g key={port.id} className={onPickPort ? 'cursor-pointer' : undefined}>
                 {hintSet.has(port.id) && (
                   <circle
                     cx={p.x}
@@ -487,20 +568,27 @@ export function Board({
           <CompassRose x={BOARD_W * 0.06} y={H * 0.82} />
         </g>
 
-        <rect width={BOARD_W} height={H} fill="url(#vignette)" pointerEvents="none" />
+        <rect
+          x={viewX}
+          y={viewY}
+          width={viewW}
+          height={viewH}
+          fill="url(#vignette)"
+          pointerEvents="none"
+        />
       </svg>
 
       <div className="pointer-events-none absolute right-3 bottom-3 flex flex-col gap-1.5">
         <button
           className="btn btn-sm pointer-events-auto !px-2.5 text-lg leading-none"
-          onClick={() => zoomAround(1.4, { x: BOARD_W / 2, y: H / 2 })}
+          onClick={() => zoomAt(1.4, midX(), midY())}
           aria-label="Näher heran"
         >
           +
         </button>
         <button
           className="btn btn-sm pointer-events-auto !px-2.5 text-lg leading-none"
-          onClick={() => zoomAround(1 / 1.4, { x: BOARD_W / 2, y: H / 2 })}
+          onClick={() => zoomAt(1 / 1.4, midX(), midY())}
           aria-label="Weiter weg"
         >
           −
@@ -515,10 +603,7 @@ export function Board({
         </button>
         <button
           className="btn btn-sm pointer-events-auto !px-2 text-xs leading-none"
-          onClick={() => {
-            setSmooth(true)
-            setView({ k: 1, tx: 0, ty: 0 })
-          }}
+          onClick={() => setCam(clampCam({ k: 1, cx: BOARD_W / 2, cy: H / 2 }))}
           aria-label="Ganzer Plan"
         >
           ⤢

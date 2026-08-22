@@ -54,12 +54,12 @@ export function GameScreen() {
   // The harbour opens itself; everything else waits to be asked for.
   useEffect(() => {
     if (realtime) {
+      // The plan stays uncovered unless something is asked for; arriving in
+      // harbour offers a button rather than taking over the screen.
       if (state.phase === 'over') {
         setKind('ende')
         setSnap('full')
-      } else if (portId) {
-        setKind((k) => (k === null ? 'port' : k))
-      } else {
+      } else if (!portId) {
         setKind((k) => (k === 'port' ? null : k))
       }
       return
@@ -686,7 +686,7 @@ function KontorSheet({
         </div>
       )}
 
-      {tab === 'wohin' && <MarketReport report={report} cargo={flagship(player).cargo.length} />}
+      {tab === 'wohin' && <MarketReport ctx={ctx} report={report} cargo={flagship(player).cargo.length} />}
 
       {tab === 'journal' && (
         <ul className="anim-fade space-y-1.5 text-[12px] leading-snug">

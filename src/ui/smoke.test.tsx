@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from '@app/App'
 import { useGame } from '@app/store'
@@ -262,18 +262,79 @@ describe('the map on a touch screen', () => {
     expect(board()).toBeTruthy()
   })
 
-  it('recentres on the ship when the turn passes', () => {
+  it('moves the ship when a green dot is tapped', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'tap' }))
+    act(() => useGame.getState().dispatch({ type: 'endTurn' }))
+    act(() => useGame.getState().dispatch({ type: 'endTurn' }))
+    act(() => useGame.getState().dispatch({ type: 'roll' }))
+
+    const before = useGame.getState().state!
+    expect(before.phase).toBe('move')
+    const remaining = before.movement!.remaining
+    const wasAt = flagship(before.players[before.activeIndex]!).nodeId
+
+    // A plain tap on the surface. This used to do nothing on a touch screen:
+    // the surface held a pointer capture, so the dot's own handler never ran.
+    const svg = board()
+    fireEvent.pointerDown(svg, { pointerId: 1, clientX: 160, clientY: 240 })
+    fireEvent.pointerUp(svg, { pointerId: 1, clientX: 160, clientY: 240 })
+
+    const after = useGame.getState().state!
+    expect(after.movement?.remaining ?? 0).toBe(remaining - 1)
+    expect(flagship(after.players[after.activeIndex]!).nodeId).not.toBe(wasAt)
+  })
+
+  it('ignores a tap that was really a drag', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'drag' }))
+    act(() => useGame.getState().dispatch({ type: 'endTurn' }))
+    act(() => useGame.getState().dispatch({ type: 'endTurn' }))
+    act(() => useGame.getState().dispatch({ type: 'roll' }))
+    const remaining = useGame.getState().state!.movement!.remaining
+
+    const svg = board()
+    fireEvent.pointerDown(svg, { pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 260, clientY: 210 })
+    fireEvent.pointerUp(svg, { pointerId: 1, clientX: 260, clientY: 210 })
+
+    // Panning the plan must never be mistaken for an order.
+    expect(useGame.getState().state!.movement!.remaining).toBe(remaining)
+  })
+
+  it('shows the plan through a viewBox shaped like the screen, never letterboxed', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'focus' }))
 
-    const layer = () => board().querySelector('g[style]') as SVGGElement
-    const before = layer().style.transform
+    const svg = board()
+    // 'slice' covers the container; the default 'meet' would leave dead bands
+    // above and below on a tall telephone.
+    expect(svg.getAttribute('preserveAspectRatio')).toBe('xMidYMid slice')
+    const box = svg.getAttribute('viewBox')!.split(' ').map(Number)
+    expect(box).toHaveLength(4)
+    expect(box.every((n) => Number.isFinite(n))).toBe(true)
+  })
 
-    act(() => useGame.getState().dispatch({ type: 'endTurn' }))
+  it('recentres on the ship when the turn passes', () => {
+    vi.useFakeTimers()
+    try {
+      render(<App />)
+      act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'focus' }))
+      act(() => {
+        vi.advanceTimersByTime(800)
+      })
+      const before = board().getAttribute('viewBox')
 
-    // Bo's harbour is elsewhere, so the camera must have moved.
-    expect(layer().style.transform).not.toBe(before)
-    expect(layer().style.transform).toMatch(/scale\(/)
+      act(() => useGame.getState().dispatch({ type: 'endTurn' }))
+      act(() => {
+        vi.advanceTimersByTime(800)
+      })
+
+      // Bo's harbour is elsewhere, so the camera must have travelled.
+      expect(board().getAttribute('viewBox')).not.toBe(before)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

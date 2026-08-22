@@ -46,11 +46,17 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html,
-body,
+html {
+  height: 100%;
+}
+
+/*
+ * The app owns the window. `inset: 0` on a fixed body gives the real visible
+ * box on a telephone, without fighting the address bar the way 100vh does,
+ * and #root then resolves its 100% against a definite height.
+ */
 #root {
   height: 100%;
-  height: 100dvh;
 }
 
 /* Respect the notch and the home indicator. */
@@ -76,7 +82,7 @@ body {
   margin: 0;
   position: fixed;
   inset: 0;
-  width: 100%;
+  overflow: hidden;
   background-color: #3b3227;
   color: var(--color-ink);
   font-family: var(--font-body);
