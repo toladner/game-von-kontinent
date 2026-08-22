@@ -368,3 +368,20 @@ export function arrivalOf(state: GameState, vehicle: VehicleInstance): number | 
 export function isRedField(state: GameState): boolean {
   return state.config.redFields.includes(state.round)
 }
+
+/**
+ * Whether this table has a shipyard at all.
+ *
+ * The original game gives every house one steamer and no way to buy another,
+ * so a limit of one means the yard is not merely full — it does not exist.
+ */
+export function hasShipyard(state: GameState): boolean {
+  return state.config.maxFleetSize > 1
+}
+
+/** Why the yard will not sell, in words that fit the setting. */
+export function fleetLimitNote(maxFleetSize: number): string {
+  return maxFleetSize <= 1
+    ? 'Ein Haus, ein Schiff — so will es die Anleitung.'
+    : `Mehr als ${maxFleetSize} Schiffe verwaltet kein Haus.`
+}

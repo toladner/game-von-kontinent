@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
 import { CargoHold } from './Cargo'
 import { clockText, untilText } from './useNow'
-import { arrivalOf, portAt } from '@engine/selectors'
+import { arrivalOf, fleetLimitNote, hasShipyard, portAt } from '@engine/selectors'
 import { flagship, type GameState, type PlayerState, type VehicleInstance } from '@engine/state'
 import type { EngineContext } from '@engine/context'
 import { PLAYER_COLORS } from '@app/store'
@@ -99,12 +99,13 @@ export function FleetSheet({
             ))}
           </ul>
 
-          {herePort && (
+          {/* A table playing the printed rules has no yard to show at all. */}
+          {herePort && hasShipyard(state) && (
             <>
               <h3 className="smallcaps text-ink-soft mt-5 mb-2 text-[11px]">Werft</h3>
               {player.fleet.length >= state.config.maxFleetSize ? (
                 <p className="text-ink-faint text-xs italic">
-                  Mehr als {state.config.maxFleetSize} Schiffe verwaltet kein Haus.
+                  {fleetLimitNote(state.config.maxFleetSize)}
                 </p>
               ) : (
                 <div className="space-y-2">

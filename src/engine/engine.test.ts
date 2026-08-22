@@ -262,3 +262,41 @@ describe('scoring', () => {
     expect(table[0]!.worth).toBe(netWorth(table[0]!.player))
   })
 })
+
+describe('the shipyard', () => {
+  it('is closed under the printed rules — one house, one ship', () => {
+    const state = seated(['Ada', 'Bo'], { seed: 'werft' })
+    expect(state.config.maxFleetSize).toBe(1)
+
+    const before = state.players[0]!.cash
+    const after = applyAction(ctx, state, { type: 'buyVehicle', kindId: 'kuestenschoner' })
+
+    expect(after.state.players[0]!.fleet).toHaveLength(1)
+    expect(after.state.players[0]!.cash).toBe(before)
+    expect(after.events.some((e) => e.type === 'rejected')).toBe(true)
+  })
+
+  it('opens only when a variant asks for a fleet', () => {
+    const state = seated(['Ada', 'Bo'], { seed: 'werft', maxFleetSize: 2 })
+    const after = applyAction(ctx, state, { type: 'buyVehicle', kindId: 'kuestenschoner' })
+
+    expect(after.state.players[0]!.fleet).toHaveLength(2)
+
+    // And it stops at the limit the variant named.
+    const third = applyAction(ctx, after.state, {
+      type: 'buyVehicle',
+      kindId: 'kuestenschoner',
+    })
+    expect(third.state.players[0]!.fleet).toHaveLength(2)
+  })
+
+  it('prices a second ship against a season, not against one cargo', () => {
+    // A house must empty its till for the cheapest hull and trade its way up
+    // to anything larger — otherwise a fleet is just a first-turn purchase.
+    const capital = CLASSIC_PACK.config.startingCapital
+    const prices = CLASSIC_PACK.vehicles.map((v) => v.price).sort((a, b) => a - b)
+
+    expect(prices[0]).toBeGreaterThan(capital * 0.8)
+    for (const price of prices.slice(1)) expect(price).toBeGreaterThan(capital * 2)
+  })
+})

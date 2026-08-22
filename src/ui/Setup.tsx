@@ -62,6 +62,7 @@ export function Setup() {
           sicht: options.sicht,
           minutesPerPip: options.minutesPerPip,
           durationHours: options.durationHours,
+          maxFleetSize: options.fleetLimit,
         })
       } catch (error) {
         setProblem(
@@ -79,6 +80,7 @@ export function Setup() {
       sicht: options.sicht,
       minutesPerPip: options.minutesPerPip,
       durationHours: options.durationHours,
+      maxFleetSize: options.fleetLimit,
     })
   }
 
@@ -398,9 +400,33 @@ function StepOptionen({
           disabled={!CAPABILITIES['sicht:realistisch']!.ready}
           note={CAPABILITIES['sicht:realistisch']!.note}
           onClick={() => {
-            // Fog only means anything once ships take real time to arrive.
-            setOptions((o) => ({ ...o, sicht: 'realistisch', travel: 'echtzeit' }))
+            // Fog only means anything once ships take real time to arrive —
+            // and once there is a captain elsewhere to lose sight of.
+            setOptions((o) => ({
+              ...o,
+              sicht: 'realistisch',
+              travel: 'echtzeit',
+              fleetLimit: Math.max(o.fleetLimit, 2),
+            }))
           }}
+        />
+      </div>
+
+      <Legend>Reederei</Legend>
+      <div className="space-y-2.5">
+        <Slider
+          label="Schiffe je Haus"
+          value={options.fleetLimit}
+          min={1}
+          max={4}
+          step={1}
+          hint={
+            options.fleetLimit === 1
+              ? 'wie im Original — keine Werft'
+              : 'Werften verkaufen; ein zweites Schiff kostet ein halbes Vermögen'
+          }
+          format={(v) => String(v)}
+          onChange={(v) => set('fleetLimit', v)}
         />
       </div>
 

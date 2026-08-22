@@ -33,6 +33,11 @@ export interface GameOptions {
   /** Real-time only: how many real hours the season lasts. */
   readonly durationHours: number
   readonly startingCapital: number
+  /**
+   * Vessels one house may run. 1 is the printed game: no yard, no fleet.
+   * Above that the yards open and a second captain becomes possible.
+   */
+  readonly fleetLimit: number
   readonly table: Table
   readonly sicht: Sicht
   readonly joinPolicy: JoinPolicy
@@ -48,6 +53,7 @@ export const DEFAULT_OPTIONS: GameOptions = {
   minutesPerPip: 6,
   durationHours: 24,
   startingCapital: 500_000,
+  fleetLimit: 1,
   table: 'lokal',
   sicht: 'normal',
   joinPolicy: 'nur-zu-beginn',

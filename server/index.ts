@@ -34,6 +34,8 @@ export interface GameMeta {
   readonly travel: TravelMode
   readonly minutesPerPip: number
   readonly durationHours: number
+  /** Vessels one house may run at once; 1 is the printed game. */
+  readonly maxFleetSize: number
   readonly packId: string
   readonly createdAt: number
 }
@@ -105,6 +107,7 @@ export default {
         // only way an automated test can watch a voyage finish.
         minutesPerPip: clampF(body.minutesPerPip ?? 6, 0.02, 240),
         durationHours: clamp(body.durationHours ?? 24, 1, 720),
+        maxFleetSize: clamp(body.maxFleetSize ?? 1, 1, 6),
         packId: 'classic',
         createdAt: Date.now(),
       }
@@ -184,6 +187,7 @@ export class GameRoom {
       travel: this.meta.travel,
       minutesPerPip: this.meta.minutesPerPip,
       durationHours: this.meta.durationHours,
+      maxFleetSize: this.meta.maxFleetSize,
     })
     for (const a of this.actions) s = applyAction(ctx, s, a).state
     this.state = s

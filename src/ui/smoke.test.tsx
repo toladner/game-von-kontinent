@@ -393,6 +393,9 @@ describe('Sicht realistisch in the interface', () => {
         sicht: 'realistisch',
         minutesPerPip: 1,
         durationHours: 6,
+        // Choosing "realistisch" in the setup opens the yards for the same
+        // reason: a captain over the horizon needs a second ship to be on.
+        maxFleetSize: 2,
         seed: 'fog-ui',
       }),
     )

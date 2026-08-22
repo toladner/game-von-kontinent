@@ -19,6 +19,8 @@ export interface GameMeta {
   readonly travel: 'runde' | 'echtzeit'
   readonly minutesPerPip: number
   readonly durationHours: number
+  /** Vessels one house may run at once; absent on tables opened before fleets. */
+  readonly maxFleetSize?: number
   readonly packId: string
   readonly createdAt: number
 }
@@ -69,6 +71,7 @@ export async function createOnlineGame(options: {
   travel: 'runde' | 'echtzeit'
   minutesPerPip: number
   durationHours: number
+  maxFleetSize: number
 }): Promise<{ code: string; meta: GameMeta }> {
   const res = await fetch('/api/games', {
     method: 'POST',

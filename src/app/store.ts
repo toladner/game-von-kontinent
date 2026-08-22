@@ -23,6 +23,8 @@ interface SaveFile {
   travel?: 'runde' | 'echtzeit'
   minutesPerPip?: number
   durationHours?: number
+  sicht?: 'normal' | 'realistisch'
+  maxFleetSize?: number
   readonly actions: GameAction[]
 }
 
@@ -34,6 +36,8 @@ export interface BeginOptions {
   readonly minutesPerPip?: number
   readonly durationHours?: number
   readonly sicht?: 'normal' | 'realistisch'
+  /** Vessels one house may run; 1 (the printed game) closes the yards. */
+  readonly maxFleetSize?: number
 }
 
 export interface LogLine {
@@ -223,6 +227,7 @@ export const useGame = create<Store>((set, get) => ({
         ...(options.sicht ? { sicht: options.sicht } : {}),
         ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),
         ...(options.durationHours ? { durationHours: options.durationHours } : {}),
+        ...(options.maxFleetSize ? { maxFleetSize: options.maxFleetSize } : {}),
       }),
       opening,
     )
@@ -230,6 +235,8 @@ export const useGame = create<Store>((set, get) => ({
     saved.travel = travel
     if (options.minutesPerPip) saved.minutesPerPip = options.minutesPerPip
     if (options.durationHours) saved.durationHours = options.durationHours
+    if (options.sicht) saved.sicht = options.sicht
+    if (options.maxFleetSize) saved.maxFleetSize = options.maxFleetSize
     persist()
     const firstActing = state.players[0]?.id ?? null
     session?.close()
@@ -261,6 +268,7 @@ export const useGame = create<Store>((set, get) => ({
       travel: options.travel ?? 'runde',
       minutesPerPip: options.minutesPerPip ?? 6,
       durationHours: options.durationHours ?? 24,
+      maxFleetSize: options.maxFleetSize ?? 1,
     })
     get().join(code, name)
     return code
@@ -285,6 +293,8 @@ export const useGame = create<Store>((set, get) => ({
           travel: meta.travel,
           minutesPerPip: meta.minutesPerPip,
           durationHours: meta.durationHours,
+          // Must match the server exactly, or our replay drifts from its truth.
+          ...(meta.maxFleetSize ? { maxFleetSize: meta.maxFleetSize } : {}),
         })
         // Under fog the log is withheld; a view arrives separately.
         const rebuilt = meta.sicht === 'realistisch' ? null : replay(ctx, initial, actions)
@@ -428,6 +438,8 @@ export const useGame = create<Store>((set, get) => ({
         ...(file.travel ? { travel: file.travel } : {}),
         ...(file.minutesPerPip ? { minutesPerPip: file.minutesPerPip } : {}),
         ...(file.durationHours ? { durationHours: file.durationHours } : {}),
+        ...(file.sicht ? { sicht: file.sicht } : {}),
+        ...(file.maxFleetSize ? { maxFleetSize: file.maxFleetSize } : {}),
       })
       const state = replay(ctx, initial, file.actions ?? [])
       saved = file

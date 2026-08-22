@@ -17,6 +17,7 @@ import { isPort } from './mapbuild'
 import { rollDie } from './rng'
 import {
   distancesFrom,
+  fleetLimitNote,
   legalSteps,
   legMsFor,
   portAt,
@@ -599,6 +600,11 @@ export function applyAction(
     }
 
     case 'buyVehicle': {
+      // Checked before anything else: a table playing the printed rules has no
+      // yard at all, and the reason differs from a house that is simply full.
+      if (draft.config.maxFleetSize <= 1) {
+        return reject(state, fleetLimitNote(draft.config.maxFleetSize))
+      }
       const buyerShip = flagship(player)
       if (buyerShip.voyage) return reject(state, 'Auf See kauft man kein Schiff.')
       const yard = portAt(ctx, buyerShip.nodeId)
@@ -608,7 +614,7 @@ export function applyAction(
       if (!kind) return reject(state, 'Dieses Schiff führt die Werft nicht.')
       if (player.cash < kind.price) return reject(state, 'Die Barmittel reichen nicht.')
       if (player.fleet.length >= draft.config.maxFleetSize) {
-        return reject(state, `Mehr als ${draft.config.maxFleetSize} Schiffe verwaltet kein Haus.`)
+        return reject(state, fleetLimitNote(draft.config.maxFleetSize))
       }
 
       const identity = makeShipIdentity(`${player.id}:${player.fleet.length}:${ctx.pack.id}`)

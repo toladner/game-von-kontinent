@@ -19,6 +19,11 @@ export interface NewGameOptions {
   /** Real hours the season lasts; only meaningful in real-time play. */
   readonly durationHours?: number
   readonly sicht?: Sicht
+  /**
+   * Vessels one house may run at once. The printed game says one; a variant
+   * that wants a fleet has to ask for it.
+   */
+  readonly maxFleetSize?: number
 }
 
 /**
@@ -36,6 +41,7 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     ...(options.startingCapital ? { startingCapital: options.startingCapital } : {}),
     ...(options.travel ? { travel: options.travel } : {}),
     ...(options.sicht ? { sicht: options.sicht } : {}),
+    ...(options.maxFleetSize ? { maxFleetSize: options.maxFleetSize } : {}),
     realtime: {
       ...ctx.pack.config.realtime,
       ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),

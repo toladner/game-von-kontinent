@@ -53,14 +53,23 @@ export const CLASSIC_CONFIG: RuleConfig = {
     price: 0,
     speedFactor: 1,
   },
-  maxFleetSize: 5,
+  /**
+   * The printed game gives each house one steamer and never another: there is
+   * no yard on the board and no rule for buying one. A fleet is an extension,
+   * so the faithful setting is 1 and variants raise it deliberately.
+   */
+  maxFleetSize: 1,
 }
 
 /**
- * What the yards have on the stocks.
+ * What the yards have on the stocks. Only variants that raise `maxFleetSize`
+ * above 1 ever see this list — the original game has no yard.
  *
  * A second ship is not a bigger hold, it is a second trade running at the same
- * time — and, once the Brieftauben are in play, a captain you cannot see.
+ * time — and, once the Brieftauben are in play, a captain you cannot see. That
+ * is worth a great deal, so it is priced against a whole season rather than
+ * against one cargo: with 500.000 in the till a house can just about manage a
+ * schooner by emptying it, and must trade its way up to anything larger.
  */
 export const CLASSIC_VEHICLES: readonly Vehicle[] = [
   {
@@ -68,27 +77,27 @@ export const CLASSIC_VEHICLES: readonly Vehicle[] = [
     name: 'Küstenschoner',
     capacity: 3,
     modes: ['see'],
-    price: 140_000,
+    price: 450_000,
     speedFactor: 0.75,
-    blurb: 'Flink und billig, nimmt aber nur drei Posten.',
+    blurb: 'Flink und noch erschwinglich, nimmt aber nur drei Posten.',
   },
   {
     id: 'frachtdampfer',
     name: 'Frachtdampfer',
     capacity: 6,
     modes: ['see'],
-    price: 300_000,
+    price: 1_100_000,
     speedFactor: 1,
-    blurb: 'Das übliche Arbeitstier der Linie.',
+    blurb: 'Das übliche Arbeitstier der Linie. Ein gutes Jahr Handel.',
   },
   {
     id: 'grossfrachter',
     name: 'Großfrachter',
     capacity: 12,
     modes: ['see'],
-    price: 620_000,
+    price: 2_400_000,
     speedFactor: 1.35,
-    blurb: 'Ein schwimmendes Lagerhaus. Nicht eilig.',
+    blurb: 'Ein schwimmendes Lagerhaus. Nicht eilig, und nicht billig.',
   },
 ]
 

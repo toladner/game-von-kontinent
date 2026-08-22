@@ -23,6 +23,8 @@ function table(overrides: Partial<Parameters<typeof createGame>[1]> = {}): GameS
     sicht: 'realistisch',
     minutesPerPip: 1,
     durationHours: 24,
+    // Fog is about captains you cannot see, so this table runs a fleet.
+    maxFleetSize: 2,
     ...overrides,
   })
   return replay(ctx, base, [
