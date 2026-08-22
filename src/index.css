@@ -475,10 +475,22 @@ body {
   animation: sheet-up 280ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
 
-/* Height animates from the class so a drag can suspend it inline. */
-
+/*
+ * The height lives here, driven by a custom property the component sets, so
+ * that a drag can take it over inline and hand it straight back — and so the
+ * wide-screen rail can ignore it altogether. An inline height would have won
+ * over any class, which is why the rail used to stand 42% tall against the
+ * top of the window instead of filling its column.
+ */
 .sheet {
+  height: var(--sheet-h, 42dvh);
   transition: height 260ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+@media (min-width: 64rem) {
+  .sheet {
+    height: auto;
+  }
 }
 
 .anim-fade {

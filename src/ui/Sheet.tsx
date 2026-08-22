@@ -3,6 +3,36 @@ import { useEffect, useRef, type ReactNode } from 'react'
 export type SheetSnap = 'closed' | 'peek' | 'full'
 
 /**
+ * How tall each level stands, as a share of the viewport. The stylesheet
+ * holds the same numbers; these are here so a release can work out which
+ * level the thumb ended up nearest to.
+ */
+const SHARE: Record<SheetSnap, number> = { closed: 0, peek: 0.42, full: 0.86 }
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+
+function snapHeights(): Record<SheetSnap, number> {
+  const h = typeof window === 'undefined' ? 800 : window.innerHeight
+  return { closed: 0, peek: SHARE.peek * h, full: SHARE.full * h }
+}
+
+/**
+ * Which level a released drag belongs to.
+ *
+ * Nearest wins, rather than "did it move more than 40px in some direction":
+ * a long haul upwards from a peek should land on full, and a long haul down
+ * from full should close rather than stopping halfway because the first
+ * threshold it crossed said so.
+ */
+export function nearestSnap(heightPx: number, viewport?: number): SheetSnap {
+  const h = viewport ?? (typeof window === 'undefined' ? 800 : window.innerHeight)
+  const levels: SheetSnap[] = ['closed', 'peek', 'full']
+  return levels.reduce((best, level) =>
+    Math.abs(SHARE[level] * h - heightPx) < Math.abs(SHARE[best] * h - heightPx) ? level : best,
+  )
+}
+
+/**
  * The one panel the game speaks through.
  *
  * On a phone it is a bottom sheet you can drag between a peek and a full
@@ -27,22 +57,25 @@ export function Sheet({
   footer?: ReactNode
 }) {
   const asideRef = useRef<HTMLElement | null>(null)
-  const drag = useRef<{ y: number; from: SheetSnap; moved: boolean } | null>(null)
+  const drag = useRef<{ y: number; height: number; moved: boolean } | null>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && snap === 'full') onSnap('peek')
+      if (e.key !== 'Escape') return
+      onSnap(snap === 'full' ? 'peek' : 'closed')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [snap, onSnap])
 
-  const height = snap === 'full' ? '86dvh' : snap === 'peek' ? '42dvh' : '0dvh'
-
   /**
-   * The gesture is driven straight at the element rather than through React
-   * state: a re-render per pointermove is both janky and easy to get wrong,
-   * and the previous version read a stale value on release.
+   * The gesture moves the sheet's height, not its position.
+   *
+   * Translating it upwards used to leave a strip of board showing underneath,
+   * so the travel had to be clamped to a token 70px and the thing barely
+   * budged. Growing it from the bottom edge is what a sheet actually does:
+   * it follows the thumb the whole way, in both directions, and never comes
+   * unstuck from the foot of the screen.
    */
   const onPointerDown = (e: React.PointerEvent) => {
     try {
@@ -50,38 +83,43 @@ export function Sheet({
     } catch {
       /* capture is a nicety, not a requirement */
     }
-    drag.current = { y: e.clientY, from: snap, moved: false }
-    if (asideRef.current) asideRef.current.style.transition = 'none'
+    const el = asideRef.current
+    // Start from where the sheet actually stands; if the browser will not say
+    // — mid-animation, or in a test — from where this level is meant to be.
+    drag.current = {
+      y: e.clientY,
+      height: el?.offsetHeight || snapHeights()[snap],
+      moved: false,
+    }
+    if (el) el.style.transition = 'none'
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current
-    if (!d) return
+    const el = asideRef.current
+    if (!d || !el) return
     const dy = e.clientY - d.y
     if (Math.abs(dy) > 6) d.moved = true
-    if (asideRef.current) {
-      asideRef.current.style.transform = `translateY(${Math.max(-70, dy)}px)`
-    }
+    el.style.height = `${clamp(d.height - dy, 0, snapHeights().full)}px`
   }
 
   const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current
+    const el = asideRef.current
     if (!d) return
     drag.current = null
-    const dy = e.clientY - d.y
 
-    if (asideRef.current) {
-      asideRef.current.style.transform = ''
-      asideRef.current.style.transition = ''
+    if (el) {
+      el.style.transition = ''
+      // Hand the height back to the stylesheet; the transition carries it
+      // from wherever the thumb left it to whichever level wins.
+      el.style.height = ''
     }
 
     // A tap on the grip is a perfectly good way to ask for more room.
-    if (!d.moved) {
-      onSnap(d.from === 'full' ? 'peek' : 'full')
-      return
-    }
-    if (dy < -40) onSnap('full')
-    else if (dy > 40) onSnap(d.from === 'full' ? 'peek' : 'closed')
+    if (!d.moved) return onSnap(snap === 'full' ? 'peek' : 'full')
+
+    onSnap(nearestSnap(clamp(d.height - (e.clientY - d.y), 0, snapHeights().full)))
   }
 
   if (snap === 'closed') return null
@@ -90,7 +128,14 @@ export function Sheet({
     <aside
       ref={asideRef}
       className="paper anim-sheet sheet fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-xl border-t border-black/25 shadow-[0_-8px_28px_rgb(0_0_0/0.35)] lg:inset-y-0 lg:right-0 lg:left-auto lg:w-[400px] lg:rounded-none lg:rounded-l-xl lg:border-t-0 lg:border-l lg:shadow-[-8px_0_28px_rgb(0_0_0/0.3)]"
-      style={{ height, paddingBottom: 'var(--safe-b)' }}
+      style={
+        {
+          // The rail on a wide screen ignores this and fills its column;
+          // see the media query beside .sheet.
+          '--sheet-h': snap === 'full' ? '86dvh' : '42dvh',
+          paddingBottom: 'var(--safe-b)',
+        } as React.CSSProperties
+      }
       aria-label={title}
     >
       {/* Griff — groß genug für einen Daumen, und ein Tippen genügt auch. */}
@@ -128,6 +173,15 @@ export function Sheet({
           aria-label={snap === 'full' ? 'Verkleinern' : 'Vergrößern'}
         >
           {snap === 'full' ? '▾' : '▴'}
+        </button>
+        {/* The rail is always full height, so collapsing it means nothing —
+            what a wide screen needs is a way to put it away entirely. */}
+        <button
+          className="btn btn-sm hidden !px-2 !py-0.5 text-xs lg:block"
+          onClick={() => onSnap('closed')}
+          aria-label="Schließen"
+        >
+          ✕
         </button>
       </header>
 

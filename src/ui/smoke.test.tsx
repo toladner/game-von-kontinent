@@ -900,3 +900,49 @@ describe('the round and the tabs are one list', () => {
     expect(slip().innerHTML).not.toContain('text-rot')
   })
 })
+
+describe('the sheet on a wide screen', () => {
+  it('offers a way to put the rail away', () => {
+    // The grip and the collapse arrow are both lg:hidden, so before this the
+    // only route to 'closed' was a drag — and a desktop had none. Opening
+    // the Kontor left you with no way back to the action bar.
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'schliessen' }))
+    enterHarbour()
+
+    const shut = screen.getByRole('button', { name: 'Schließen' })
+    expect(shut).toBeTruthy()
+    act(() => {
+      fireEvent.click(shut)
+    })
+    expect(screen.queryByRole('tab', { name: /Ladung/ })).toBeNull()
+    // And the way back in is offered again.
+    expect(screen.getByText('Hafen öffnen')).toBeTruthy()
+  })
+
+  it('leaves the height to the stylesheet so the rail can fill its column', () => {
+    // An inline height beats any class, which is how the rail came to stand
+    // 42% tall against the top of the window instead of floor to ceiling.
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'saeule' }))
+    enterHarbour()
+
+    const sheet = document.querySelector('aside.sheet') as HTMLElement
+    expect(sheet.style.height).toBe('')
+    expect(sheet.style.getPropertyValue('--sheet-h')).toBe('86dvh')
+  })
+
+  it('puts the sheet away on Escape', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'escape' }))
+    enterHarbour()
+
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Escape' })
+    })
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Escape' })
+    })
+    expect(screen.queryByRole('tab', { name: /Ladung/ })).toBeNull()
+  })
+})
