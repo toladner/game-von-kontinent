@@ -66,7 +66,7 @@ export function GameScreen() {
     }
     if (state.phase === 'port') {
       setKind('port')
-      setSnap('peek')
+      setSnap('full')
     } else if (state.phase === 'konjunktur') {
       setKind('konjunktur')
       setSnap('peek')
@@ -86,7 +86,8 @@ export function GameScreen() {
 
   const open = (k: SheetKind) => {
     setKind(k)
-    setSnap('peek')
+    // Buying and selling wants the whole sheet; the rest is a glance.
+    setSnap(k === 'port' ? 'full' : 'peek')
   }
   const close = (s: SheetSnap) => {
     if (s === 'closed') setKind(null)

@@ -281,11 +281,16 @@ describe('the map on a touch screen', () => {
     // The harbour opens itself on arrival.
     expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
 
-    // Drag it away.
-    const grip = screen.getAllByLabelText(/Vergrößern|Verkleinern/)[0]!
-    fireEvent.pointerDown(grip, { pointerId: 1, clientY: 100 })
-    fireEvent.pointerMove(grip, { pointerId: 1, clientY: 400 })
-    fireEvent.pointerUp(grip, { pointerId: 1, clientY: 400 })
+    // Drag it away. The harbour opens full, so that is full → peek → gone.
+    const dragDown = () => {
+      const grip = screen.getAllByLabelText(/Vergrößern|Verkleinern/)[0]!
+      fireEvent.pointerDown(grip, { pointerId: 1, clientY: 100 })
+      fireEvent.pointerMove(grip, { pointerId: 1, clientY: 400 })
+      fireEvent.pointerUp(grip, { pointerId: 1, clientY: 400 })
+    }
+    dragDown()
+    expect(screen.getByRole('button', { name: /ablegen/i })).toBeTruthy()
+    dragDown()
     expect(screen.queryByRole('button', { name: /ablegen/i })).toBeNull()
 
     // The button that offers it back must actually bring it back.

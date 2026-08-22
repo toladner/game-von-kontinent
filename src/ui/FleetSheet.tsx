@@ -114,7 +114,9 @@ export function FleetSheet({
                     return (
                       <button
                         key={kind.id}
-                        className="paper-card block w-full rounded-md p-2.5 text-left disabled:opacity-45"
+                        className={`block w-full rounded-md p-2.5 text-left ${
+                          tooDear ? 'card-dead' : 'paper-card'
+                        }`}
                         disabled={tooDear}
                         onClick={() => onBuy(kind.id)}
                       >

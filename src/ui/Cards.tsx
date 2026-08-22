@@ -30,9 +30,9 @@ export function Warenkarte({
 
   return (
     <Tag
-      className={`paper-card focusable relative block w-full rounded-[2px] px-3 py-2 text-left transition ${
-        onClick && !disabled ? 'hover:-translate-y-0.5 hover:shadow-md' : ''
-      } ${disabled ? 'opacity-60 grayscale' : ''}`}
+      className={`focusable block w-full rounded-[2px] px-3 py-2 text-left transition ${
+        disabled ? 'card-dead' : 'paper-card'
+      } ${onClick && !disabled ? 'hover:-translate-y-0.5 hover:shadow-md' : ''}`}
       onClick={onClick}
       disabled={disabled}
       type={onClick ? 'button' : undefined}
@@ -55,20 +55,17 @@ export function Warenkarte({
         </div>
       </dl>
 
-      {sublabel && (
-        <p
-          className={`mt-1 text-[10px] leading-tight ${
-            disabled ? 'text-rot font-semibold' : 'text-ink-soft'
-          }`}
-        >
-          {sublabel}
-        </p>
-      )}
-
-      {action && (
-        <span className="smallcaps text-ink-soft absolute right-2 bottom-1.5 text-[10px]">
-          {action}
-        </span>
+      {/* Reason and call to action share a row, so neither can sit on top of
+          the other however long the reason runs. */}
+      {(sublabel || action) && (
+        <div className="mt-1.5 flex items-end justify-between gap-2">
+          <p className="text-ink-soft min-w-0 flex-1 text-[10px] leading-tight">{sublabel}</p>
+          {action && (
+            <span className="smallcaps bg-ink/85 text-paper shrink-0 rounded-[2px] px-1.5 py-0.5 text-[10px] leading-none">
+              {action}
+            </span>
+          )}
+        </div>
       )}
     </Tag>
   )

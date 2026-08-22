@@ -303,7 +303,7 @@ function GuideNote({
         </p>
         {advice.tab && advice.cta && (
           <button
-            className="btn btn-sm mt-1.5 !py-0.5 text-[11px]"
+            className="btn btn-primary btn-sm mt-2 !py-1 text-[12px]"
             onClick={() => onGo(advice.tab as Tab)}
           >
             {advice.cta} →
