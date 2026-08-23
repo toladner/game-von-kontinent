@@ -1,0 +1,180 @@
+import type { Continent, KonjunkturCard } from '../engine/types'
+import { KONJUNKTUR_DECK } from './konjunktur'
+
+/**
+ * The erweiterte Konjunktur.
+ *
+ * The printed 27 cards are excellent and slightly monotonous: nearly all of
+ * them move every price on the board by a percentage, which on a plan with
+ * five oceans means nothing about *where* you are ever matters. These cards
+ * pick out a part of the world instead. A storm in the Indian Ocean is news
+ * if you are in it and gossip if you are not, and that difference is the
+ * whole reason to have a big map.
+ *
+ * Written in the register of the originals — a Börsenblatt notice, not a
+ * fantasy event — and kept to effects the engine can state plainly afterwards
+ * so no player is left wondering what just happened to their cash.
+ *
+ * The printed deck is included whole: this is the classic game with more
+ * weather, not a different game.
+ */
+
+let n = 0
+const card = (
+  title: string,
+  lines: readonly string[],
+  effects: KonjunkturCard['effects'],
+): KonjunkturCard => ({ id: `kx${++n}`, title, lines, effects })
+
+/** A price swing over one continent, in force for a while. */
+const wind = (
+  continent: Continent,
+  region: string,
+  percent: number,
+  rounds: number,
+): KonjunkturCard =>
+  card(
+    percent > 0 ? 'Hausse' : 'Baisse',
+    [
+      `${region}`,
+      `Verkaufspreise ${percent > 0 ? '+' : '−'} ${Math.abs(percent)} %`,
+      `für ${rounds} Runden`,
+    ],
+    [
+      {
+        kind: 'regionalPriceDelta',
+        continent,
+        percent,
+        rounds,
+        title: `${percent > 0 ? 'Hausse' : 'Baisse'} in ${region}`,
+      },
+    ],
+  )
+
+/** Heavy weather: everyone caught in that part of the world loses cargo. */
+const storm = (continent: Continent, region: string, what: string, lose = 1): KonjunkturCard =>
+  card(
+    'Sturmwarnung',
+    [what, `${region}`, lose === 1 ? 'Ein Posten geht über Bord' : `${lose} Posten über Bord`],
+    [{ kind: 'stormInRegion', continent, lose, title: `${what} — ${region}` }],
+  )
+
+export const KONJUNKTUR_ERWEITERT: readonly KonjunkturCard[] = [
+  // The printed deck, entire.
+  ...KONJUNKTUR_DECK,
+
+  // --- Regionale Konjunktur ------------------------------------------------
+  wind('europa', 'Europa', 25, 4),
+  wind('europa', 'Europa', -20, 3),
+  wind('nordamerika', 'Nordamerika', 20, 4),
+  wind('nordamerika', 'Nordamerika', -15, 3),
+  wind('suedamerika', 'Südamerika', 30, 3),
+  wind('suedamerika', 'Südamerika', -20, 4),
+  wind('afrika', 'Afrika', 25, 4),
+  wind('afrika', 'Afrika', -15, 3),
+  wind('asien', 'Ostasien', 30, 4),
+  wind('asien', 'Ostasien', -25, 3),
+  wind('ozeanien', 'Australien', 25, 5),
+
+  // --- Wetter und Seeunfälle -----------------------------------------------
+  storm('europa', 'Nordsee und Ärmelkanal', 'Schwerer Nordweststurm'),
+  storm('afrika', 'Vor Kap Hoorn und dem Kap', 'Orkan'),
+  storm('asien', 'Südchinesisches Meer', 'Taifun'),
+  storm('asien', 'Golf von Bengalen', 'Zyklon'),
+  storm('ozeanien', 'Große Australische Bucht', 'Schwere See'),
+  storm('nordamerika', 'Karibik', 'Hurrikan'),
+  storm('suedamerika', 'Vor der Küste Patagoniens', 'Weststurm'),
+
+  // --- Unglück an Bord ------------------------------------------------------
+  card(
+    'Seeräuberei',
+    ['In der Straße von Malakka', 'Ein Posten Ihrer Ladung', 'ist verschwunden'],
+    [{ kind: 'cargoLostByDrawer', lose: 1, title: 'Seeräuberei in der Straße von Malakka' }],
+  ),
+  card(
+    'Feuer im Laderaum',
+    ['Gelöscht, doch nicht rechtzeitig', 'Ein Posten ist verloren'],
+    [{ kind: 'cargoLostByDrawer', lose: 1, title: 'Feuer im Laderaum' }],
+  ),
+  card(
+    'Wassereinbruch',
+    ['Die Ladung hat gelitten', 'Zwei Posten sind unverkäuflich'],
+    [{ kind: 'cargoLostByDrawer', lose: 2, title: 'Wassereinbruch' }],
+  ),
+
+  // --- Örtliche Zahlungen ---------------------------------------------------
+  card(
+    'Hafenprämie',
+    ['Für alle Schiffe', 'in europäischen Häfen', '8.000,—'],
+    [
+      {
+        kind: 'regionalLevy',
+        continent: 'europa',
+        amount: 8_000,
+        sign: 1,
+        title: 'Hafenprämie in Europa',
+      },
+    ],
+  ),
+  card(
+    'Liegegebühr',
+    ['Für alle Schiffe', 'in asiatischen Häfen', '6.000,—'],
+    [
+      {
+        kind: 'regionalLevy',
+        continent: 'asien',
+        amount: 6_000,
+        sign: -1,
+        title: 'Liegegebühr in Asien',
+      },
+    ],
+  ),
+  card(
+    'Ausfuhrprämie',
+    ['Für alle Schiffe', 'in südamerikanischen Häfen', '10.000,—'],
+    [
+      {
+        kind: 'regionalLevy',
+        continent: 'suedamerika',
+        amount: 10_000,
+        sign: 1,
+        title: 'Ausfuhrprämie in Südamerika',
+      },
+    ],
+  ),
+  card(
+    'Kanalgebühr',
+    ['Für alle Schiffe', 'in afrikanischen Häfen', '5.000,—'],
+    [
+      {
+        kind: 'regionalLevy',
+        continent: 'afrika',
+        amount: 5_000,
+        sign: -1,
+        title: 'Kanalgebühr in Afrika',
+      },
+    ],
+  ),
+
+  // --- Zwei Wetterlagen auf einmal -----------------------------------------
+  card(
+    'Handelsverlagerung',
+    ['Hausse in Ostasien', 'Baisse in Europa', 'für 3 Runden'],
+    [
+      {
+        kind: 'regionalPriceDelta',
+        continent: 'asien',
+        percent: 25,
+        rounds: 3,
+        title: 'Hausse in Ostasien',
+      },
+      {
+        kind: 'regionalPriceDelta',
+        continent: 'europa',
+        percent: -15,
+        rounds: 3,
+        title: 'Baisse in Europa',
+      },
+    ],
+  ),
+]

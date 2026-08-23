@@ -1,4 +1,12 @@
-import type { GoodId, Money, NodeId, PortId, RuleConfig, Vehicle } from './types'
+import type {
+  Continent,
+  GoodId,
+  Money,
+  NodeId,
+  PortId,
+  RuleConfig,
+  Vehicle,
+} from './types'
 import type { RngState } from './rng'
 import type { Persona } from './persona'
 
@@ -188,6 +196,26 @@ export interface PendingCard {
   readonly drawerId: string
 }
 
+/**
+ * Weather over one part of the world, under the erweiterte Konjunktur.
+ *
+ * The printed Hausse and Baisse move every price on the board at once and
+ * lapse the moment the visit ends. These hang over one continent for a while,
+ * which is what gives a large plan a reason to care where you are: a Baisse
+ * in Ostasien is somebody else's problem if you are in the Baltic.
+ */
+export interface RegionalWeather {
+  readonly id: string
+  /** Shown in the news and on the harbour sheet. */
+  readonly title: string
+  readonly continent: Continent
+  readonly percent: number
+  /** Round play: the last round it applies to. Null in real-time play. */
+  readonly untilRound: number | null
+  /** Real-time play: epoch milliseconds it lapses at. Null in round play. */
+  readonly untilTime: number | null
+}
+
 export interface GameState {
   readonly packId: string
   readonly config: RuleConfig
@@ -217,6 +245,11 @@ export interface GameState {
    * seed, and therefore has to travel with the save, the replay and the wire.
    */
   readonly exports: Readonly<Record<string, readonly GoodId[]>> | null
+  /**
+   * Regional price weather in force, under the erweiterte Konjunktur. Pruned
+   * as rounds pass and as the real-time clock advances, so it never grows.
+   */
+  readonly weather: readonly RegionalWeather[]
   readonly bankStock: Readonly<Record<number, number>>
   /** Konjunktur deck as card ids, drawn from the top, returned to the bottom. */
   readonly deck: readonly string[]

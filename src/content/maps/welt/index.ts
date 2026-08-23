@@ -3,6 +3,7 @@ import { buildMap } from '../../../engine/mapbuild'
 import { GOODS } from '../../goods'
 import { GOODS_WELT } from '../../goods-welt'
 import { KONJUNKTUR_DECK } from '../../konjunktur'
+import { KONJUNKTUR_ERWEITERT } from '../../konjunktur-erweitert'
 import { CLASSIC_CONFIG, CLASSIC_VEHICLES } from '../classic'
 import { COUNTRIES } from '../classic/countries'
 import { PORTS, START_PORTS } from '../classic/ports'
@@ -50,5 +51,6 @@ export const WELT_PACK: ContentPack = {
   vehicles: CLASSIC_VEHICLES,
   goods: [...GOODS, ...GOODS_WELT],
   konjunktur: KONJUNKTUR_DECK,
+  konjunkturErweitert: KONJUNKTUR_ERWEITERT,
   config: WELT_CONFIG,
 }

@@ -159,13 +159,35 @@ export function sellPriceAt(
   portId: PortId,
   goodId: GoodId,
 ): Money {
-  const base = goodOf(ctx, goodId).sell
-  if (state.config.preise !== 'entfernung') return base
+  const card = goodOf(ctx, goodId).sell
+  let price = card
 
-  const hops = distanceToSource(ctx, state, goodId).get(portId)
-  // Unreachable from any source: nothing to price against, so pay the card.
-  if (hops === undefined) return base
+  if (state.config.preise === 'entfernung') {
+    const hops = distanceToSource(ctx, state, goodId).get(portId)
+    // Unreachable from any source: nothing to price against, so pay the card.
+    if (hops !== undefined) price = card * Math.min(CEILING, FLOOR + PER_PIP * hops)
+  }
 
-  const factor = Math.min(CEILING, FLOOR + PER_PIP * hops)
-  return round1000(base * factor)
+  const wind = weatherOver(ctx, state, portId)
+  if (wind !== 0) price = price * (1 + wind / 100)
+
+  return round1000(price)
+}
+
+/**
+ * The regional price weather over a harbour, as a percentage.
+ *
+ * Zero unless the erweiterte Konjunktur is in play and a card has settled
+ * something over this continent. Expiry is handled where time passes; this
+ * only reads.
+ */
+export function weatherOver(ctx: EngineContext, state: GameState, portId: PortId): number {
+  if (state.weather.length === 0) return 0
+  const port = ctx.portsById.get(portId)
+  if (!port) return 0
+  const continent = ctx.pack.map.countries.find((c) => c.id === port.country)?.continent
+  if (!continent) return 0
+  return state.weather
+    .filter((w) => w.continent === continent)
+    .reduce((sum, w) => sum + w.percent, 0)
 }

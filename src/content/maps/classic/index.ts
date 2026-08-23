@@ -2,6 +2,7 @@ import type { ContentPack, RuleConfig, Vehicle } from '../../../engine/types'
 import { buildMap } from '../../../engine/mapbuild'
 import { GOODS } from '../../goods'
 import { KONJUNKTUR_DECK } from '../../konjunktur'
+import { KONJUNKTUR_ERWEITERT } from '../../konjunktur-erweitert'
 import { COUNTRIES } from './countries'
 import { PORTS, START_PORTS } from './ports'
 import { LEGS } from './legs'
@@ -14,6 +15,7 @@ export const CLASSIC_CONFIG: RuleConfig = {
   travel: 'runde',
   // The printed game: the Warenverzeichnis stands, and a Verkaufspreis is
   // the same figure in every harbour on the board.
+  konjunkturMode: 'klassisch',
   angebot: 'fest',
   preise: 'fest',
   sicht: 'normal',
@@ -122,5 +124,6 @@ export const CLASSIC_PACK: ContentPack = {
   vehicles: CLASSIC_VEHICLES,
   goods: GOODS,
   konjunktur: KONJUNKTUR_DECK,
+  konjunkturErweitert: KONJUNKTUR_ERWEITERT,
   config: CLASSIC_CONFIG,
 }

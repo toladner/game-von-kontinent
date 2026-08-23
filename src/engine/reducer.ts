@@ -25,7 +25,7 @@ import {
   routeTo,
   verkaufszwangOpen,
 } from './selectors'
-import type { KonjunkturEffect, Money, NodeId } from './types'
+import type { Continent, KonjunkturEffect, Money, NodeId } from './types'
 import { exportsAt } from './market'
 
 type Draft = { -readonly [K in keyof GameState]: GameState[K] } & {
@@ -153,6 +153,61 @@ function payPlayer(
 // Konjunktur effects
 // ---------------------------------------------------------------------------
 
+/**
+ * Which continent a node lies off.
+ *
+ * A harbour knows its country and the country its continent. A sea node has
+ * neither, so it is taken to belong to the harbour its lane starts from —
+ * generated ids are `sea:<a>~<b>:<i>`, which makes that a lookup rather than
+ * a search, and puts a ship squarely in one region or the other for as long
+ * as it is on that lane.
+ */
+function continentAt(ctx: EngineContext, nodeId: NodeId): Continent | null {
+  const direct = ctx.portsById.get(nodeId)
+  const portId = direct
+    ? nodeId
+    : nodeId.startsWith('sea:')
+      ? nodeId.slice(4).split('~')[0]
+      : undefined
+  const port = portId ? ctx.portsById.get(portId) : undefined
+  if (!port) return null
+  return ctx.pack.map.countries.find((c) => c.id === port.country)?.continent ?? null
+}
+
+/**
+ * Throw cargo overboard, dearest first.
+ *
+ * Dearest first because losing the cheapest posten would make a storm an
+ * inconvenience; this way it is news. Silent when the hold is empty — there
+ * is nothing to report and nothing to lose.
+ */
+function jettison(
+  draft: Draft,
+  index: number,
+  count: number,
+  reason: string,
+  events: GameEvent[],
+): void {
+  const player = draft.players[index]!
+  const ship = flagship(player)
+  if (ship.cargo.length === 0) return
+
+  const doomed = [...ship.cargo].sort((a, b) => b.pricePaid - a.pricePaid).slice(0, count)
+  const lost = new Set(doomed.map((c) => c.uid))
+  patchShip(draft, index, { cargo: ship.cargo.filter((c) => !lost.has(c.uid)) })
+
+  for (const item of doomed) {
+    draft.bankStock[item.goodId] = (draft.bankStock[item.goodId] ?? 0) + 1
+    events.push({
+      type: 'cargoLost',
+      playerId: player.id,
+      goodId: item.goodId,
+      value: item.pricePaid,
+      reason,
+    })
+  }
+}
+
 function applyEffect(
   ctx: EngineContext,
   draft: Draft,
@@ -168,6 +223,52 @@ function applyEffect(
     case 'payoutToDrawer':
       payPlayer(draft, drawerIndex, effect.amount, 'telegramm', events)
       return
+
+    case 'regionalPriceDelta': {
+      // Weather, not a single transaction: it hangs over the continent until
+      // it lapses, and every sale made there meanwhile feels it.
+      const realtime = draft.config.travel === 'echtzeit'
+      draft.weather = [
+        ...draft.weather.filter((w) => w.continent !== effect.continent),
+        {
+          id: `w${draft.seq}:${effect.continent}`,
+          title: effect.title,
+          continent: effect.continent,
+          percent: effect.percent,
+          untilRound: realtime ? null : draft.round + effect.rounds,
+          untilTime: realtime ? draft.now + effect.rounds * 3_600_000 : null,
+        },
+      ]
+      events.push({
+        type: 'weatherSet',
+        continent: effect.continent,
+        percent: effect.percent,
+        title: effect.title,
+      })
+      return
+    }
+
+    case 'stormInRegion': {
+      for (let i = 0; i < draft.players.length; i++) {
+        if (continentAt(ctx, flagship(draft.players[i]!).nodeId) !== effect.continent) continue
+        jettison(draft, i, effect.lose, effect.title, events)
+      }
+      return
+    }
+
+    case 'cargoLostByDrawer':
+      jettison(draft, drawerIndex, effect.lose, effect.title, events)
+      return
+
+    case 'regionalLevy': {
+      for (let i = 0; i < draft.players.length; i++) {
+        const portId = portAt(ctx, flagship(draft.players[i]!).nodeId)
+        if (!portId || continentAt(ctx, portId) !== effect.continent) continue
+        if (effect.sign > 0) payPlayer(draft, i, effect.amount, 'telegramm', events)
+        else chargePlayer(draft, i, effect.amount, 'hafengebuehr', events)
+      }
+      return
+    }
 
     case 'feeForDrawer':
       chargePlayer(draft, drawerIndex, effect.amount, 'entladegeld', events)
@@ -370,6 +471,10 @@ function advanceTurn(ctx: EngineContext, draft: Draft, events: GameEvent[]): voi
     // The Kegelfigur moves on whenever play comes back round to the starter.
     if (draft.activeIndex === draft.startPlayerIndex) {
       draft.round += 1
+      // ...and on the round track in round play.
+      draft.weather = draft.weather.filter(
+        (w) => w.untilRound === null || w.untilRound >= draft.round,
+      )
       if (draft.round > draft.config.totalRounds) {
         resolveFinalRun(ctx, draft, events)
         return
@@ -806,6 +911,9 @@ function applyTick(ctx: EngineContext, state: GameState, at: number): ActionResu
   if (draft.config.travel !== 'echtzeit' || draft.phase !== 'laufend') {
     return { state: draft as GameState, events }
   }
+
+  // Weather blows itself out on the clock in real-time play.
+  draft.weather = draft.weather.filter((w) => w.untilTime === null || w.untilTime > draft.now)
 
   advanceVoyages(ctx, draft, events)
   if (draft.config.sicht === 'realistisch') {

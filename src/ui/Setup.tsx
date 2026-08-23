@@ -12,6 +12,7 @@ import {
   type Sicht,
   type Angebot,
   type Preise,
+  type Konjunktur,
   type Table,
   type Travel,
 } from '@app/options'
@@ -81,6 +82,7 @@ export function Setup() {
           maxFleetSize: options.fleetLimit,
           angebot: options.angebot,
           preise: options.preise,
+          konjunktur: options.konjunktur,
         })
       } catch (error) {
         setProblem(
@@ -102,6 +104,7 @@ export function Setup() {
       maxFleetSize: options.fleetLimit,
       angebot: options.angebot,
       preise: options.preise,
+      konjunktur: options.konjunktur,
     })
   }
 
@@ -461,6 +464,21 @@ function StepOptionen({
           blurb="Je weiter eine Ware vom nächsten Hafen entfernt ist, der sie selbst ausführt, desto mehr bringt sie. Kurze Wege lohnen dann nicht mehr — die weite Fahrt zahlt sich aus."
           selected={options.preise === 'entfernung'}
           onClick={() => set('preise', 'entfernung' as Preise)}
+        />
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <Choice
+          title="Konjunktur: klassisch"
+          blurb="Die 27 gedruckten Karten. Hausse, Baisse, Steuer, Telegramm."
+          selected={options.konjunktur === 'klassisch'}
+          onClick={() => set('konjunktur', 'klassisch' as Konjunktur)}
+        />
+        <Choice
+          title="Konjunktur: erweitert"
+          blurb="Dazu Stürme, die Ladung über Bord gehen lassen, Hausse und Baisse über einzelnen Erdteilen, Seeräuber und örtliche Gebühren. Wo Sie stehen, zählt dann mit."
+          selected={options.konjunktur === 'erweitert'}
+          onClick={() => set('konjunktur', 'erweitert' as Konjunktur)}
         />
       </div>
 

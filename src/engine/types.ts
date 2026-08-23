@@ -171,6 +171,41 @@ export type KonjunkturEffect =
   | { readonly kind: 'feeForDrawer'; readonly amount: Money }
   /** Telegramm: the drawing player receives a money order. */
   | { readonly kind: 'payoutToDrawer'; readonly amount: Money }
+  /**
+   * Erweiterte Konjunktur — events that pick out a part of the world rather
+   * than the whole board. These are what make a plan with five oceans feel
+   * different from a plan with one: a storm in the Indian Ocean is news if
+   * you are in it and gossip if you are not.
+   */
+  /** A price swing over one continent, in force for a number of rounds. */
+  | {
+      readonly kind: 'regionalPriceDelta'
+      readonly continent: Continent
+      readonly percent: number
+      /** Rounds it stays in force; in real-time play, hours. */
+      readonly rounds: number
+      /** Headline for the news, e.g. "Hausse in Ostasien". */
+      readonly title: string
+    }
+  /** Heavy weather in one region: every ship caught in it loses cargo. */
+  | {
+      readonly kind: 'stormInRegion'
+      readonly continent: Continent
+      /** Pieces of cargo lost per ship, dearest first. */
+      readonly lose: number
+      readonly title: string
+    }
+  /** Pirates, ice, a fire in the hold: the drawing player alone loses cargo. */
+  | { readonly kind: 'cargoLostByDrawer'; readonly lose: number; readonly title: string }
+  /** A windfall or demand for every ship lying in one continent's harbours. */
+  | {
+      readonly kind: 'regionalLevy'
+      readonly continent: Continent
+      readonly amount: Money
+      /** Positive pays the houses, negative charges them. */
+      readonly sign: 1 | -1
+      readonly title: string
+    }
 
 export interface KonjunkturCard {
   readonly id: string
@@ -203,6 +238,9 @@ export interface RealtimeConfig {
   readonly durationHours: number
 }
 
+/** Which Konjunktur deck is in play. */
+export type KonjunkturMode = 'klassisch' | 'erweitert'
+
 /** How goods are distributed over the harbours. */
 export type AngebotMode = 'fest' | 'zufaellig'
 
@@ -228,6 +266,14 @@ export interface RuleConfig {
    * 'fest'      - harbours ship what the Warenverzeichnis says they ship.
    * 'zufaellig' - the trade routes are rolled from the seed instead.
    */
+  /**
+   * 'klassisch' - the 27 printed Konjunkturkarten and nothing else.
+   * 'erweitert' - and storms, regional booms, pirates and local demands.
+   *
+   * Named for the mode rather than the deck, because `ContentPack.konjunktur`
+   * is the deck and the two would otherwise read alike.
+   */
+  readonly konjunkturMode: KonjunkturMode
   readonly angebot: AngebotMode
   /**
    * 'fest'       - one printed Verkaufspreis, good the world over.
@@ -280,6 +326,12 @@ export interface ContentPack {
   /** Vessels the shipyards offer, beyond the one every house starts with. */
   readonly vehicles: readonly Vehicle[]
   readonly goods: readonly Good[]
+  /** The 27 printed cards. Always present; used under 'klassisch'. */
   readonly konjunktur: readonly KonjunkturCard[]
+  /**
+   * The larger deck used under `konjunkturMode: 'erweitert'`. Includes the
+   * printed cards, so the mode adds weather rather than replacing the game.
+   */
+  readonly konjunkturErweitert?: readonly KonjunkturCard[]
   readonly config: RuleConfig
 }

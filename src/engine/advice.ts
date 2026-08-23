@@ -304,6 +304,39 @@ export function konjunkturOutcome(
         }
       }
 
+      case 'regionalPriceDelta': {
+        const up = effect.percent > 0
+        return {
+          headline: `${effect.title}: ${up ? '+' : '−'}${Math.abs(effect.percent)} %.`,
+          detail: `Gilt ${effect.rounds} Runden lang für jeden Verkauf in diesem Erdteil — für Sie wie für die Mitspieler. Anderswo ändert sich nichts.`,
+          tone: up ? 'gut' : 'schlecht',
+        }
+      }
+
+      case 'stormInRegion':
+        return {
+          headline: effect.title,
+          detail: `Jedes Schiff in diesem Seegebiet verliert ${effect.lose === 1 ? 'einen Posten' : `${effect.lose} Posten`} — den teuersten zuerst. Wer anderswo fährt, kommt davon.`,
+          tone: 'schlecht',
+        }
+
+      case 'cargoLostByDrawer':
+        return {
+          headline: effect.title,
+          detail:
+            held > 0
+              ? `Sie verlieren ${effect.lose === 1 ? 'einen Posten' : `${effect.lose} Posten`} Ihrer Ladung, den teuersten zuerst.`
+              : 'Ihr Laderaum ist leer — diesmal gibt es nichts zu verlieren.',
+          tone: held > 0 ? 'schlecht' : 'neutral',
+        }
+
+      case 'regionalLevy':
+        return {
+          headline: `${effect.sign > 0 ? 'Sie erhalten' : 'Sie zahlen'} ${money(effect.amount)}.`,
+          detail: `${effect.title} — fällig für jedes Schiff, das gerade in einem Hafen dieses Erdteils liegt. Liegen Sie anderswo, betrifft es Sie nicht.`,
+          tone: effect.sign > 0 ? 'gut' : 'schlecht',
+        }
+
       case 'salePriceDelta': {
         const up = effect.percent > 0
         return {

@@ -42,6 +42,14 @@ export type Angebot = 'fest' | 'zufaellig'
  */
 export type Preise = 'fest' | 'entfernung'
 
+/**
+ * Which Konjunktur deck is on the table.
+ *
+ * 'klassisch' - the 27 printed cards.
+ * 'erweitert' - and storms, regional booms and slumps, pirates, local dues.
+ */
+export type Konjunktur = 'klassisch' | 'erweitert'
+
 export interface GameOptions {
   readonly mode: GameMode
   readonly packId: string
@@ -61,6 +69,7 @@ export interface GameOptions {
   readonly sicht: Sicht
   readonly angebot: Angebot
   readonly preise: Preise
+  readonly konjunktur: Konjunktur
   readonly joinPolicy: JoinPolicy
   /** Only for joining: the code of a running game. */
   readonly joinCode: string
@@ -79,6 +88,7 @@ export const DEFAULT_OPTIONS: GameOptions = {
   sicht: 'normal',
   angebot: 'fest',
   preise: 'fest',
+  konjunktur: 'klassisch',
   joinPolicy: 'nur-zu-beginn',
   joinCode: '',
 }
@@ -126,6 +136,8 @@ export const CAPABILITIES: Record<string, Capability> = {
   'angebot:zufaellig': { ready: true, note: '' },
   'preise:fest': { ready: true, note: '' },
   'preise:entfernung': { ready: true, note: '' },
+  'konjunktur:klassisch': { ready: true, note: '' },
+  'konjunktur:erweitert': { ready: true, note: '' },
 }
 
 export function isReady(key: string): boolean {

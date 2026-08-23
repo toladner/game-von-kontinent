@@ -3,6 +3,7 @@ import { buildMap } from '../../engine/mapbuild'
 import { GOODS } from '../goods'
 import { GOODS_WELT } from '../goods-welt'
 import { KONJUNKTUR_DECK } from '../konjunktur'
+import { KONJUNKTUR_ERWEITERT } from '../konjunktur-erweitert'
 import { CLASSIC_CONFIG, CLASSIC_VEHICLES } from './classic'
 import { COUNTRIES } from './classic/countries'
 import { PORTS, START_PORTS } from './classic/ports'
@@ -159,6 +160,7 @@ export function buildRegionPack(spec: RegionSpec): ContentPack {
     vehicles: CLASSIC_VEHICLES,
     goods: cut.goods,
     konjunktur: KONJUNKTUR_DECK,
+  konjunkturErweitert: KONJUNKTUR_ERWEITERT,
     config: { ...CLASSIC_CONFIG, totalRounds: spec.totalRounds },
   }
 }

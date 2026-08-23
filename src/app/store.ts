@@ -6,7 +6,7 @@ import type { Gender } from '@engine/persona'
 import { applyAction, replay } from '@engine/reducer'
 import type { GameAction, GameEvent } from '@engine/actions'
 import type { GameState, JoinPolicy, PlayerState } from '@engine/state'
-import type { AngebotMode, PreisMode } from '@engine/types'
+import type { AngebotMode, KonjunkturMode, PreisMode } from '@engine/types'
 import { projectFor } from '@engine/fog'
 import {
   createOnlineGame,
@@ -31,6 +31,7 @@ interface SaveFile {
   maxFleetSize?: number
   angebot?: AngebotMode
   preise?: PreisMode
+  konjunktur?: KonjunkturMode
   readonly actions: GameAction[]
 }
 
@@ -50,6 +51,8 @@ export interface BeginOptions {
   readonly angebot?: AngebotMode
   /** 'entfernung' pays more the further a good is from its source. */
   readonly preise?: PreisMode
+  /** 'erweitert' adds storms, regional weather and pirates to the deck. */
+  readonly konjunktur?: KonjunkturMode
 }
 
 export interface LogLine {
@@ -221,6 +224,16 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
         `${nameOf(event.playerId)} erhält ${money(event.amount)}${event.reason === 'telegramm' ? ' per Telegramm' : ' als Schadenersatz'}.`,
         'gut',
       )
+    case 'cargoLost':
+      return line(
+        `${nameOf(event.playerId)} verliert ${goodOf(event.goodId)} (${money(event.value)}) — ${event.reason}.`,
+        'schlecht',
+      )
+    case 'weatherSet':
+      return line(
+        `${event.title}: Verkaufspreise dort ${event.percent > 0 ? '+' : '−'} ${Math.abs(event.percent)} %.`,
+        'wichtig',
+      )
     case 'roundStarted':
       return line(
         `Runde ${event.round}${event.red ? ' — rotes Feld, die Konjunktur spricht mit.' : '.'}`,
@@ -283,6 +296,7 @@ export const useGame = create<Store>((set, get) => ({
         ...(options.maxFleetSize ? { maxFleetSize: options.maxFleetSize } : {}),
         ...(options.angebot ? { angebot: options.angebot } : {}),
         ...(options.preise ? { preise: options.preise } : {}),
+        ...(options.konjunktur ? { konjunktur: options.konjunktur } : {}),
       }),
       opening,
     )
@@ -296,6 +310,7 @@ export const useGame = create<Store>((set, get) => ({
     // trade routes and disagree with the log it is replaying.
     if (options.angebot) saved.angebot = options.angebot
     if (options.preise) saved.preise = options.preise
+    if (options.konjunktur) saved.konjunktur = options.konjunktur
     persist()
     const firstActing = state.players[0]?.id ?? null
     session?.close()
@@ -516,6 +531,7 @@ export const useGame = create<Store>((set, get) => ({
         ...(file.maxFleetSize ? { maxFleetSize: file.maxFleetSize } : {}),
         ...(file.angebot ? { angebot: file.angebot } : {}),
         ...(file.preise ? { preise: file.preise } : {}),
+        ...(file.konjunktur ? { konjunktur: file.konjunktur } : {}),
       })
       const state = replay(ctx, initial, file.actions ?? [])
       saved = file

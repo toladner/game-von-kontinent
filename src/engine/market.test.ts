@@ -6,6 +6,7 @@ import { applyAction, replay } from './reducer'
 import { buyOffers, portAt, quoteSale, saleQuotes } from './selectors'
 import { flagship, type GameState } from './state'
 import { distanceToSource, exportsAt, sellPriceAt } from './market'
+import type { KonjunkturCard } from './types'
 import type { NewGameOptions } from './setup'
 
 const ctx = createContext(CLASSIC_PACK)
@@ -121,9 +122,11 @@ describe('Preise "Entfernung"', () => {
     const s = table({ preise: 'entfernung' })
     const good = CLASSIC_PACK.goods[22]!
     const dist = distanceToSource(ctx, s, good.id)
+    // Assert rather than skip: a silent return here would mean this test
+    // stopped checking anything the day the map changed.
     const doorstep = allPorts().find((id) => dist.get(id) === 1)
-    if (!doorstep) return
-    expect(sellPriceAt(ctx, s, doorstep, good.id)).toBeLessThan(good.sell)
+    expect(doorstep, 'no harbour one hop from a source').toBeTruthy()
+    expect(sellPriceAt(ctx, s, doorstep!, good.id)).toBeLessThan(good.sell)
   })
 
   it('still pays only the glut price where the harbour ships it itself', () => {
@@ -157,5 +160,101 @@ describe('Preise "Entfernung"', () => {
     )!
     const priceIn = (s: GameState) => saleQuotes(ctx, s, s.players[0]!, elsewhere)[0]!.price
     expect(priceIn(a)).not.toBe(priceIn(b))
+  })
+})
+
+describe('Konjunktur "erweitert"', () => {
+  const deck = (s: GameState) => s.deck.length
+
+  it('leaves the printed deck alone under "klassisch"', () => {
+    const s = table()
+    expect(deck(s)).toBe(CLASSIC_PACK.konjunktur.length)
+  })
+
+  it('shuffles in the weather cards under "erweitert"', () => {
+    const s = table({ konjunktur: 'erweitert' })
+    expect(deck(s)).toBeGreaterThan(CLASSIC_PACK.konjunktur.length)
+    // The printed cards are still in there: this adds, it does not replace.
+    for (const card of CLASSIC_PACK.konjunktur) {
+      expect(s.deck.includes(card.id), card.title).toBe(true)
+    }
+  })
+
+  it('hangs weather over one continent and prices it there only', () => {
+    const s = table({ konjunktur: 'erweitert' })
+    const withWind: GameState = {
+      ...s,
+      weather: [
+        {
+          id: 'w1',
+          title: 'Hausse in Europa',
+          continent: 'europa',
+          percent: 50,
+          untilRound: s.round + 3,
+          untilTime: null,
+        },
+      ],
+    }
+    const good = CLASSIC_PACK.goods[21]! // Getreide
+    const inEurope = sellPriceAt(ctx, withWind, 'hamburg', good.id)
+    const elsewhere = sellPriceAt(ctx, withWind, 'newyork', good.id)
+
+    expect(inEurope).toBeGreaterThan(good.sell)
+    expect(elsewhere).toBe(good.sell)
+  })
+
+  it('lets the weather blow out when its rounds are up', () => {
+    const s = table({ konjunktur: 'erweitert' })
+    const withWind: GameState = {
+      ...s,
+      weather: [
+        {
+          id: 'w1',
+          title: 'Baisse in Europa',
+          continent: 'europa',
+          percent: -30,
+          untilRound: s.round,
+          untilTime: null,
+        },
+      ],
+    }
+    // Play on until the round track moves past it.
+    let next = withWind
+    for (let i = 0; i < 12 && next.round <= withWind.round; i++) {
+      next = applyAction(ctx, next, { type: 'endTurn' }).state
+    }
+    expect(next.round).toBeGreaterThan(withWind.round)
+    expect(next.weather).toEqual([])
+  })
+
+  it('throws the dearest cargo overboard in a storm, not the cheapest', () => {
+    const s = table({ konjunktur: 'erweitert' })
+    const portId = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    let loaded = s
+    for (const offer of buyOffers(ctx, s, s.players[0]!, portId).filter((o) => o.status === 'ok')) {
+      loaded = applyAction(ctx, loaded, { type: 'buy', goodId: offer.goodId }).state
+    }
+    const before = flagship(loaded.players[0]!).cargo
+    expect(before.length, 'need two posten to prove the dearest goes first')
+      .toBeGreaterThanOrEqual(2)
+
+    const dearest = [...before].sort((a, b) => b.pricePaid - a.pricePaid)[0]!
+    const card: KonjunkturCard = {
+      id: 'storm-test',
+      title: 'Sturm',
+      lines: [],
+      effects: [{ kind: 'stormInRegion', continent: 'europa', lose: 1, title: 'Sturm' }],
+    }
+    const withCard: GameState = { ...loaded, phase: 'konjunktur', deck: [card.id] }
+    const probe = createContext({
+      ...CLASSIC_PACK,
+      konjunktur: [...CLASSIC_PACK.konjunktur, card],
+    })
+    const after = applyAction(probe, withCard, { type: 'drawKonjunktur' })
+
+    const kept = flagship(after.state.players[0]!).cargo
+    expect(kept.length).toBe(before.length - 1)
+    expect(kept.some((c) => c.uid === dearest.uid)).toBe(false)
+    expect(after.events.some((e) => e.type === 'cargoLost')).toBe(true)
   })
 })

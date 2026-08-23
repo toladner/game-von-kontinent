@@ -147,6 +147,22 @@ export type GameEvent =
       readonly reason: 'telegramm' | 'schaden'
     }
   | { readonly type: 'levySkipped'; readonly playerId: string; readonly levy: string }
+  /** Erweiterte Konjunktur: cargo over the side, to a storm or to pirates. */
+  | {
+      readonly type: 'cargoLost'
+      readonly playerId: string
+      readonly goodId: GoodId
+      readonly value: Money
+      /** Headline of the card that did it, so the news can name the cause. */
+      readonly reason: string
+    }
+  /** Erweiterte Konjunktur: price weather settled over a continent. */
+  | {
+      readonly type: 'weatherSet'
+      readonly continent: string
+      readonly percent: number
+      readonly title: string
+    }
   | { readonly type: 'turnEnded'; readonly playerId: string }
   | { readonly type: 'roundStarted'; readonly round: number; readonly red: boolean }
   | { readonly type: 'gameOver' }

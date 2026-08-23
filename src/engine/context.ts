@@ -22,7 +22,10 @@ export interface EngineContext {
 export function createContext(pack: ContentPack): EngineContext {
   const graph = buildGraph(pack.map)
   const goodsById = new Map(pack.goods.map((g) => [g.id, g]))
-  const cardsById = new Map(pack.konjunktur.map((c) => [c.id, c]))
+  // Both decks, so a lookup works whichever one a game is playing with.
+  const cardsById = new Map(
+    [...pack.konjunktur, ...(pack.konjunkturErweitert ?? [])].map((c) => [c.id, c]),
+  )
   const countriesById = new Map(pack.map.countries.map((c) => [c.id, c]))
 
   const portsById = new Map<string, Port>()

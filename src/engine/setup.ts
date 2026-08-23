@@ -1,7 +1,14 @@
 import type { EngineContext } from './context'
 import type { GameAction } from './actions'
 import type { GameState, JoinPolicy } from './state'
-import type { AngebotMode, GoodId, PreisMode, Sicht, TravelMode } from './types'
+import type {
+  AngebotMode,
+  GoodId,
+  KonjunkturMode,
+  PreisMode,
+  Sicht,
+  TravelMode,
+} from './types'
 import type { Gender } from './persona'
 import { seedFrom, shuffle, type RngState } from './rng'
 import { rollExports } from './market'
@@ -30,6 +37,8 @@ export interface NewGameOptions {
   readonly angebot?: AngebotMode
   /** 'entfernung' pays more for a good the further it is from its source. */
   readonly preise?: PreisMode
+  /** 'erweitert' adds storms, regional booms and pirates to the deck. */
+  readonly konjunktur?: KonjunkturMode
 }
 
 /**
@@ -50,6 +59,7 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     ...(options.maxFleetSize ? { maxFleetSize: options.maxFleetSize } : {}),
     ...(options.angebot ? { angebot: options.angebot } : {}),
     ...(options.preise ? { preise: options.preise } : {}),
+    ...(options.konjunktur ? { konjunkturMode: options.konjunktur } : {}),
     realtime: {
       ...ctx.pack.config.realtime,
       ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),
@@ -61,8 +71,13 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
 
   const [ports, rngAfterPorts] = shuffle(ctx.pack.map.startPorts, rng)
   rng = rngAfterPorts
+  // Which deck is on the table is a rule of this game, not of the pack.
+  const cards =
+    config.konjunkturMode === 'erweitert'
+      ? (ctx.pack.konjunkturErweitert ?? ctx.pack.konjunktur)
+      : ctx.pack.konjunktur
   const [deck, rngAfterDeck] = shuffle(
-    ctx.pack.konjunktur.map((c) => c.id),
+    cards.map((c) => c.id),
     rng,
   )
   rng = rngAfterDeck
@@ -92,6 +107,7 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     phase: 'lobby',
     players: [],
     exports,
+    weather: [],
     bankStock,
     deck,
     pendingCard: null,
