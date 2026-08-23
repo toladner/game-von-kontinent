@@ -15,6 +15,9 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // The app registers the worker itself, in `@app/updates`: the injected
+      // snippet only registers, and never checks for a newer build.
+      injectRegister: null,
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Von Kontinent zu Kontinent',
