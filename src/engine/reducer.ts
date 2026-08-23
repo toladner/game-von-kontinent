@@ -588,7 +588,7 @@ export function applyAction(
       const route = routeTo(ctx, ship.nodeId, ship.cameFrom, action.to)
       if (route.length === 0) return reject(state, 'Dorthin führt keine Linie.')
 
-      const legMs = legMsFor(draft as GameState, ship)
+      const legMs = legMsFor(ctx, draft as GameState, ship, ship.nodeId, route[0]!)
       patchVehicle(draft, index, ship.id, {
         voyage: {
           route,
@@ -829,9 +829,12 @@ function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
 
       while (vehicle.voyage && draft.now >= vehicle.voyage.legArrivesAt && guard++ < 5000) {
         const voyage = vehicle.voyage
-        const legMs = legMsFor(draft as GameState, vehicle)
         const next = voyage.route[0]!
         const rest = voyage.route.slice(1)
+        // Each leg is priced from the segment it actually covers, so the one
+        // being started here is next -> rest[0], not the one just finished.
+        const legMs =
+          rest.length === 0 ? 0 : legMsFor(ctx, draft as GameState, vehicle, next, rest[0]!)
 
         patchVehicle(draft, i, vehicle.id, {
           nodeId: next,
@@ -917,7 +920,7 @@ function resolvePigeons(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
 
       const route = routeTo(ctx, ship.nodeId, ship.cameFrom, pigeon.order.destination)
       if (route.length > 0) {
-        const legMs = legMsFor(draft as GameState, ship)
+        const legMs = legMsFor(ctx, draft as GameState, ship, ship.nodeId, route[0]!)
         patchVehicle(draft, index, ship.id, {
           voyage: {
             route,

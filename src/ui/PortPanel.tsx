@@ -62,6 +62,7 @@ export function PortSheet({
   onEnter,
   onLookAt,
   markedPort,
+  onSetCourse,
   followTab,
   onTabChange,
 }: {
@@ -80,6 +81,8 @@ export function PortSheet({
   /** Asked to look at a harbour on the plan; the sheet gets out of the way. */
   onLookAt: (portId: string) => void
   markedPort: string | null
+  /** Real-time play: name a harbour on Wohin? and the ship sails there. */
+  onSetCourse?: (portId: string) => void
   /**
    * Set when watching somebody else's turn: the panel shown is the one they
    * are on, so the table is looking at the same thing while they decide.
@@ -346,6 +349,7 @@ export function PortSheet({
           cargo={flagship(player).cargo.length}
           onLookAt={onLookAt}
           markedPort={markedPort}
+          onSetCourse={onSetCourse}
         />
       )}
 
@@ -444,12 +448,19 @@ export function MarketReport({
   cargo,
   onLookAt,
   markedPort = null,
+  onSetCourse,
 }: {
   ctx?: EngineContext
   report: readonly import('@engine/selectors').Destination[]
   cargo: number
   onLookAt?: (portId: string) => void
   markedPort?: string | null
+  /**
+   * Real-time play only: choosing a harbour here is choosing where to sail.
+   * There is no die and no counting off — you name the port and the ship
+   * makes its own way there while you get on with something else.
+   */
+  onSetCourse?: (portId: string) => void
 }) {
   if (cargo === 0) {
     return (
@@ -469,7 +480,11 @@ export function MarketReport({
       <p className="text-ink-soft mb-2 text-[12px] leading-snug italic">
         Diese Häfen führen Ihre Ware <em>nicht</em> selbst und zahlen daher den vollen Preis.
         Der Betrag ist der Gewinn gegenüber Ihrem Einkauf, die Punkte sind die Entfernung.
-        {onLookAt && ' Antippen zeigt den Hafen auf dem Plan.'}
+        {onSetCourse
+          ? ' Antippen zeigt den Hafen auf dem Plan; „Kurs setzen“ schickt das Schiff hin.'
+          : onLookAt
+            ? ' Antippen zeigt den Hafen auf dem Plan.'
+            : ''}
       </p>
       <ol className="stagger space-y-1">
         {report.map((d) => (
@@ -506,6 +521,15 @@ export function MarketReport({
               </span>
             )}
             </button>
+            {onSetCourse && (
+              <button
+                type="button"
+                className="btn btn-sm btn-primary mt-1 w-full text-[13px]"
+                onClick={() => onSetCourse(d.portId)}
+              >
+                Kurs auf {d.name} setzen
+              </button>
+            )}
           </li>
         ))}
       </ol>

@@ -100,6 +100,24 @@ export interface MapGraph {
   readonly nodesById: ReadonlyMap<string, AnyNode>
   /** Adjacency list; order is stable so replays are deterministic. */
   readonly neighbours: ReadonlyMap<string, readonly string[]>
+  /**
+   * Great-circle length of every lane segment in kilometres, stored under
+   * both `a|b` and `b|a`. Real-time voyages are timed from these, so crossing
+   * the Atlantic costs what it should against a hop down the Channel.
+   */
+  readonly edgeKm: ReadonlyMap<string, number>
+  /**
+   * The length of an ordinary segment — the median, so a handful of very long
+   * ocean legs cannot drag it. Leg times are expressed relative to this,
+   * which keeps `minutesPerPip` meaning "how long a normal hop takes" no
+   * matter how unevenly a map is spaced.
+   */
+  readonly typicalKm: number
+}
+
+/** Key for a lane segment. Undirected, but stored both ways for lookup speed. */
+export function edgeKey(a: string, b: string): string {
+  return `${a}|${b}`
 }
 
 export function buildGraph(map: GameMap): MapGraph {
@@ -115,7 +133,22 @@ export function buildGraph(map: GameMap): MapGraph {
     add(lane.b, lane.a)
   }
   for (const list of neighbours.values()) list.sort()
-  return { map, nodesById, neighbours }
+
+  const edgeKm = new Map<string, number>()
+  const lengths: number[] = []
+  for (const lane of map.lanes) {
+    const a = nodesById.get(lane.a)
+    const b = nodesById.get(lane.b)
+    if (!a || !b) continue
+    const km = distanceKm(a, b)
+    edgeKm.set(edgeKey(lane.a, lane.b), km)
+    edgeKm.set(edgeKey(lane.b, lane.a), km)
+    lengths.push(km)
+  }
+  lengths.sort((x, y) => x - y)
+  const typicalKm = lengths.length > 0 ? lengths[Math.floor(lengths.length / 2)]! : 1
+
+  return { map, nodesById, neighbours, edgeKm, typicalKm }
 }
 
 export function isPort(node: AnyNode | undefined): node is Port {

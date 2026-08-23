@@ -11,6 +11,13 @@ import { PLAYER_COLORS } from '@app/store'
 const BOARD_W = 1200
 const MIN_K = 0.8
 const MAX_K = 8
+/**
+ * How far past the top and bottom edges the camera may be pushed, as a share
+ * of the visible height. Enough to lift a polar harbour clear of the Kopfzeile
+ * or out from under a peeking sheet; not so much that the plan can be flicked
+ * off the screen entirely.
+ */
+const EDGE_ROOM = 0.3
 /** Below this the sea pips crowd together; above it they read as steps. */
 const PIP_ZOOM = 1.15
 const LABEL_ZOOM = 1.9
@@ -192,13 +199,30 @@ export function Board({
       const scale = coverScale * k
       const vw = size.w / scale
       const vh = size.h / scale
-      // Keep the window on the board, unless the board is smaller than it.
+
+      /*
+       * The plan is not the only thing on the screen. The Kopfzeile sits over
+       * the top of it and a sheet or the action bar over the bottom, so a
+       * camera clamped exactly to the board can only ever show Vancouver or
+       * Kapstadt *underneath* that furniture — you can see the harbour but
+       * never get a clean tap at it. Letting the window run past the edge by
+       * a slice of its own height gives those rows somewhere to go.
+       *
+       * Vertical only: the top and bottom are where the chrome is, and
+       * overscrolling sideways would just walk the plan off into blank paper
+       * for no gain.
+       */
+      const padY = vh * EDGE_ROOM
+
       const cx =
         vw >= BOARD_W ? BOARD_W / 2 : Math.min(BOARD_W - vw / 2, Math.max(vw / 2, next.cx))
-      const cy = vh >= H ? H / 2 : Math.min(H - vh / 2, Math.max(vh / 2, next.cy))
+      const cy =
+        vh >= H
+          ? Math.min(H / 2 + padY, Math.max(H / 2 - padY, next.cy))
+          : Math.min(H - vh / 2 + padY, Math.max(vh / 2 - padY, next.cy))
       return { k, cx, cy }
     },
-    [coverScale, size.w, size.h],
+    [coverScale, size.w, size.h, H],
   )
 
   const scale = coverScale * cam.k

@@ -226,7 +226,7 @@ function VesselRow({
   const sighting = player.knowledge.sightings[vehicle.id]
   const believed = vehicle.unseen === true
   const where = ctx.portsById.get(vehicle.nodeId)?.name ?? 'auf See'
-  const eta = arrivalOf(state, vehicle)
+  const eta = arrivalOf(ctx, state, vehicle)
 
   return (
     <li className="paper-card rounded-md p-2.5">

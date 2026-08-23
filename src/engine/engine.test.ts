@@ -3,7 +3,15 @@ import { CLASSIC_PACK } from '@content/maps/classic'
 import { createContext } from './context'
 import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
-import { buyOffers, legalSteps, portAt, routeTo, standings } from './selectors'
+import {
+  buyOffers,
+  legalSteps,
+  legMsFor,
+  portAt,
+  routeTo,
+  standings,
+  voyageEndsAt,
+} from './selectors'
 import { isPort } from './mapbuild'
 import { flagship, netWorth } from './state'
 import type { GameAction } from './actions'
@@ -253,21 +261,53 @@ describe('real-time sailing', () => {
       const r = routeTo(ctx, from, null, id)
       return r.length >= 2 && r.length <= 6
     })!
-    const pips = routeTo(ctx, from, null, target).length
 
     s = applyAction(ctx, s, { type: 'setCourse', to: target, by: 'a' }).state
     expect(flagship(s.players[0]!).voyage!.destination).toBe(target)
 
+    // Legs are priced by the sea mile now, so ask the map how long this
+    // voyage takes rather than assuming a minute a hop.
+    const eta = voyageEndsAt(ctx, s, flagship(s.players[0]!))!
+    expect(eta).toBeGreaterThan(T0)
+
     // Halfway there, still at sea.
-    s = applyAction(ctx, s, { type: 'tick', at: T0 + Math.floor(pips / 2) * MIN }).state
+    s = applyAction(ctx, s, { type: 'tick', at: T0 + Math.floor((eta - T0) / 2) }).state
     expect(flagship(s.players[0]!).voyage).not.toBeNull()
     expect(portAt(ctx, flagship(s.players[0]!).nodeId)).not.toBe(target)
 
     // Come back later: the ship is in harbour without anyone watching.
-    const arrived = applyAction(ctx, s, { type: 'tick', at: T0 + (pips + 1) * MIN })
+    const arrived = applyAction(ctx, s, { type: 'tick', at: eta + MIN })
     expect(flagship(arrived.state.players[0]!).nodeId).toBe(target)
     expect(flagship(arrived.state.players[0]!).voyage ?? null).toBeNull()
     expect(arrived.events.some((e) => e.type === 'arrived')).toBe(true)
+  })
+
+  it('charges by the sea mile, not by the hop', () => {
+    // A flat cost per hop made the Atlantic as quick as the Channel. The map
+    // knows how far every lane runs, so the clock should too.
+    const s = afloat()
+    const ship = flagship(s.players[0]!)
+    const lanes = [...ctx.graph.edgeKm.entries()].sort((a, b) => a[1] - b[1])
+    const [shortest] = lanes[0]!
+    const [longest] = lanes[lanes.length - 1]!
+    const split = (key: string) => key.split('|') as [string, string]
+
+    const quick = legMsFor(ctx, s, ship, ...split(shortest))
+    const slow = legMsFor(ctx, s, ship, ...split(longest))
+    expect(slow).toBeGreaterThan(quick)
+    // And the difference is the distance, not a rounding wobble.
+    expect(slow / quick).toBeGreaterThan(2)
+  })
+
+  it('keeps minutesPerPip meaning "an ordinary hop"', () => {
+    // Times are billed against the median lane, so the setting a player picks
+    // still describes a typical leg however uneven the map is.
+    const s = afloat()
+    const ship = flagship(s.players[0]!)
+    const median = ctx.graph.typicalKm
+    const lane = [...ctx.graph.edgeKm.entries()].find(([, km]) => km === median)!
+    const [a, b] = lane[0].split('|') as [string, string]
+    expect(legMsFor(ctx, s, ship, a, b)).toBeCloseTo(1 * (ship.kind.speedFactor || 1) * 60_000, 0)
   })
 
   it('will not trade from the open sea', () => {

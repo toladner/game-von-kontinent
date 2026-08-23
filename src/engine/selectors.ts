@@ -1,7 +1,7 @@
 import type { CargoItem, GameState, PlayerState } from './state'
 import { activePlayer, flagship, netWorth, type VehicleInstance } from './state'
 import { goodOf, type EngineContext } from './context'
-import { isPort } from './mapbuild'
+import { edgeKey, isPort } from './mapbuild'
 import type { GoodId, Money, NodeId, PortId } from './types'
 
 /** The port the given ship lies in, or null if it is on open water. */
@@ -181,9 +181,51 @@ export function sellDestinations(
   return rows.sort((a, b) => a.distance - b.distance).slice(0, limit)
 }
 
-/** How long one pip takes this vessel, in milliseconds. */
-export function legMsFor(state: GameState, vehicle: VehicleInstance): number {
-  return state.config.realtime.minutesPerPip * (vehicle.kind.speedFactor || 1) * 60_000
+/**
+ * How long this vessel needs for one leg, in milliseconds.
+ *
+ * Time is charged by the sea mile rather than by the hop. The graph knows the
+ * great-circle length of every segment, and a leg is billed against the
+ * median segment, so `minutesPerPip` still reads as "how long an ordinary hop
+ * takes" while the run from Lissabon to the Azores properly costs more than
+ * a coastal step. `speedFactor` then makes a Großfrachter the lumberer it is.
+ *
+ * Ships still sit at a node for the whole leg, so nothing about this disturbs
+ * the collision rule: two vessels are on the same point or they are not.
+ */
+export function legMsFor(
+  ctx: EngineContext,
+  state: GameState,
+  vehicle: VehicleInstance,
+  from: NodeId,
+  to: NodeId,
+): number {
+  const km = ctx.graph.edgeKm.get(edgeKey(from, to))
+  const relative = km && ctx.graph.typicalKm > 0 ? km / ctx.graph.typicalKm : 1
+  return (
+    state.config.realtime.minutesPerPip * relative * (vehicle.kind.speedFactor || 1) * 60_000
+  )
+}
+
+/**
+ * When a voyage in progress reaches its destination.
+ *
+ * The leg under way has a known arrival; the rest are priced from the map,
+ * so the estimate stays honest on a route whose legs differ in length.
+ */
+export function voyageEndsAt(
+  ctx: EngineContext,
+  state: GameState,
+  vehicle: VehicleInstance,
+): number | null {
+  const voyage = vehicle.voyage
+  if (!voyage) return null
+  let at = voyage.legArrivesAt
+  // route[0] is where this leg lands; everything after it is still to sail.
+  for (let i = 0; i < voyage.route.length - 1; i++) {
+    at += legMsFor(ctx, state, vehicle, voyage.route[i]!, voyage.route[i + 1]!)
+  }
+  return at
 }
 
 /** Distance in pips from a node to every other node, honouring the no-turn rule. */
@@ -331,7 +373,7 @@ export function standings(state: GameState): readonly Standing[] {
  * The server sleeps until then instead of ticking on a timer, so a game that
  * nobody is watching costs nothing and the action log stays short.
  */
-export function nextEventAt(state: GameState): number | null {
+export function nextEventAt(ctx: EngineContext, state: GameState): number | null {
   if (state.config.travel !== 'echtzeit' || state.phase !== 'laufend') return null
 
   const times: number[] = []
@@ -341,7 +383,7 @@ export function nextEventAt(state: GameState): number | null {
       const voyage = vehicle.voyage
       // One tick at the final arrival walks a ship through every leg at once.
       if (voyage) {
-        times.push(voyage.legArrivesAt + legMsFor(state, vehicle) * (voyage.route.length - 1))
+        times.push(voyageEndsAt(ctx, state, vehicle) ?? voyage.legArrivesAt)
       }
     }
   }
@@ -355,14 +397,20 @@ export function nextEventAt(state: GameState): number | null {
 }
 
 /** Arrival time of the whole voyage, not just the current leg. */
-export function arrivalAt(state: GameState, player: PlayerState): number | null {
-  return arrivalOf(state, flagship(player))
+export function arrivalAt(
+  ctx: EngineContext,
+  state: GameState,
+  player: PlayerState,
+): number | null {
+  return voyageEndsAt(ctx, state, flagship(player))
 }
 
-export function arrivalOf(state: GameState, vehicle: VehicleInstance): number | null {
-  const voyage = vehicle.voyage
-  if (!voyage) return null
-  return voyage.legArrivesAt + legMsFor(state, vehicle) * (voyage.route.length - 1)
+export function arrivalOf(
+  ctx: EngineContext,
+  state: GameState,
+  vehicle: VehicleInstance,
+): number | null {
+  return voyageEndsAt(ctx, state, vehicle)
 }
 
 export function isRedField(state: GameState): boolean {

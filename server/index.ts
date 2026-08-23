@@ -461,7 +461,7 @@ export class GameRoom {
    */
   private async scheduleWake(): Promise<void> {
     if (!this.state) return
-    const at = nextEventAt(this.state)
+    const at = nextEventAt(ctx, this.state)
     if (at === null) {
       await this.storage.storage.deleteAlarm()
       return

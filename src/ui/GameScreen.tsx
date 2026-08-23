@@ -12,6 +12,8 @@ import { PigeonSheet } from './PigeonSheet'
 import { formatMoney, PLAYER_COLORS, playerLabel, useGame, type LogLine } from '@app/store'
 import { arrivalAt, legalSteps, marketReport, portAt, standings } from '@engine/selectors'
 import { konjunkturOutcome, type HarbourStep } from '@engine/advice'
+import { Emph } from './Emph'
+import type { GameEvent } from '@engine/actions'
 import {
   cargoValue,
   flagship,
@@ -41,6 +43,7 @@ export function GameScreen() {
   const notice = useGame((s) => s.notice)
   const dismiss = useGame((s) => s.dismissNotice)
   const log = useGame((s) => s.log)
+  const lastEvents = useGame((s) => s.lastEvents)
   const newsSeen = useGame((s) => s.newsSeen)
   const markNewsRead = useGame((s) => s.markNewsRead)
   const abandon = useGame((s) => s.abandon)
@@ -262,6 +265,14 @@ export function GameScreen() {
           }
           onTabChange={net && myTurn ? (t) => announceFocus(t) : undefined}
           markedPort={marked?.portId ?? null}
+          // No die in real-time play: naming the harbour is the whole move.
+          onSetCourse={
+            realtime && portId
+              ? (to) => {
+                  if (to !== portId) dispatch({ type: 'setCourse', to })
+                }
+              : undefined
+          }
           onLookAt={(to) => {
             // Get out of the way first, then go and find it: the sheet slides
             // to a peek while the plan glides across, and both settle together.
@@ -340,7 +351,14 @@ export function GameScreen() {
       )}
 
       {kind === 'ende' && (
-        <FinalSheet state={state} snap={snap} onSnap={close} onNew={abandon} />
+        <FinalSheet
+          ctx={ctx}
+          state={state}
+          closing={lastEvents}
+          snap={snap}
+          onSnap={close}
+          onNew={abandon}
+        />
       )}
     </div>
   )
@@ -554,7 +572,7 @@ function RealtimeBar({
   )
 
   if (voyage) {
-    const eta = arrivalAt(state, player) ?? now
+    const eta = arrivalAt(ctx, state, player) ?? now
     const destination = ctx.portsById.get(voyage.destination)?.name ?? voyage.destination
     return wrap(
       <div className="paper flex items-center gap-3 rounded-xl px-4 py-2.5 shadow-xl">
@@ -662,7 +680,7 @@ function SeasonSheet({
       <ul className="space-y-1.5 text-[12px]">
         {state.players.map((p) => {
           const color = COLORS[p.colorIndex % COLORS.length]!
-          const eta = arrivalAt(state, p)
+          const eta = arrivalAt(ctx, state, p)
           const ship = flagship(p)
           const where = ship.voyage
             ? `unterwegs nach ${ctx.portsById.get(ship.voyage.destination)?.name ?? ''}`
@@ -884,17 +902,47 @@ function KonjunkturSheet({
   )
 }
 
+/**
+ * The Schlußabrechnung, with its working shown.
+ *
+ * The last round runs itself: every ship makes for the nearest harbour and
+ * the whole hold goes over the side at once. Showing only the final ranking
+ * meant a player watched their cash jump by six figures with no account of
+ * where it came from. The closing sales are already emitted as events, so
+ * they are laid out here, per house, under the rule that produced them.
+ */
 function FinalSheet({
+  ctx,
   state,
+  closing,
   snap,
   onSnap,
   onNew,
 }: {
+  ctx: EngineContext
   state: GameState
+  /** Events from the action that ended the game — the whole closing run. */
+  closing: readonly GameEvent[]
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
   onNew: () => void
 }) {
+  const table = useMemo(() => standings(state), [state])
+
+  // What each house sold up at the close, in the order the bank took it.
+  const soldUp = useMemo(() => {
+    const byPlayer = new Map<string, { goodId: number; price: number; profit: number }[]>()
+    for (const e of closing) {
+      if (e.type !== 'sold' || e.kind !== 'schluss') continue
+      const rows = byPlayer.get(e.playerId) ?? []
+      rows.push({ goodId: e.goodId, price: e.price, profit: e.profit })
+      byPlayer.set(e.playerId, rows)
+    }
+    return byPlayer
+  }, [closing])
+
+  const anySales = soldUp.size > 0
+
   return (
     <Sheet
       snap={snap}
@@ -907,7 +955,68 @@ function FinalSheet({
         </button>
       }
     >
-      <Rangliste state={state} size="gross" />
+      <div className="paper-slip mb-3 rounded-sm px-3 py-2.5">
+        <p className="text-press text-[13px] leading-snug">
+          <Emph
+            strong="press-dark font-bold"
+            text={
+              'Die *letzte Runde* ist gefahren. Jedes Schiff hat den *nächsten Hafen* angelaufen und ' +
+              'seine Ladung abgestoßen: was der Hafen *nicht selbst führt*, zum vollen Verkaufspreis — ' +
+              'alles andere zu *75 % des Einkaufs*. Sieger ist das größte Vermögen.'
+            }
+          />
+        </p>
+      </div>
+
+      <ol className="stagger space-y-2">
+        {table.map((row) => {
+          const rows = soldUp.get(row.player.id) ?? []
+          const takings = rows.reduce((sum, r) => sum + r.price, 0)
+          return (
+            <li key={row.player.id} className="paper-card rounded-sm p-2.5">
+              <div className="flex items-center gap-3">
+                <span className="display w-6 text-center text-xl">{row.rank}</span>
+                <Portrait traits={row.player.persona.portrait} size={40} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{row.player.name}</p>
+                  <p className="text-ink-soft truncate text-[11px]">{playerLabel(row.player)}</p>
+                </div>
+                <span className="tnum text-sm font-bold">{formatMoney(row.worth)}</span>
+              </div>
+
+              {rows.length > 0 && (
+                <ul className="mt-2 space-y-0.5 border-t border-black/10 pt-1.5 text-[12px]">
+                  {rows.map((r, i) => (
+                    <li key={i} className="flex items-baseline justify-between gap-2">
+                      <span className="min-w-0 flex-1 truncate">
+                        {ctx.goodsById.get(r.goodId)?.name ?? `Ware ${r.goodId}`}
+                      </span>
+                      <span className="tnum">{r.price.toLocaleString('de-DE')}</span>
+                      <span
+                        className={`tnum w-20 text-right ${r.profit >= 0 ? 'text-press' : 'text-rot'}`}
+                      >
+                        {r.profit >= 0 ? '+' : '−'}
+                        {Math.abs(r.profit).toLocaleString('de-DE')}
+                      </span>
+                    </li>
+                  ))}
+                  <li className="flex items-baseline justify-between gap-2 border-t border-black/10 pt-1 font-bold">
+                    <span className="smallcaps text-[11px]">Schlußverkauf</span>
+                    <span className="tnum">{takings.toLocaleString('de-DE')}</span>
+                    <span className="w-20" />
+                  </li>
+                </ul>
+              )}
+
+              {anySales && rows.length === 0 && (
+                <p className="text-ink-soft mt-1.5 border-t border-black/10 pt-1.5 text-[12px]">
+                  Fuhr mit leerem Laderaum ein — nichts mehr abzurechnen.
+                </p>
+              )}
+            </li>
+          )
+        })}
+      </ol>
     </Sheet>
   )
 }
