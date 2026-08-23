@@ -1,0 +1,67 @@
+# Typecheck, test and build every push.
+#
+# This used to end in a GitHub Pages deployment, which failed on every run:
+# Pages was never enabled on the repository, so `deploy-pages` had nowhere to
+# put anything. Enabling it would have been the wrong fix. Pages serves static
+# files, and half of this game is a Cloudflare Worker — one Durable Object per
+# table, running the same reducer as the browser. A Pages copy would have no
+# /api at all: no online play, no season clock, no saved tables. A second URL
+# serving a quietly broken game is worse than no second URL.
+#
+# So the build stands on its own as CI, and deployment stays where the server
+# is. The deploy job below turns itself on the moment a CLOUDFLARE_API_TOKEN
+# is present in the repository secrets, and skips cleanly until then, so a
+# missing token reports success rather than a red tick nobody reads.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Both projects: the browser build and the Worker, which have separate
+      # tsconfigs and can drift apart without either failing on its own.
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Veröffentlichen
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "Kein CLOUDFLARE_API_TOKEN hinterlegt — Veröffentlichung übersprungen."
+            echo "Zum Einschalten: ein Worker-Token unter Settings › Secrets › Actions ablegen."
+            exit 0
+          fi
+          npm run deploy
