@@ -445,6 +445,24 @@ export class GameRoom {
       if (state.hostId !== playerId) return 'Nur wer die Partie eröffnet hat, gibt sie frei.'
       return null
     }
+
+    // Nobody acts for another house, whichever way the table is played. In
+    // round play the turn check below happened to cover this; in real-time
+    // nothing did, and an action naming somebody else would have been taken
+    // at its word.
+    const by = 'by' in action ? action.by : undefined
+    if (by && by !== playerId) return 'Sie handeln nur für Ihr eigenes Haus.'
+
+    /*
+     * Real-time play has no turn to wait for. The ships sail on a clock and
+     * every house trades whenever it likes — that is the whole point of the
+     * mode, and `activeIndex` is meaningless there: it never leaves the first
+     * seat. Applying turn order anyway left everybody except the first player
+     * permanently told that the first player was "am Zug", unable to buy,
+     * sell or set a course for the entire game.
+     */
+    if (state.config.travel === 'echtzeit') return null
+
     const active = state.players[state.activeIndex]
     if (!active) return 'Es ist niemand am Zug.'
     if (active.id !== playerId) return `${active.name} ist am Zug.`

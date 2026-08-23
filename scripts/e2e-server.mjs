@@ -17,9 +17,13 @@ function client(code, label) {
   const waiters = []
   ws.addEventListener('message', (e) => {
     const msg = JSON.parse(e.data)
-    inbox.push(msg)
+    // Handed to a waiter *or* queued, never both. Doing both left every
+    // message in the inbox after it had already been consumed, so a later
+    // `until('error')` would shift an error out of the distant past and
+    // report it as the answer to the question just asked.
     const w = waiters.shift()
     if (w) w(msg)
+    else inbox.push(msg)
   })
   return {
     label,
@@ -169,7 +173,11 @@ const rt = await (
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       travel: 'echtzeit',
-      minutesPerPip: 0.02, // ~1.2 s a pip, so a test can watch a whole voyage
+      // ~3 s a median leg. Fast enough to watch a whole voyage inside a test
+      // run, slow enough that "at sea" is a state a check can actually catch:
+      // at the server's floor of 0.02 a leg lasts about a second, and the
+      // ship kept making port between looking and asking.
+      minutesPerPip: 0.05,
       durationHours: 1,
       joinPolicy: 'jederzeit',
     }),
@@ -191,6 +199,54 @@ const before = await (await fetch(`${BASE}/api/games/${rt.code}`)).json()
 const homePort = before.players[0].at
 ok(`season opened, ship lying at ${homePort}`)
 
+// --- Two devices at one real-time table -------------------------------------
+//
+// The reported failure: player two could open their own harbour and do
+// nothing in it, being told over and over that player one was "am Zug". Turn
+// order was applied to a mode that has no turns, and activeIndex never leaves
+// the first seat, so every house but the first was frozen for the whole game.
+const maat = client(rt.code, 'Maat')
+await maat.open()
+maat.send({ t: 'hello', name: 'Maat' })
+const maatWelcome = await maat.until('welcome')
+if (!maatWelcome.playerId) fail('the second device was never seated')
+else ok(`second device seated as ${maatWelcome.playerId}`)
+await cap.untilAction('join')
+
+const board = await (await fetch(`${BASE}/api/games/${rt.code}`)).json()
+const maatSeat = board.players.find((p) => p.id === maatWelcome.playerId)
+if (!maatSeat) fail('the second player is not in the table state')
+
+const CANDIDATES_2 = [
+  'hamburg', 'london', 'lissabon', 'newyork', 'habana', 'dakar',
+  'kapstadt', 'buenosaires', 'riodejaneiro', 'valparaiso', 'sanfrancisco', 'daressalam',
+]
+const maatDestination = CANDIDATES_2.find((c) => c !== maatSeat.at)
+maat.send({
+  t: 'action',
+  action: { type: 'setCourse', to: maatDestination, by: maatWelcome.playerId },
+})
+try {
+  await maat.untilAction('setCourse', 4000)
+  ok('the second player may act without waiting for a turn')
+} catch {
+  const refusal = maat.inbox.find((m) => m.t === 'error')
+  fail(`second player was refused: ${refusal ? refusal.reason : 'no reply at all'}`)
+}
+
+// ...but only for their own house. Nothing stopped this before: in round play
+// the turn check happened to cover it, and in real-time nothing did.
+maat.send({
+  t: 'action',
+  action: { type: 'buy', goodId: 4, by: capWelcome.playerId },
+})
+const impersonation = await maat.until('error')
+if (!/eigenes Haus/i.test(impersonation.reason)) {
+  fail(`acting for another house was not refused: ${impersonation.reason}`)
+} else ok('nobody trades for another house: ' + impersonation.reason)
+
+maat.close()
+
 const CANDIDATES = [
   'hamburg', 'london', 'lissabon', 'newyork', 'habana', 'dakar',
   'kapstadt', 'buenosaires', 'riodejaneiro', 'valparaiso', 'sanfrancisco', 'daressalam',
@@ -200,11 +256,32 @@ cap.send({ t: 'action', action: { type: 'setCourse', to: destination, by: capWel
 await cap.untilAction('setCourse')
 ok(`course laid in for ${destination}`)
 
-// Trading is refused while the ship is at sea.
+// She is still alongside with the hatches open, so the quay has not shut:
+// a buy here is refused on its merits, not for being at sea.
 cap.send({ t: 'action', action: { type: 'buy', goodId: 4, by: capWelcome.playerId } })
-const atSea = await cap.until('error')
-if (!/See|Hafen/i.test(atSea.reason)) fail(`unexpected sea error: ${atSea.reason}`)
-else ok('no trading from the open sea: ' + atSea.reason)
+const alongside = await cap.until('error')
+if (/Auf See/i.test(alongside.reason)) {
+  fail('the quay shut before the ship had cast off')
+} else ok('the quay stays open until she casts off: ' + alongside.reason)
+
+// Once she has, it is shut. Waited for rather than slept through: a route
+// runs through other harbours on its way, and catching her alongside one of
+// those would be asking the wrong question and getting the wrong answer.
+let where = null
+for (let i = 0; i < 60; i++) {
+  const look = await (await fetch(`${BASE}/api/games/${rt.code}`)).json()
+  where = look.players[0].at
+  if (typeof where === 'string' && where.startsWith('sea:')) break
+  await new Promise((r) => setTimeout(r, 250))
+}
+if (!where || !where.startsWith('sea:')) {
+  fail(`never caught the ship at sea (last seen at ${where})`)
+} else {
+  cap.send({ t: 'action', action: { type: 'buy', goodId: 4, by: capWelcome.playerId } })
+  const atSea = await cap.until('error')
+  if (!/Auf See/i.test(atSea.reason)) fail(`expected a refusal from the open sea: ${atSea.reason}`)
+  else ok('no trading from the open sea: ' + atSea.reason)
+}
 
 // Now sit in silence. Nothing is sent; the arrival has to come to us, which
 // only happens if the server woke itself up.
@@ -213,7 +290,19 @@ const arrival = await cap.untilAction('tick', 90_000)
 if (!arrival) fail('no unsolicited tick ever arrived')
 else ok('the server woke by itself and pushed the clock forward')
 
-const after = await (await fetch(`${BASE}/api/games/${rt.code}`)).json()
+/*
+ * ...and then wait for the voyage to finish, rather than assuming one tick
+ * means it has. Legs are charged by the sea mile now, so the first tick can
+ * land a long way short of the destination — which is exactly how this check
+ * came to be reporting a ship "not arrived" at a harbour it was still
+ * honestly sailing towards.
+ */
+const deadline = Date.now() + 180_000
+let after = await (await fetch(`${BASE}/api/games/${rt.code}`)).json()
+while (after.players[0].at !== destination && Date.now() < deadline) {
+  await cap.until('append', Math.max(500, deadline - Date.now())).catch(() => null)
+  after = await (await fetch(`${BASE}/api/games/${rt.code}`)).json()
+}
 if (after.players[0].at !== destination) {
   fail(`ship did not arrive: still at ${after.players[0].at}`)
 } else {

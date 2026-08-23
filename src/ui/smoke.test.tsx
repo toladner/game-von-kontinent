@@ -1104,3 +1104,52 @@ describe('looking a harbour up on the plan', () => {
     expect(screen.queryAllByRole('button', { pressed: true })).toHaveLength(0)
   })
 })
+
+describe('a second device with no seat', () => {
+  /**
+   * Two people opened a real-time table on two devices and the second could
+   * do nothing at all — the screen showed the first player's ship, name and
+   * harbour as if they were its own, and every tap was swallowed in silence.
+   *
+   * Real-time play has no turns, so "wait your turn" was never the answer.
+   * The device simply had no seat, and nothing said so.
+   */
+  const seatless = () => {
+    render(<App />)
+    act(() => {
+      useGame
+        .getState()
+        .begin(['Ada', 'Bo'], { travel: 'echtzeit', minutesPerPip: 1, seed: 'kein-platz' })
+    })
+    // As a client the server never seated: connected, watching, no playerId.
+    act(() => {
+      useGame.setState({
+        net: { code: 'ABCD', status: 'verbunden', playerId: null, online: [] },
+      })
+    })
+  }
+
+  it('does not hand the first player’s ship to a stranger', () => {
+    seatless()
+    const state = useGame.getState().state!
+    expect(state.players[0]!.name).toBe('Ada')
+    // Ada's name must not be sitting in this device's own HUD.
+    expect(screen.queryByLabelText(/^Platz 1, Ada/)).toBeNull()
+  })
+
+  it('says plainly that there is no seat at this table', () => {
+    seatless()
+    expect(screen.getByText('Zuschauer')).toBeTruthy()
+    expect(screen.getByText(/keinen Platz an diesem Tisch/i)).toBeTruthy()
+  })
+
+  it('does not swallow an order it cannot carry out', () => {
+    // Silence is the worst answer: the player cannot tell a refusal from a
+    // broken button.
+    seatless()
+    act(() => {
+      useGame.getState().dispatch({ type: 'buy', goodId: 1 })
+    })
+    expect(useGame.getState().notice).toBeTruthy()
+  })
+})

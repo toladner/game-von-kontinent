@@ -67,6 +67,7 @@ export function PortSheet({
   onLookAt,
   markedPort,
   onSetCourse,
+  onOpenPort,
   onShowMap,
   followTab,
   onTabChange,
@@ -88,6 +89,8 @@ export function PortSheet({
   markedPort: string | null
   /** Real-time play: name a harbour on Wohin? and the ship sails there. */
   onSetCourse?: (portId: string) => void
+  /** Open a harbour's card without committing to sail to it. */
+  onOpenPort?: (portId: string) => void
   /**
    * Real-time play: get the sheet out of the way so a harbour can be picked
    * off the plan instead of out of the list.
@@ -375,6 +378,7 @@ export function PortSheet({
           onLookAt={onLookAt}
           markedPort={markedPort}
           onSetCourse={onSetCourse}
+          onOpenPort={onOpenPort}
         />
       )}
 
@@ -474,6 +478,7 @@ export function MarketReport({
   onLookAt,
   markedPort = null,
   onSetCourse,
+  onOpenPort,
 }: {
   ctx?: EngineContext
   report: readonly import('@engine/selectors').Destination[]
@@ -486,6 +491,8 @@ export function MarketReport({
    * makes its own way there while you get on with something else.
    */
   onSetCourse?: (portId: string) => void
+  /** Show the harbour's own card, as tapping it on the plan would. */
+  onOpenPort?: (portId: string) => void
 }) {
   if (cargo === 0) {
     return (
@@ -560,13 +567,26 @@ export function MarketReport({
             )}
             </button>
             {onSetCourse && (
-              <button
-                type="button"
-                className="btn btn-sm btn-primary mt-1 w-full text-[13px]"
-                onClick={() => onSetCourse(d.portId)}
-              >
-                Kurs auf {d.name} setzen
-              </button>
+              // Look before you leap: the same card the plan gives you, from
+              // a list entry, so a long voyage is never bought sight unseen.
+              <div className="mt-1 flex gap-1.5">
+                {onOpenPort && (
+                  <button
+                    type="button"
+                    className="btn btn-sm shrink-0 text-[13px]"
+                    onClick={() => onOpenPort(d.portId)}
+                  >
+                    Öffnen
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary flex-1 text-[13px]"
+                  onClick={() => onSetCourse(d.portId)}
+                >
+                  Kurs auf {d.name} setzen
+                </button>
+              </div>
             )}
           </li>
         ))}

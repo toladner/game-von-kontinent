@@ -473,7 +473,12 @@ export const useGame = create<Store>((set, get) => ({
 
     if (state.config.travel === 'echtzeit' && namesAnActor(action) && !action.by) {
       const me = get().acting()
-      if (!me) return
+      if (!me) {
+        // No seat at this table. Dropping the order in silence is the worst
+        // answer: the player cannot tell a refusal from a broken button.
+        set({ notice: 'Sie sitzen nicht mit am Tisch — Sie sehen nur zu.' })
+        return
+      }
       action = { ...action, by: me.id }
     }
 

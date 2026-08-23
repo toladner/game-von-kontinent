@@ -62,6 +62,15 @@ export function GameScreen() {
 
   // Round play follows the turn; real-time play follows whoever this device
   // is commanding.
+  /**
+   * Whether this device has a seat at all.
+   *
+   * A watcher who joined a table that had already sailed gets no playerId,
+   * and the screen used to fall through to `players[0]` — handing them the
+   * first player's ship, name, cash and harbour as though it were their own,
+   * while every tap vanished. Better to say so.
+   */
+  const seated = !net || net.playerId !== null
   const player = (realtime ? acting : state.players[state.activeIndex]) ?? state.players[0]!
   const voyage = flagship(player).voyage ?? null
   const portId = voyage ? null : portAt(ctx, flagship(player).nodeId)
@@ -88,6 +97,7 @@ export function GameScreen() {
 
   // The harbour opens itself; everything else waits to be asked for.
   useEffect(() => {
+    if (!seated) return
     if (realtime) {
       // The plan stays uncovered unless something is asked for; arriving in
       // harbour offers a button rather than taking over the screen.
@@ -111,7 +121,7 @@ export function GameScreen() {
     } else {
       setKind(null)
     }
-  }, [state.phase, state.activeIndex, realtime, portId])
+  }, [state.phase, state.activeIndex, realtime, portId, seated])
 
   useEffect(() => {
     if (!notice) return
@@ -197,6 +207,14 @@ export function GameScreen() {
         className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 px-3"
         style={{ paddingTop: 'calc(var(--safe-t) + 0.6rem)' }}
       >
+        {!seated ? (
+          <div className="paper anim-rise pointer-events-auto rounded-lg px-3 py-2 shadow-lg">
+            <p className="smallcaps text-[11px] tracking-[0.2em]">Zuschauer</p>
+            <p className="text-ink-soft text-[12px] leading-snug">
+              Sie haben keinen Platz an diesem Tisch und sehen nur zu.
+            </p>
+          </div>
+        ) : (
         <PlayerHUD
           ctx={ctx}
           player={player}
@@ -209,6 +227,7 @@ export function GameScreen() {
           rank={table.find((r) => r.player.id === player.id)?.rank ?? null}
           onOpen={() => open('kontor')}
         />
+        )}
         <NewsPill unread={unread} onOpen={() => open('nachrichten')} />
         <FleetPill
           count={player.fleet.length}
@@ -227,7 +246,7 @@ export function GameScreen() {
         )}
       </div>
 
-      {realtime ? (
+      {!seated ? null : realtime ? (
         <RealtimeBar
           ctx={ctx}
           state={state}
@@ -284,6 +303,17 @@ export function GameScreen() {
           }
           onTabChange={net && myTurn ? (t) => announceFocus(t) : undefined}
           markedPort={marked?.portId ?? null}
+          // The same card a tap on the plan opens, reached from the list.
+          onOpenPort={
+            realtime
+              ? (to) => {
+                  setPreview(to)
+                  setMarked((m) => ({ portId: to, nonce: (m?.nonce ?? 0) + 1 }))
+                  setKind('vorschau')
+                  setSnap('peek')
+                }
+              : undefined
+          }
           // No die in real-time play: naming the harbour is the whole move.
           onSetCourse={
             realtime && portId
