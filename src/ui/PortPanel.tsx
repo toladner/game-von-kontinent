@@ -67,6 +67,7 @@ export function PortSheet({
   onLookAt,
   markedPort,
   onSetCourse,
+  onShowMap,
   followTab,
   onTabChange,
 }: {
@@ -87,6 +88,11 @@ export function PortSheet({
   markedPort: string | null
   /** Real-time play: name a harbour on Wohin? and the ship sails there. */
   onSetCourse?: (portId: string) => void
+  /**
+   * Real-time play: get the sheet out of the way so a harbour can be picked
+   * off the plan instead of out of the list.
+   */
+  onShowMap?: () => void
   /**
    * Set when watching somebody else's turn: the panel shown is the one they
    * are on, so the table is looking at the same thing while they decide.
@@ -201,6 +207,10 @@ export function PortSheet({
             // the end. Sailing with an empty hold wastes the whole leg, so
             // that last step costs one extra tap — a warning, not a refusal.
             if (next) return setTab(next.step)
+            // In real-time play there is no turn to end. The walk finishes at
+            // the chart, where a harbour has to be named — so the last button
+            // opens the plan rather than pretending to cast off.
+            if (onShowMap) return onShowMap()
             if (empty && !confirmEmpty) return setConfirmEmpty(true)
             onLeave()
           }}
@@ -210,13 +220,15 @@ export function PortSheet({
         >
           {next
             ? `Weiter zu ${next.label}`
-            : zwang
-              ? 'Erst absetzen — Verkaufszwang'
-              : confirmEmpty
-                ? 'Wirklich ohne Ladung ablegen?'
-                : empty
-                  ? 'Ohne Ladung ablegen'
-                  : 'Ablegen'}
+            : onShowMap
+              ? 'Hafen auf der Karte wählen'
+              : zwang
+                ? 'Erst absetzen — Verkaufszwang'
+                : confirmEmpty
+                  ? 'Wirklich ohne Ladung ablegen?'
+                  : empty
+                    ? 'Ohne Ladung ablegen'
+                    : 'Ablegen'}
         </button>
         )
       }
@@ -518,6 +530,13 @@ export function MarketReport({
                       .filter(Boolean)
                       .join(', ')
                   : `${d.sellable} Posten`}
+                {/* A harbour that takes part of the hold is a different kind
+                    of choice, not a worse version of the same one — so it
+                    says so rather than leaving it to be inferred from a list
+                    of names the reader would have to count. */}
+                {cargo > d.sellable && (
+                  <span className="text-rot"> · {cargo - d.sellable} bleibt an Bord</span>
+                )}
               </span>
             </span>
             {cargo > 0 && (

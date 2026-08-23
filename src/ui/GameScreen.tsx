@@ -270,6 +270,8 @@ export function GameScreen() {
           onBuy={(goodId) => dispatch({ type: 'buy', goodId })}
           onSell={(uid) => dispatch({ type: 'sell', uid })}
           onLeave={() => dispatch({ type: 'endTurn' })}
+          // Real-time play ends the walk at the chart, not at a gangway.
+          onShowMap={realtime ? () => close('closed') : undefined}
           greeting={greeting}
           onEnter={() => setGreeting(false)}
           // Online, a watcher rides along on the active player's panel; the

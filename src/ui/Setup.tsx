@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { askToNotify, notifyState, type NotifyState } from '@app/notify'
 import { makePersona, type Gender } from '@engine/persona'
 import type { Seat } from '@engine/setup'
@@ -336,11 +336,18 @@ export interface DropdownOption<T extends string> {
 }
 
 /**
- * A native select, dressed for the Kontor.
+ * A dropdown that can explain itself.
  *
- * Native on purpose: it is the one control that already knows how to be a
- * wheel on a phone, a listbox on a desktop and a focusable element for a
- * screen reader, and none of that is worth rebuilding to gain a typeface.
+ * This began as a native `<select>`, which is the right instinct — it already
+ * knows how to be a wheel on a phone and a listbox on a desktop. But an
+ * `<option>` may only ever hold one line of plain text in the browser's own
+ * font, and these settings need a sentence apiece in the Kontor's face. That
+ * is the one thing native cannot do, so it is rebuilt: a button, a popover
+ * listbox, and the keyboard handling that a select would have given free.
+ *
+ * Closes on Escape, on a click outside, and on choosing. Arrow keys and
+ * Home/End walk the list, because a control that traps a keyboard user is
+ * worse than a plain select with no descriptions at all.
  */
 function Dropdown<T extends string>({
   value,
@@ -353,19 +360,120 @@ function Dropdown<T extends string>({
   onChange: (value: T) => void
   label: string
 }) {
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(() => Math.max(0, options.findIndex((o) => o.id === value)))
+  const root = useRef<HTMLDivElement>(null)
+  const chosen = options.find((o) => o.id === value)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  const pick = (option: DropdownOption<T>) => {
+    if (option.disabled) return
+    onChange(option.id)
+    setOpen(false)
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') return setOpen(false)
+    if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault()
+      setActive(Math.max(0, options.findIndex((o) => o.id === value)))
+      return setOpen(true)
+    }
+    if (!open) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActive((i) => Math.min(options.length - 1, i + 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActive((i) => Math.max(0, i - 1))
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      setActive(0)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      setActive(options.length - 1)
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      const option = options[active]
+      if (option) pick(option)
+    }
+  }
+
   return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value as T)}
-      className="focusable teletype border-ink/25 bg-paper text-ink min-w-0 flex-1 rounded-[2px] border px-2 py-1.5 text-right text-[13px] font-semibold"
-    >
-      {options.map((option) => (
-        <option key={option.id} value={option.id} disabled={option.disabled}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <div ref={root} className="relative min-w-0 flex-1">
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={onKeyDown}
+        className="focusable border-ink/25 bg-paper flex w-full items-center justify-between gap-2 rounded-[2px] border px-2.5 py-1.5 text-left"
+      >
+        <span className="smallcaps min-w-0 flex-1 truncate text-[13px] font-bold">
+          {chosen?.label ?? value}
+        </span>
+        <span
+          className={`text-ink-soft shrink-0 text-[9px] transition-transform ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        >
+          ▼
+        </span>
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label={label}
+          tabIndex={-1}
+          onKeyDown={onKeyDown}
+          className="paper anim-fade absolute right-0 left-0 z-30 mt-1 max-h-[19rem] overflow-y-auto rounded-md py-1 shadow-xl"
+        >
+          {options.map((option, i) => {
+            const selected = option.id === value
+            return (
+              <li key={option.id} role="option" aria-selected={selected}>
+                <button
+                  type="button"
+                  disabled={option.disabled}
+                  onClick={() => pick(option)}
+                  onMouseEnter={() => setActive(i)}
+                  className={`block w-full px-3 py-2 text-left transition ${
+                    option.disabled ? 'opacity-45' : i === active ? 'bg-ink/8' : ''
+                  }`}
+                >
+                  <span className="flex items-baseline gap-2">
+                    <span
+                      className={`smallcaps flex-1 text-[13px] ${selected ? 'font-bold' : 'font-semibold'}`}
+                    >
+                      {option.label}
+                    </span>
+                    {selected && (
+                      <span className="text-press shrink-0 text-[12px]" aria-hidden>
+                        ✓
+                      </span>
+                    )}
+                  </span>
+                  {option.hint && (
+                    <span className="text-ink-soft mt-0.5 block text-[12px] leading-snug">
+                      {option.hint}
+                    </span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
   )
 }
 
@@ -606,7 +714,13 @@ function StepOptionen({
           <Dropdown
             label="Spielplan"
             value={options.packId}
-            options={PACKS.filter((p) => p.ready).map((p) => ({ id: p.id, label: p.name }))}
+            // The blurb rides inside the list too, so the plans can be
+            // compared without choosing one to find out what it is.
+            options={PACKS.filter((p) => p.ready).map((p) => ({
+              id: p.id,
+              label: p.name,
+              hint: p.blurb,
+            }))}
             onChange={(id) => set('packId', id)}
           />
         </Field>

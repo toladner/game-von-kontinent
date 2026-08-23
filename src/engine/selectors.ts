@@ -445,10 +445,14 @@ export function marketReport(
     .filter((d) => (flagship(player).cargo.length > 0 ? d.sellable > 0 : d.offers > 0))
     .sort((a, b) => score(b) - score(a))
 
+  const inHold = ship.cargo.length
+
   // Under fixed prices a good fetches the same figure in every harbour, so
   // profit is flat and the only question is which is nearest — the best few
   // by score are exactly the right answer.
-  if (state.config.preise !== 'entfernung') return usable.slice(0, limit)
+  if (state.config.preise !== 'entfernung') {
+    return withAwkwardOptions(usable.slice(0, limit), usable, limit, inHold)
+  }
 
   /*
    * Under distance pricing the far harbours pay more, so ranking by score
@@ -459,8 +463,42 @@ export function marketReport(
    * near to far, which is the order the comparison wants to be read in.
    */
   const worthwhile = efficientFrontier(usable)
-  const spread = spreadByDistance(worthwhile, limit)
+  const spread = withAwkwardOptions(
+    spreadByDistance(worthwhile, limit),
+    usable,
+    limit,
+    inHold,
+  )
   return [...spread].sort((a, b) => a.distance - b.distance)
+}
+
+/**
+ * Make room for a harbour that will not take the whole hold.
+ *
+ * Ranking by what a place pays quietly favours the harbours that buy
+ * everything, and a chart made only of those turns the decision into "which
+ * of these six is nearest". A port that takes one posten of two is a
+ * different kind of choice — sell the tea here and carry the wool on, or hold
+ * both for somewhere that wants the pair — and it is worth one slot even when
+ * the arithmetic likes it less.
+ *
+ * Only when the hold actually has something to split, and only when the
+ * chart has not already offered one.
+ */
+function withAwkwardOptions(
+  chosen: readonly Destination[],
+  candidates: readonly Destination[],
+  limit: number,
+  held: number,
+): readonly Destination[] {
+  if (held < 2 || chosen.length === 0) return chosen
+  if (chosen.some((d) => d.sellable < held)) return chosen
+
+  const partial = candidates.find((d) => d.sellable > 0 && d.sellable < held)
+  if (!partial) return chosen
+  // Candidates arrive best-first, so this is the best of its kind. It takes
+  // the last slot rather than displacing the harbour at the top.
+  return chosen.length < limit ? [...chosen, partial] : [...chosen.slice(0, -1), partial]
 }
 
 /**

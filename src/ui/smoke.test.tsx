@@ -32,9 +32,12 @@ function enterHarbour(): void {
 }
 
 /** The single button at the foot of the harbour sheet, whatever it says. */
-const footer = () => screen.getByRole('button', { name: /Weiter zu|ablegen|Verkaufszwang/i })
+const footer = () =>
+  screen.getByRole('button', { name: /Weiter zu|ablegen|Verkaufszwang|Karte wählen/i })
 const noFooter = () =>
-  screen.queryByRole('button', { name: /Weiter zu|ablegen|Verkaufszwang/i }) === null
+  screen.queryByRole('button', {
+    name: /Weiter zu|ablegen|Verkaufszwang|Karte wählen/i,
+  }) === null
 
 /**
  * Follow the Makler to the end of the walk, where departure waits.
@@ -76,6 +79,53 @@ describe('the front page', () => {
     expect((screen.getByText('An Bord gehen') as HTMLButtonElement).disabled).toBe(false)
   })
 
+  /** Open a dropdown and pick the option with this label. */
+  const opener = (control: string) => screen.getByRole('button', { name: control })
+  const choose = (control: string, option: string) => {
+    fireEvent.click(opener(control))
+    const list = screen.getByRole('listbox', { name: control })
+    const row = [...list.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes(option),
+    )
+    if (!row) throw new Error(`no option "${option}" under "${control}"`)
+    fireEvent.click(row)
+  }
+
+  it('works the dropdowns from the keyboard, as a select would have', () => {
+    // Rebuilding a native control means rebuilding what it gave away free.
+    // A dropdown that traps a keyboard user is worse than a plain select
+    // with no descriptions at all.
+    render(<App />)
+    fireEvent.click(screen.getByText('Vollständig'))
+    const control = opener('Konjunktur')
+
+    expect(control.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.keyDown(control, { key: 'ArrowDown' })
+    expect(control.getAttribute('aria-expanded')).toBe('true')
+
+    fireEvent.keyDown(control, { key: 'ArrowDown' })
+    fireEvent.keyDown(control, { key: 'Enter' })
+    expect(control.textContent).toContain('Erweitert')
+    expect(control.getAttribute('aria-expanded')).toBe('false')
+
+    // Escape closes without choosing.
+    fireEvent.keyDown(control, { key: 'ArrowDown' })
+    fireEvent.keyDown(control, { key: 'Home' })
+    fireEvent.keyDown(control, { key: 'Escape' })
+    expect(control.getAttribute('aria-expanded')).toBe('false')
+    expect(control.textContent).toContain('Erweitert')
+  })
+
+  it('shuts a dropdown when the page is clicked elsewhere', () => {
+    render(<App />)
+    fireEvent.click(screen.getByText('Vollständig'))
+    fireEvent.click(opener('Preise'))
+    expect(screen.getByRole('listbox', { name: 'Preise' })).toBeTruthy()
+
+    fireEvent.mouseDown(document.body)
+    expect(screen.queryByRole('listbox', { name: 'Preise' })).toBeNull()
+  })
+
   it('opens the option page on the full path', () => {
     render(<App />)
     fireEvent.click(screen.getByText('Vollständig'))
@@ -86,38 +136,42 @@ describe('the front page', () => {
       expect(screen.getByText(heading), heading).toBeTruthy()
     }
 
-    // Every plan in the registry is offered, the world and the regions
-    // included — the world used to be an "in Vorbereitung" placeholder.
-    const plan = screen.getByLabelText('Spielplan') as HTMLSelectElement
-    const offered = [...plan.options].map((o) => o.text)
-    for (const name of ['Originalplan', 'Ganze Welt', 'Europa', 'Asien und Ozeanien']) {
-      expect(offered, name).toContain(name)
-    }
-    expect([...plan.options].every((o) => !o.disabled)).toBe(true)
-
     // Every mode has a dropdown of its own.
-    for (const label of ['Fahrtweise', 'Sicht', 'Angebot', 'Preise', 'Konjunktur']) {
-      expect((screen.getByLabelText(label) as HTMLSelectElement).tagName, label).toBe('SELECT')
+    for (const label of ['Spielplan', 'Fahrtweise', 'Sicht', 'Angebot', 'Preise', 'Konjunktur']) {
+      expect(opener(label).getAttribute('aria-haspopup'), label).toBe('listbox')
     }
+
+    // Every plan in the registry is offered, the world and the regions
+    // included — the world used to be an "in Vorbereitung" placeholder — and
+    // each explains itself in the list rather than only once chosen.
+    fireEvent.click(opener('Spielplan'))
+    const list = screen.getByRole('listbox', { name: 'Spielplan' })
+    const offered = [...list.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '')
+    for (const name of ['Originalplan', 'Ganze Welt', 'Europa', 'Asien und Ozeanien']) {
+      expect(offered.some((text) => text.includes(name)), name).toBe(true)
+    }
+    expect(offered.every((text) => text.length > 24)).toBe(true)
+    expect([...list.querySelectorAll('button')].every((b) => !b.disabled)).toBe(true)
+    fireEvent.keyDown(opener('Spielplan'), { key: 'Escape' })
 
     // Dauer and Kapital stay sliders: a range is the right control for a number.
     expect((screen.getByLabelText('Runden') as HTMLInputElement).type).toBe('range')
     expect((screen.getByLabelText('Betriebskapital') as HTMLInputElement).type).toBe('range')
 
     // Choosing real time swaps the round count for a pace and a season.
-    fireEvent.change(screen.getByLabelText('Fahrtweise'), { target: { value: 'echtzeit' } })
+    choose('Fahrtweise', 'In Echtzeit')
     expect(screen.queryByLabelText('Runden')).toBeNull()
     expect((screen.getByLabelText('Fahrzeit je Punkt') as HTMLInputElement).type).toBe('range')
     expect((screen.getByLabelText('Länge der Saison') as HTMLInputElement).type).toBe('range')
 
     // Fog has no meaning without real time, so choosing it brings that along.
-    fireEvent.change(screen.getByLabelText('Fahrtweise'), { target: { value: 'wuerfel' } })
+    choose('Fahrtweise', 'Mit Würfel')
     expect(screen.queryByLabelText('Runden')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Sicht'), { target: { value: 'realistisch' } })
-    expect((screen.getByLabelText('Fahrtweise') as HTMLSelectElement).value).toBe('echtzeit')
+    choose('Sicht', 'Realistisch')
+    expect(opener('Fahrtweise').textContent).toContain('In Echtzeit')
 
-    fireEvent.change(screen.getByLabelText('Sicht'), { target: { value: 'normal' } })
-    fireEvent.change(screen.getByLabelText('Fahrtweise'), { target: { value: 'wuerfel' } })
+    choose('Sicht', 'Normal')
+    choose('Fahrtweise', 'Mit Würfel')
     fireEvent.click(screen.getByText('Weiter'))
     expect(
       (screen.getByText('Partie eröffnen').closest('button') as HTMLButtonElement).disabled,
@@ -268,6 +322,22 @@ describe('real-time play in the interface', () => {
     expect(state.phase).toBe('laufend')
     // A clock, not a round track.
     expect(screen.getAllByText('Saison').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Kurs zu setzen/)).toBeTruthy()
+
+    // The walk through the harbour ends at the chart, where a destination has
+    // to be named — so the last button opens the plan. It used to offer
+    // "Ablegen", which in real-time play ends no turn and does nothing.
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Hafen' }))
+    })
+    enterHarbour()
+    const last = walkToDeparture()
+    expect(last.textContent).toBe('Hafen auf der Karte wählen')
+    act(() => {
+      fireEvent.click(last)
+    })
+    // Sheet gone, plan uncovered, and the bar says what to do next.
+    expect(screen.queryByRole('button', { name: 'Hafen auf der Karte wählen' })).toBeNull()
     expect(screen.getByText(/Kurs zu setzen/)).toBeTruthy()
 
     const from = flagship(state.players[0]!).nodeId
