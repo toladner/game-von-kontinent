@@ -451,7 +451,11 @@ export function marketReport(
   // profit is flat and the only question is which is nearest — the best few
   // by score are exactly the right answer.
   if (state.config.preise !== 'entfernung') {
-    return withAwkwardOptions(usable.slice(0, limit), usable, limit, inHold)
+    // Sorted again at the end: making room for the awkward options writes
+    // them in wherever a slot came free, which is no order at all.
+    return [...withAwkwardOptions(usable.slice(0, limit), usable, limit, inHold)].sort(
+      (a, b) => score(b) - score(a),
+    )
   }
 
   /*
@@ -473,32 +477,50 @@ export function marketReport(
 }
 
 /**
- * Make room for a harbour that will not take the whole hold.
+ * Make room for harbours that will not take the whole hold.
  *
- * Ranking by what a place pays quietly favours the harbours that buy
- * everything, and a chart made only of those turns the decision into "which
- * of these six is nearest". A port that takes one posten of two is a
- * different kind of choice — sell the tea here and carry the wool on, or hold
- * both for somewhere that wants the pair — and it is worth one slot even when
- * the arithmetic likes it less.
+ * Ranking by what a place pays quietly favours the ports that buy everything,
+ * and a chart made only of those turns the decision into "which of these is
+ * nearest". A port that takes one posten of two is a different kind of choice
+ * — sell the tea here and carry the wool on, or hold both for somewhere that
+ * wants the pair — and it is worth a place even when the arithmetic likes it
+ * less. Two of them, so the awkward option is a real branch to weigh rather
+ * than a single oddity easily read as a mistake.
  *
- * Only when the hold actually has something to split, and only when the
- * chart has not already offered one.
+ * Only when the hold actually has something to split, and only as far as the
+ * chart has not already offered them by itself.
  */
 function withAwkwardOptions(
   chosen: readonly Destination[],
   candidates: readonly Destination[],
   limit: number,
   held: number,
+  want = 2,
 ): readonly Destination[] {
   if (held < 2 || chosen.length === 0) return chosen
-  if (chosen.some((d) => d.sellable < held)) return chosen
+  const missing = want - chosen.filter((d) => d.sellable < held).length
+  if (missing <= 0) return chosen
 
-  const partial = candidates.find((d) => d.sellable > 0 && d.sellable < held)
-  if (!partial) return chosen
-  // Candidates arrive best-first, so this is the best of its kind. It takes
-  // the last slot rather than displacing the harbour at the top.
-  return chosen.length < limit ? [...chosen, partial] : [...chosen.slice(0, -1), partial]
+  const taken = new Set(chosen.map((d) => d.portId))
+  // Candidates arrive best-first, so these are the best of their kind.
+  const extras = candidates
+    .filter((d) => d.sellable > 0 && d.sellable < held && !taken.has(d.portId))
+    .slice(0, missing)
+  if (extras.length === 0) return chosen
+
+  const out = [...chosen]
+  for (const extra of extras) {
+    if (out.length < limit) {
+      out.push(extra)
+      continue
+    }
+    // Displace the last harbour that would buy the whole hold, so the obvious
+    // answer keeps the top of the list and only its spare copies give way.
+    const victim = out.map((d) => d.sellable >= held).lastIndexOf(true)
+    if (victim < 0) break
+    out[victim] = extra
+  }
+  return out
 }
 
 /**

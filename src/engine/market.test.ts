@@ -268,6 +268,16 @@ describe('Konjunktur "erweitert"', () => {
 })
 
 describe('the Wohin? list under distance pricing', () => {
+  /** Fill the hold to the harbour's limit — two posten, so it can be split. */
+  const vollBeladen = (options: NewGameOptions) => {
+    let s = table(options)
+    const portId = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    for (const offer of buyOffers(ctx, s, s.players[0]!, portId).filter((o) => o.status === 'ok')) {
+      s = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
+    }
+    return s
+  }
+
   /** Load a hold, then see what the chart offers. */
   const laden = (options: NewGameOptions) => {
     const s = table(options)
@@ -310,15 +320,65 @@ describe('the Wohin? list under distance pricing', () => {
     }
   })
 
+  it('always offers two harbours that will not take the whole hold', () => {
+    // Ranking by what a place pays favours the ports that buy everything, and
+    // a chart made only of those is just "which of these is nearest". Two, not
+    // one: a single oddity in a list of six reads as a mistake rather than a
+    // branch worth weighing.
+    for (const preise of ['fest', 'entfernung'] as const) {
+      const s = vollBeladen({ preise })
+      const held = flagship(s.players[0]!).cargo.length
+      expect(held, preise).toBeGreaterThan(1)
+
+      const rows = marketReport(ctx, s, s.players[0]!, 6)
+      const partial = rows.filter((d) => d.sellable < held)
+      expect(partial.length, `${preise}: partial options`).toBe(2)
+      // And they are real options, not empty ones.
+      for (const row of partial) expect(row.sellable, row.name).toBeGreaterThan(0)
+    }
+  })
+
+  it('does not go looking for awkward options with one posten aboard', () => {
+    // With a single good there is nothing to split, so every harbour either
+    // takes it or is not on the list at all.
+    const s = table({ preise: 'entfernung' })
+    const portId = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    const offer = buyOffers(ctx, s, s.players[0]!, portId).find((o) => o.status === 'ok')!
+    const one = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
+    expect(flagship(one.players[0]!).cargo).toHaveLength(1)
+
+    for (const row of marketReport(ctx, one, one.players[0]!, 6)) {
+      expect(row.sellable, row.name).toBe(1)
+    }
+  })
+
+  it('keeps the list in one order after making room', () => {
+    // Displacing a full-sale harbour writes the newcomer in wherever a slot
+    // came free, which is no order at all until it is sorted again.
+    const s = vollBeladen({})
+    const rows = marketReport(ctx, s, s.players[0]!, 6)
+    for (let i = 1; i < rows.length; i++) {
+      const before = rows[i - 1]!
+      const row = rows[i]!
+      expect(
+        before.profit > row.profit || before.distance <= row.distance,
+        `${before.name} then ${row.name}`,
+      ).toBe(true)
+    }
+  })
+
   it('leaves the fixed-price list alone, where nearness is the whole question', () => {
     // Every harbour pays the same figure, so a far one is strictly worse and
     // padding the list with distance would be noise.
-    const s = laden({})
+    const s = vollBeladen({})
+    const held = flagship(s.players[0]!).cargo.length
     const report = marketReport(ctx, s, s.players[0]!, 6)
-    const profits = new Set(report.map((d) => d.profit))
-    expect(profits.size).toBe(1)
-    for (let i = 1; i < report.length; i++) {
-      expect(report[i]!.distance).toBeGreaterThanOrEqual(report[i - 1]!.distance)
+    // Every harbour that takes the whole hold pays exactly the same figure,
+    // so among those only nearness can separate them.
+    const full = report.filter((d) => d.sellable === held)
+    expect(new Set(full.map((d) => d.profit)).size).toBe(1)
+    for (let i = 1; i < full.length; i++) {
+      expect(full[i]!.distance).toBeGreaterThanOrEqual(full[i - 1]!.distance)
     }
   })
 })

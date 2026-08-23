@@ -333,6 +333,9 @@ describe('real-time play in the interface', () => {
     enterHarbour()
     const last = walkToDeparture()
     expect(last.textContent).toBe('Hafen auf der Karte wählen')
+    // Opening the plan is not the end of anything — the voyage is still
+    // unchosen — so it does not carry the weight of a finishing move.
+    expect(last.className).not.toContain('btn-primary')
     act(() => {
       fireEvent.click(last)
     })

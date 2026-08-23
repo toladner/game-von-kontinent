@@ -200,7 +200,16 @@ export function PortSheet({
         ) : (
         <button
           className={`btn w-full text-base ${
-            confirmEmpty ? 'btn-warn' : next || laden ? 'btn-primary' : ''
+            confirmEmpty
+              ? 'btn-warn'
+              : // Opening the plan is not the end of anything — the voyage is
+                // still unchosen — so it does not get the weight of a
+                // finishing move.
+                onShowMap && !next
+                ? ''
+                : next || laden
+                  ? 'btn-primary'
+                  : ''
           }`}
           onClick={() => {
             // One button, one path: on through the harbour, and out of it at
