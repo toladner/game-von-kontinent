@@ -41,6 +41,10 @@ export interface VehicleInstance {
   /**
    * The node the ship came from. "Ein Pendeln der Schiffe ... ist verboten" -
    * a ship may not turn around on the spot, so this edge is barred next step.
+   *
+   * Cleared on arrival in a harbour: "die Reiseroute bleibt dem Spieler
+   * überlassen", and a captain who has paid for a full port call may put about
+   * and leave the way they came. Only the flinch at sea stays forbidden.
    */
   readonly cameFrom: NodeId | null
   /** Turns still to be sat out, e.g. after ramming another ship. */

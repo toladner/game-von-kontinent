@@ -1,7 +1,7 @@
 import { goodOf, portOf, type EngineContext } from './context'
 import { flagship, type GameState, type PlayerState } from './state'
-import { buyOffers, marketReport, saleQuotes, verkaufszwangOpen } from './selectors'
-import type { PortId } from './types'
+import { buyOffers, marketReport, portAt, saleQuotes, verkaufszwangOpen } from './selectors'
+import type { KonjunkturCard, PortId } from './types'
 
 /**
  * The round the Kontormakler walks you through a harbour.
@@ -233,6 +233,95 @@ const OFFERS = [
   'Wenn Sie nicht wissen, was zu tun ist: ich bin gleich hier.',
   'Man schickt mich zu jedem fremden Schiff. Heute also zu Ihnen.',
 ] as const
+
+// ---------------------------------------------------------------------------
+// The Konjunktur
+// ---------------------------------------------------------------------------
+
+export interface CardOutcome {
+  /** The one line worth reading: "Sie erhalten 15.000." */
+  readonly headline: string
+  /** Who else it touches, and for how long. */
+  readonly detail: string
+  readonly tone: 'gut' | 'schlecht' | 'neutral'
+}
+
+/**
+ * What a Konjunkturkarte just did to the player who turned it.
+ *
+ * The printed card states a rule ("Verkaufspreise + 20 %"), not a consequence,
+ * and the money moves without anyone pressing anything — so a player could be
+ * charged a Steuer and never work out where their cash went. This says the
+ * consequence in the second person, in figures, for the house that drew it.
+ *
+ * Derived from the effects rather than the printed lines, so a content pack
+ * that adds a card gets an explanation for free.
+ */
+export function konjunkturOutcome(
+  ctx: EngineContext,
+  player: PlayerState,
+  card: KonjunkturCard,
+): CardOutcome {
+  const held = flagship(player).cargo.reduce((sum, item) => sum + item.pricePaid, 0)
+  const inPort = portAt(ctx, flagship(player).nodeId) !== null
+
+  for (const effect of card.effects) {
+    switch (effect.kind) {
+      case 'payoutToDrawer':
+        return {
+          headline: `Sie erhalten ${money(effect.amount)}.`,
+          detail: 'Eine telegrafische Überweisung an Ihr Kontor. Sonst ändert sich nichts.',
+          tone: 'gut',
+        }
+
+      case 'feeForDrawer':
+        return {
+          headline: `Sie zahlen ${money(effect.amount)}.`,
+          detail: 'Entladegeld, nur für Ihr Schiff. Die Mitspieler bleiben verschont.',
+          tone: 'schlecht',
+        }
+
+      case 'portFeeAllInPort':
+        return {
+          headline: inPort ? `Sie zahlen ${money(effect.amount)}.` : 'Sie zahlen nichts.',
+          detail: inPort
+            ? 'Hafengebühr — fällig für jedes Schiff, das gerade in einem Hafen liegt.'
+            : 'Hafengebühr trifft nur Schiffe, die in einem Hafen liegen. Ihres liegt auf See.',
+          tone: inPort ? 'schlecht' : 'neutral',
+        }
+
+      case 'leviedOnAllShips': {
+        const due = Math.round((held * effect.percentOfCargoValue) / 100)
+        const label = effect.levy === 'steuer' ? 'Steuer' : 'Versicherung'
+        return {
+          headline: due > 0 ? `Sie zahlen ${money(due)}.` : 'Sie zahlen nichts.',
+          detail:
+            due > 0
+              ? `${label}: ${effect.percentOfCargoValue} % vom Warenwert Ihrer Ladung (${money(held)}). Gilt für alle Mitspieler.`
+              : `${label} bemißt sich am Warenwert an Bord — Ihr Laderaum ist leer, also bleibt es bei null.`,
+          tone: due > 0 ? 'schlecht' : 'neutral',
+        }
+      }
+
+      case 'salePriceDelta': {
+        const up = effect.percent > 0
+        return {
+          headline: `Verkaufspreise ${up ? '+' : '−'}${Math.abs(effect.percent)} %.`,
+          detail: up
+            ? 'Hausse: alles, was Sie in diesem Hafen absetzen, bringt entsprechend mehr.'
+            : 'Baisse: was Sie in diesem Hafen absetzen, bringt entsprechend weniger. Aufheben ist erlaubt.',
+          tone: up ? 'gut' : 'schlecht',
+        }
+      }
+    }
+  }
+
+  return {
+    headline: 'Die Börse schweigt.',
+    detail: 'Diese Karte kostet Sie nichts und bringt Ihnen nichts.',
+    tone: 'neutral',
+  }
+}
 
 export function harbourGreeting(
   ctx: EngineContext,

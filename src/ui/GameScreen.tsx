@@ -11,6 +11,7 @@ import { FleetSheet } from './FleetSheet'
 import { PigeonSheet } from './PigeonSheet'
 import { formatMoney, PLAYER_COLORS, playerLabel, useGame, type LogLine } from '@app/store'
 import { arrivalAt, legalSteps, marketReport, portAt, standings } from '@engine/selectors'
+import { konjunkturOutcome, type HarbourStep } from '@engine/advice'
 import {
   cargoValue,
   flagship,
@@ -22,7 +23,16 @@ import type { EngineContext } from '@engine/context'
 import { clockText, durationText, untilText, useNow } from './useNow'
 import { PLAYER_COLORS as COLORS } from '@app/store'
 
-type SheetKind = 'port' | 'kontor' | 'runde' | 'konjunktur' | 'ende' | 'flotte' | 'taube' | null
+type SheetKind =
+  | 'port'
+  | 'kontor'
+  | 'runde'
+  | 'konjunktur'
+  | 'ende'
+  | 'flotte'
+  | 'taube'
+  | 'nachrichten'
+  | null
 
 export function GameScreen() {
   const ctx = useGame((s) => s.ctx)
@@ -31,11 +41,16 @@ export function GameScreen() {
   const notice = useGame((s) => s.notice)
   const dismiss = useGame((s) => s.dismissNotice)
   const log = useGame((s) => s.log)
+  const newsSeen = useGame((s) => s.newsSeen)
+  const markNewsRead = useGame((s) => s.markNewsRead)
   const abandon = useGame((s) => s.abandon)
 
   const acting = useGame((s) => s.acting())
   const setActing = useGame((s) => s.setActing)
   const net = useGame((s) => s.net)
+  const myTurn = useGame((s) => s.myTurn())
+  const focus = useGame((s) => s.focus)
+  const announceFocus = useGame((s) => s.announceFocus)
 
   const realtime = state.config.travel === 'echtzeit'
   const now = useNow(1000, realtime)
@@ -97,10 +112,23 @@ export function GameScreen() {
     return () => clearTimeout(t)
   }, [notice, dismiss])
 
+  const unread = useMemo(() => log.filter((l) => l.id > newsSeen).length, [log, newsSeen])
+
+  /**
+   * Where the unread mark sat when the sheet was opened. Opening marks
+   * everything read, so without this the "neu" rules would vanish in the same
+   * frame the player went to look at them.
+   */
+  const [newsMark, setNewsMark] = useState(0)
+
   const open = (k: SheetKind) => {
     setKind(k)
-    // Buying and selling wants the whole sheet; the rest is a glance.
-    setSnap(k === 'port' ? 'full' : 'peek')
+    // Buying and selling wants the whole sheet; the news wants room to read.
+    setSnap(k === 'port' || k === 'nachrichten' ? 'full' : 'peek')
+    if (k === 'nachrichten') {
+      setNewsMark(newsSeen)
+      markNewsRead()
+    }
   }
   const close = (s: SheetSnap) => {
     if (s === 'closed') setKind(null)
@@ -111,6 +139,10 @@ export function GameScreen() {
     () => marketReport(ctx, player, 5).map((d) => d.portId),
     [ctx, player],
   )
+
+  // Who is winning, recomputed wherever it is shown so the HUD badge and the
+  // Kontor table can never disagree.
+  const table = useMemo(() => standings(state), [state])
 
   // Recentre the plan whenever the turn passes or another ship takes the helm,
   // so nobody has to go looking for their own vessel.
@@ -154,8 +186,10 @@ export function GameScreen() {
               ? state.config.maxPurchasesPerPort - flagship(player).purchasesThisVisit.length
               : null
           }
+          rank={table.find((r) => r.player.id === player.id)?.rank ?? null}
           onOpen={() => open('kontor')}
         />
+        <NewsPill unread={unread} onOpen={() => open('nachrichten')} />
         <FleetPill
           count={player.fleet.length}
           waiting={waitingMail}
@@ -218,6 +252,15 @@ export function GameScreen() {
           onLeave={() => dispatch({ type: 'endTurn' })}
           greeting={greeting}
           onEnter={() => setGreeting(false)}
+          // Online, a watcher rides along on the active player's panel; the
+          // one holding the wheel reports theirs instead. Offline there is
+          // only one screen, so neither applies.
+          followTab={
+            net && !myTurn && focus?.playerId === player.id
+              ? (focus.step as HarbourStep)
+              : null
+          }
+          onTabChange={net && myTurn ? (t) => announceFocus(t) : undefined}
           markedPort={marked?.portId ?? null}
           onLookAt={(to) => {
             // Get out of the way first, then go and find it: the sheet slides
@@ -266,15 +309,10 @@ export function GameScreen() {
       )}
 
       {kind === 'kontor' && (
-        <KontorSheet
-          ctx={ctx}
-          state={state}
-          player={player}
-          log={log}
-          snap={snap}
-          onSnap={close}
-        />
+        <KontorSheet ctx={ctx} state={state} player={player} snap={snap} onSnap={close} />
       )}
+
+      {kind === 'nachrichten' && <NewsSheet log={log} sinceId={newsMark} snap={snap} onSnap={close} />}
 
       {kind === 'runde' &&
         (realtime ? (
@@ -294,6 +332,7 @@ export function GameScreen() {
         <KonjunkturSheet
           ctx={ctx}
           state={state}
+          player={player}
           snap={snap}
           onSnap={close}
           onDraw={() => dispatch({ type: 'drawKonjunktur' })}
@@ -332,6 +371,32 @@ function FleetPill({
       {waiting > 0 && (
         <span className="bg-rot absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold text-white">
           {waiting}
+        </span>
+      )}
+    </button>
+  )
+}
+
+/**
+ * The Börsenblatt, folded into a pill. Tap for everything that has happened.
+ *
+ * The journal used to sit behind the Kontor's third tab, where nobody found
+ * it, so a Konjunkturkarte could take 15.000 off a player without them ever
+ * learning why. Out here it counts what you have not read yet.
+ */
+function NewsPill({ unread, onOpen }: { unread: number; onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      className="paper anim-rise pointer-events-auto relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 shadow-lg"
+      aria-label={`Nachrichten${unread > 0 ? `, ${unread} ungelesen` : ''}`}
+    >
+      <span className="text-base leading-none" aria-hidden>
+        📰
+      </span>
+      {unread > 0 && (
+        <span className="bg-rot absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold text-white">
+          {unread > 99 ? '99+' : unread}
         </span>
       )}
     </button>
@@ -628,18 +693,16 @@ function KontorSheet({
   ctx,
   state,
   player,
-  log,
   snap,
   onSnap,
 }: {
   ctx: EngineContext
   state: GameState
   player: PlayerState
-  log: LogLine[]
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
 }) {
-  const [tab, setTab] = useState<'kasse' | 'wohin' | 'journal'>('kasse')
+  const [tab, setTab] = useState<'kasse' | 'wohin'>('kasse')
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
   const worth = useCountUp(netWorth(player))
   const report = useMemo(() => marketReport(ctx, player, 6), [ctx, player])
@@ -658,7 +721,6 @@ function KontorSheet({
         items={[
           { id: 'kasse', label: 'Kasse' },
           { id: 'wohin', label: 'Wohin?' },
-          { id: 'journal', label: 'Journal' },
         ]}
       />
 
@@ -688,51 +750,12 @@ function KontorSheet({
             </ul>
           )}
 
-          <h3 className="smallcaps text-ink-soft mt-4 mb-1.5 text-[11px]">Die Konkurrenz</h3>
-          <ul className="space-y-1 text-[12px]">
-            {state.players
-              .filter((p) => p.id !== player.id)
-              .map((p) => {
-                const c = PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!
-                return (
-                  <li key={p.id} className="flex items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/30"
-                      style={{ background: c.ink }}
-                    />
-                    <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                    <span className="tnum text-ink-soft">
-                      {netWorth(p).toLocaleString('de-DE')}
-                    </span>
-                  </li>
-                )
-              })}
-          </ul>
+          <h3 className="smallcaps text-ink-soft mt-4 mb-1.5 text-[11px]">Die Rangliste</h3>
+          <Rangliste state={state} highlight={player.id} />
         </div>
       )}
 
       {tab === 'wohin' && <MarketReport ctx={ctx} report={report} cargo={flagship(player).cargo.length} />}
-
-      {tab === 'journal' && (
-        <ul className="anim-fade space-y-1.5 text-[12px] leading-snug">
-          {log.slice(0, 60).map((line) => (
-            <li
-              key={line.id}
-              className={
-                line.tone === 'gut'
-                  ? 'text-press'
-                  : line.tone === 'schlecht'
-                    ? 'text-rot'
-                    : line.tone === 'wichtig'
-                      ? 'font-semibold'
-                      : 'text-ink-soft'
-              }
-            >
-              {line.text}
-            </li>
-          ))}
-        </ul>
-      )}
     </Sheet>
   )
 }
@@ -780,20 +803,32 @@ function RoundSheet({
   )
 }
 
+/**
+ * The red field: turn a card, then be told plainly what it cost or paid.
+ *
+ * The card alone was not enough. It states a rule in 1950s bank German and the
+ * money moves on its own, so a player could be charged a Steuer and never
+ * connect the two. Now the card turns over on screen — the motion is what says
+ * "this happened to you" — and under it sits the consequence in figures.
+ */
 function KonjunkturSheet({
   ctx,
   state,
+  player,
   snap,
   onSnap,
   onDraw,
 }: {
   ctx: EngineContext
   state: GameState
+  player: PlayerState
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
   onDraw: () => void
 }) {
   const card = state.pendingCard ? ctx.cardsById.get(state.pendingCard.cardId) : null
+  const outcome = card ? konjunkturOutcome(ctx, player, card) : null
+
   return (
     <Sheet
       snap={snap}
@@ -809,8 +844,36 @@ function KonjunkturSheet({
       }
     >
       {card ? (
-        <div className="anim-deal">
-          <KonjunkturSlip card={card} />
+        <div className="flip-scene">
+          <div className="anim-flip">
+            <KonjunkturSlip card={card} />
+          </div>
+
+          {outcome && (
+            <div
+              className={`anim-rise mt-4 rounded-sm border-l-4 px-3 py-2.5 ${
+                outcome.tone === 'gut'
+                  ? 'paper-slip border-l-press'
+                  : outcome.tone === 'schlecht'
+                    ? 'border-l-rot bg-rot/8'
+                    : 'paper-card border-l-ink/30'
+              }`}
+              style={{ animationDelay: '520ms' }}
+            >
+              <p
+                className={`text-[17px] leading-tight font-bold ${
+                  outcome.tone === 'gut'
+                    ? 'press-dark'
+                    : outcome.tone === 'schlecht'
+                      ? 'text-rot'
+                      : ''
+                }`}
+              >
+                {outcome.headline}
+              </p>
+              <p className="text-ink-soft mt-1 text-[13px] leading-snug">{outcome.detail}</p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="paper-slip mx-auto grid h-36 w-60 place-items-center rounded-[2px] shadow-md">
@@ -832,7 +895,6 @@ function FinalSheet({
   onSnap: (s: SheetSnap) => void
   onNew: () => void
 }) {
-  const table = useMemo(() => standings(state), [state])
   return (
     <Sheet
       snap={snap}
@@ -845,20 +907,220 @@ function FinalSheet({
         </button>
       }
     >
-      <ol className="stagger space-y-2">
-        {table.map((row) => (
-          <li key={row.player.id} className="paper-card flex items-center gap-3 rounded-sm p-2.5">
-            <span className="display w-6 text-center text-xl">{row.rank}</span>
-            <Portrait traits={row.player.persona.portrait} size={40} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{row.player.name}</p>
-              <p className="text-ink-soft truncate text-[11px]">{playerLabel(row.player)}</p>
-            </div>
-            <span className="tnum text-sm font-bold">{formatMoney(row.worth)}</span>
-          </li>
-        ))}
-      </ol>
+      <Rangliste state={state} size="gross" />
     </Sheet>
+  )
+}
+
+/**
+ * The Börsenblatt: everything that has happened, newest first.
+ *
+ * This is the same log that used to hide behind the Kontor's third tab, but
+ * read as a newspaper rather than a debug trace — larger type, the round
+ * headings standing clear of the entries under them, and anything that
+ * arrived since the last look ruled off down the left. Money moves in this
+ * game without the player touching anything, and the only honest fix for
+ * "what just happened to my cash" is somewhere that says so.
+ */
+function NewsSheet({
+  log,
+  sinceId,
+  snap,
+  onSnap,
+}: {
+  log: LogLine[]
+  /** Entries above this id are new since the sheet was last opened. */
+  sinceId: number
+  snap: SheetSnap
+  onSnap: (s: SheetSnap) => void
+}) {
+  const fresh = log.filter((l) => l.id > sinceId).length
+  const rounds = useMemo(() => groupByRound(log), [log])
+
+  // The current round is the one you came to read; older ones fold away so a
+  // fifty-round game does not become a scroll to nowhere.
+  const [openRounds, setOpenRounds] = useState<Record<string, boolean>>({})
+  const isOpen = (key: string, first: boolean) => openRounds[key] ?? first
+
+  return (
+    <Sheet
+      snap={snap}
+      onSnap={onSnap}
+      title="Nachrichten"
+      subtitle={
+        log.length === 0
+          ? 'Noch ist nichts eingegangen'
+          : fresh > 0
+            ? `${fresh} neu · ${log.length} insgesamt`
+            : `${log.length} Meldungen`
+      }
+    >
+      {log.length === 0 ? (
+        <p className="text-ink-soft py-6 text-center text-[13px]">
+          Sobald gewürfelt, gehandelt und angelandet wird, steht es hier.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {rounds.map((group, i) => {
+            const open = isOpen(group.key, i === 0)
+            const neu = group.lines.filter((l) => l.id > sinceId).length
+            return (
+              <section key={group.key}>
+                <button
+                  type="button"
+                  className="focusable flex w-full items-center gap-2 border-b border-black/10 py-1 text-left"
+                  onClick={() => setOpenRounds((o) => ({ ...o, [group.key]: !open }))}
+                  aria-expanded={open}
+                >
+                  <span
+                    className={`text-ink-soft shrink-0 text-[10px] transition-transform ${open ? 'rotate-90' : ''}`}
+                    aria-hidden
+                  >
+                    ▶
+                  </span>
+                  <span className="smallcaps flex-1 text-[11px] tracking-[0.2em]">
+                    {group.title}
+                  </span>
+                  {neu > 0 && (
+                    <span className="bg-gold/25 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                      {neu} neu
+                    </span>
+                  )}
+                  <span className="text-ink-faint tnum text-[10px]">{group.lines.length}</span>
+                </button>
+
+                {open && (
+                  <ol className="anim-fade mt-0.5 space-y-px">
+                    {group.lines.map((line) => (
+                      <li
+                        key={line.id}
+                        className={
+                          line.id > sinceId
+                            ? 'border-gold border-l-2 pl-2'
+                            : 'border-l-2 border-transparent pl-2'
+                        }
+                      >
+                        <p
+                          className={`py-0.5 text-[13px] leading-snug ${
+                            line.tone === 'gut'
+                              ? 'text-press'
+                              : line.tone === 'schlecht'
+                                ? 'text-rot'
+                                : line.tone === 'wichtig'
+                                  ? 'font-semibold'
+                                  : ''
+                          }`}
+                        >
+                          {line.text}
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+            )
+          })}
+        </div>
+      )}
+    </Sheet>
+  )
+}
+
+/**
+ * Fold the flat log into one section per round.
+ *
+ * The log runs newest first, and a "Runde N" line is written when that round
+ * opens — so in this order a round's heading arrives *after* the entries that
+ * belong to it. Anything above the first heading is the round in progress.
+ */
+function groupByRound(log: LogLine[]): { key: string; title: string; lines: LogLine[] }[] {
+  const groups: { key: string; title: string; lines: LogLine[] }[] = []
+  let pending: LogLine[] = []
+
+  for (const line of log) {
+    const heading = /^Runde \d+/.exec(line.text)
+    if (heading) {
+      groups.push({ key: `r${line.id}`, title: line.text.replace(/\.$/, ''), lines: pending })
+      pending = []
+    } else {
+      pending.push(line)
+    }
+  }
+  if (pending.length > 0) {
+    groups.unshift({ key: 'laufend', title: 'Laufende Runde', lines: pending })
+  }
+  return groups.filter((g) => g.lines.length > 0)
+}
+
+/**
+ * Who is winning, in order, with the places written out.
+ *
+ * The Kontor used to list only the other houses, unsorted, so working out
+ * where you stood meant reading every figure and doing the comparison in your
+ * head. The placing is the question players actually ask; the money is the
+ * footnote. Shown small in the Kontor and large at the Schlußabrechnung, but
+ * from one component so the two can never fall out of step.
+ */
+function Rangliste({
+  state,
+  highlight,
+  size = 'klein',
+}: {
+  state: GameState
+  /** Draws this house's row out of the list — normally the one reading it. */
+  highlight?: string
+  size?: 'klein' | 'gross'
+}) {
+  const table = useMemo(() => standings(state), [state])
+  const gross = size === 'gross'
+
+  return (
+    <ol className={gross ? 'stagger space-y-2' : 'space-y-0.5'}>
+      {table.map((row) => {
+        const color = PLAYER_COLORS[row.player.colorIndex % PLAYER_COLORS.length]!
+        const you = row.player.id === highlight
+        return (
+          <li
+            key={row.player.id}
+            className={`flex items-center gap-2 rounded-sm ${
+              gross ? 'paper-card p-2.5' : `px-1.5 py-1 ${you ? 'bg-ink/8' : ''}`
+            }`}
+          >
+            <span
+              className={`tnum shrink-0 text-right ${
+                gross ? 'display w-6 text-xl' : 'w-4 text-[13px] font-bold'
+              }`}
+            >
+              {row.rank}.
+            </span>
+            {gross ? (
+              <Portrait traits={row.player.persona.portrait} size={40} />
+            ) : (
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/30"
+                style={{ background: color.ink }}
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <p
+                className={`truncate ${
+                  gross ? 'text-sm font-semibold' : `text-[13px] ${you ? 'font-bold' : ''}`
+                }`}
+              >
+                {row.player.name}
+                {you && !gross && <span className="text-ink-soft font-normal"> · Sie</span>}
+              </p>
+              {gross && (
+                <p className="text-ink-soft truncate text-[11px]">{playerLabel(row.player)}</p>
+              )}
+            </div>
+            <span className={`tnum font-bold ${gross ? 'text-sm' : 'text-[13px]'}`}>
+              {gross ? formatMoney(row.worth) : row.worth.toLocaleString('de-DE')}
+            </span>
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 

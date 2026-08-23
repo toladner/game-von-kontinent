@@ -31,6 +31,7 @@ type ServerMessage =
   | { t: 'append'; actions: GameAction[]; from: number }
   | { t: 'view'; state: GameState }
   | { t: 'presence'; online: string[] }
+  | { t: 'focus'; playerId: string; step: string }
   | { t: 'error'; reason: string }
   | { t: 'pong' }
 
@@ -40,6 +41,8 @@ export interface SessionHandlers {
   /** Under fog the server sends a finished view instead of the log. */
   onView: (state: GameState) => void
   onPresence: (online: string[]) => void
+  /** Which harbour panel another seat is looking at. Presence, not state. */
+  onFocus: (playerId: string, step: string) => void
   onError: (reason: string) => void
   onStatus: (status: ConnectionStatus) => void
 }
@@ -147,6 +150,9 @@ export class Session {
         case 'presence':
           this.handlers.onPresence(message.online)
           return
+        case 'focus':
+          this.handlers.onFocus(message.playerId, message.step)
+          return
         case 'error':
           this.handlers.onError(message.reason)
           return
@@ -170,6 +176,15 @@ export class Session {
     if (this.socket?.readyState !== WebSocket.OPEN) return false
     this.socket.send(JSON.stringify({ t: 'action', action }))
     return true
+  }
+
+  /**
+   * Tell the table which panel of the harbour round we are on. Fire and
+   * forget: a dropped focus costs nothing, so it is never queued or retried.
+   */
+  sendFocus(step: string): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return
+    this.socket.send(JSON.stringify({ t: 'focus', step }))
   }
 
   close(): void {

@@ -69,6 +69,18 @@ interface Store {
    */
   truth: GameState | null
   log: LogLine[]
+  /**
+   * The highest log id the player has actually looked at. Everything above it
+   * is unread, which is what puts the number on the Nachrichten pill — the
+   * journal was previously buried two taps deep and simply never read.
+   */
+  newsSeen: number
+  /**
+   * Which panel of the harbour round another seat is looking at, so watchers
+   * can follow the player whose turn it is. Presence only — it never enters
+   * the action log, because it is not part of the game.
+   */
+  focus: { readonly playerId: string; readonly step: string } | null
   /** Events from the most recent action, for animations and flashes. */
   lastEvents: readonly GameEvent[]
   notice: string | null
@@ -91,6 +103,10 @@ interface Store {
   resume: () => boolean
   abandon: () => void
   dismissNotice: () => void
+  /** Called when the Nachrichten sheet is opened: everything is now read. */
+  markNewsRead: () => void
+  /** Tell the other seats which harbour panel we are on. No-op offline. */
+  announceFocus: (step: string) => void
   setActing: (playerId: string) => void
   /** True when this device may act right now. */
   myTurn: () => boolean
@@ -200,6 +216,8 @@ export const useGame = create<Store>((set, get) => ({
   state: null,
   truth: null,
   log: [],
+  newsSeen: 0,
+  focus: null,
   lastEvents: [],
   notice: null,
   net: null,
@@ -255,6 +273,7 @@ export const useGame = create<Store>((set, get) => ({
           tone: 'wichtig',
         },
       ],
+      newsSeen: 0,
       lastEvents: [],
       notice: null,
     })
@@ -281,7 +300,7 @@ export const useGame = create<Store>((set, get) => ({
     session?.close()
     // A networked game is never saved locally; the server holds the log.
     saved = null
-    set({ state: null, log: [], lastEvents: [], notice: null, net: { code, status: 'verbindet', playerId: null, online: [] } })
+    set({ state: null, log: [], newsSeen: 0, lastEvents: [], notice: null, net: { code, status: 'verbindet', playerId: null, online: [] } })
 
     session = new Session(code, name, gender, {
       onStatus: (status) =>
@@ -333,6 +352,7 @@ export const useGame = create<Store>((set, get) => ({
       },
 
       onPresence: (online) => set((s) => ({ net: s.net ? { ...s.net, online } : s.net })),
+      onFocus: (playerId, step) => set({ focus: { playerId, step } }),
       onError: (reason) => set({ notice: reason }),
     })
     session.connect()
@@ -450,6 +470,7 @@ export const useGame = create<Store>((set, get) => ({
         state: projectFor(state, state.players[0]?.id ?? null),
         truth: state,
         log: [],
+        newsSeen: 0,
         lastEvents: [],
         notice: null,
         net: null,
@@ -477,6 +498,7 @@ export const useGame = create<Store>((set, get) => ({
       state: null,
       truth: null,
       log: [],
+      newsSeen: 0,
       lastEvents: [],
       notice: null,
       net: null,
@@ -486,6 +508,15 @@ export const useGame = create<Store>((set, get) => ({
 
   dismissNotice() {
     set({ notice: null })
+  },
+
+  markNewsRead() {
+    // The log is newest-first, so its head is the high-water mark.
+    set((s) => ({ newsSeen: s.log[0]?.id ?? s.newsSeen }))
+  },
+
+  announceFocus(step) {
+    session?.sendFocus(step)
   },
 }))
 

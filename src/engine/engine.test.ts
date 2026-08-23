@@ -133,6 +133,72 @@ describe('a turn', () => {
     expect(s.movement).toBeNull()
     expect(['port', 'konjunktur', 'endOfTurn']).toContain(s.phase)
   })
+
+  /**
+   * Sail on, taking the first legal line each time, until somebody is standing
+   * in a harbour with the wheel in their hands.
+   */
+  function sailUntilPort(start: GameState): GameState {
+    // Everyone begins tied up in their home port with cameFrom already null,
+    // so cast off first — otherwise this returns before a single line is
+    // sailed and proves nothing.
+    let s = start
+    while (s.phase === 'port') s = applyAction(ctx, s, { type: 'endTurn' }).state
+
+    for (let guard = 0; guard < 400 && s.phase !== 'port'; guard++) {
+      const player = s.players[s.activeIndex]!
+      switch (s.phase) {
+        case 'roll':
+          s = applyAction(ctx, s, { type: 'roll' }).state
+          break
+        case 'move':
+          s = applyAction(ctx, s, { type: 'step', to: legalSteps(ctx, player)[0]! }).state
+          break
+        case 'konjunktur':
+          s = applyAction(ctx, s, { type: 'drawKonjunktur' }).state
+          break
+        default:
+          s = applyAction(ctx, s, { type: 'endTurn' }).state
+      }
+    }
+    return s
+  }
+
+  it('lets a ship put about once it has made port', () => {
+    // "Die Reiseroute ... bleibt dem Spieler überlassen." A full port call
+    // earns the right to leave the way you came in; only the flinch at sea is
+    // forbidden. Before this, cameFrom survived the visit and the ship was
+    // shoved onward whether the captain liked it or not.
+    const inPort = sailUntilPort(seated(['Ada', 'Bo'], { seed: 'kehrtwende' }))
+    expect(inPort.phase).toBe('port')
+
+    const player = inPort.players[inPort.activeIndex]!
+    const ship = flagship(player)
+    expect(portAt(ctx, ship.nodeId)).toBeTruthy()
+    expect(ship.cameFrom).toBeNull()
+
+    // Every line out of the harbour is open, the arrival line included.
+    const all = ctx.graph.neighbours.get(ship.nodeId) ?? []
+    expect(all.length).toBeGreaterThan(0)
+    expect([...legalSteps(ctx, player)].sort()).toEqual([...all].sort())
+  })
+
+  it('still refuses to let a ship turn round in open water', () => {
+    let s = seated(['Ada', 'Bo'], { seed: 'kehrtwende' })
+    s = applyAction(ctx, s, { type: 'endTurn' }).state
+    s = applyAction(ctx, s, { type: 'endTurn' }).state
+    s = applyAction(ctx, s, { type: 'roll' }).state
+
+    const player = s.players[s.activeIndex]!
+    const first = legalSteps(ctx, player)[0]!
+    s = applyAction(ctx, s, { type: 'step', to: first }).state
+
+    const moved = s.players[s.activeIndex]!
+    if (s.phase === 'move' && !portAt(ctx, flagship(moved).nodeId)) {
+      expect(flagship(moved).cameFrom).not.toBeNull()
+      expect(legalSteps(ctx, moved)).not.toContain(flagship(moved).cameFrom)
+    }
+  })
 })
 
 describe('determinism', () => {

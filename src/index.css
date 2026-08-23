@@ -148,6 +148,25 @@ body {
   }
 }
 
+/*
+ * Turning a Konjunkturkarte face up.
+ *
+ * The card used to appear already read, which is why players could not tell
+ * that anything had happened to them. Half a turn on the y-axis, with the
+ * scale dipping as it passes edge-on, reads as a hand turning it over.
+ */
+@keyframes karte-drehen {
+  0% {
+    transform: rotateY(-172deg) scale(0.9);
+  }
+  55% {
+    transform: rotateY(-24deg) scale(1.02);
+  }
+  100% {
+    transform: rotateY(0deg) scale(1);
+  }
+}
+
 @keyframes stamp-down {
   0% {
     transform: rotate(-7deg) scale(2.1);
@@ -503,6 +522,17 @@ body {
 
 .anim-stamp {
   animation: stamp-down 420ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+/* The stage the card is turned on; without depth the flip reads as a squash. */
+.flip-scene {
+  perspective: 900px;
+}
+
+.anim-flip {
+  animation: karte-drehen 640ms cubic-bezier(0.25, 0.85, 0.3, 1) both;
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
 }
 
 .anim-tumble {

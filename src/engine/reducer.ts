@@ -250,6 +250,13 @@ function resolveArrival(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
     return
   }
 
+  // "Die Reiseroute, die ein Schiff nimmt, bleibt dem Spieler überlassen."
+  // A port call is a fresh start: the line the ship came in on is open again,
+  // so a captain may put about and go back the way they came. Only turning on
+  // the spot at sea stays barred, which is what the Anleitung's ban on
+  // "Pendeln" is really about.
+  patchShip(draft, index, { cameFrom: null })
+
   events.push({ type: 'arrived', playerId: player.id, portId })
 
   const red = draft.config.redFields.includes(draft.round)
@@ -844,6 +851,9 @@ function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
         if (rest.length === 0) {
           const portId = portAt(ctx, next)
           if (portId) {
+            // Same as in round play: making port frees the ship to sail back
+            // out the way it came in.
+            patchVehicle(draft, i, vehicle.id, { cameFrom: null })
             events.push({ type: 'arrived', playerId: draft.players[i]!.id, portId })
           }
         }

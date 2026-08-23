@@ -46,6 +46,12 @@ type ClientMessage =
   | { t: 'hello'; token?: string; name?: string; gender?: Gender }
   | { t: 'action'; action: GameAction }
   | { t: 'start' }
+  /**
+   * Which panel of the harbour round the sender is looking at. Presence, not
+   * game state: it is never written to the log, never replayed, and a client
+   * that misses one is only briefly looking at the wrong tab.
+   */
+  | { t: 'focus'; step: string }
   | { t: 'ping' }
 
 type ServerMessage =
@@ -58,6 +64,7 @@ type ServerMessage =
    */
   | { t: 'view'; state: GameState }
   | { t: 'presence'; online: string[] }
+  | { t: 'focus'; playerId: string; step: string }
   | { t: 'error'; reason: string }
   | { t: 'pong' }
 
@@ -311,6 +318,15 @@ export class GameRoom {
     switch (message.t) {
       case 'ping':
         return this.send(socket, { t: 'pong' })
+
+      case 'focus': {
+        // Watchers should see the harbour through the eyes of whoever has the
+        // wheel. Relayed as-is and not stored: it is worth nothing a moment
+        // later, so there is nothing to catch up on when a client reconnects.
+        const who = this.sockets.get(socket)
+        if (who) this.broadcast({ t: 'focus', playerId: who, step: message.step })
+        return
+      }
 
       case 'hello': {
         // A known token returns to its own seat, even on another device.

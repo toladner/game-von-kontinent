@@ -62,6 +62,8 @@ export function PortSheet({
   onEnter,
   onLookAt,
   markedPort,
+  followTab,
+  onTabChange,
 }: {
   ctx: EngineContext
   state: GameState
@@ -78,6 +80,13 @@ export function PortSheet({
   /** Asked to look at a harbour on the plan; the sheet gets out of the way. */
   onLookAt: (portId: string) => void
   markedPort: string | null
+  /**
+   * Set when watching somebody else's turn: the panel shown is the one they
+   * are on, so the table is looking at the same thing while they decide.
+   */
+  followTab?: Tab | null
+  /** Called when we move ourselves, so the other seats can follow along. */
+  onTabChange?: (tab: Tab) => void
 }) {
   const port = portOf(ctx, portId)
   const country = ctx.pack.map.countries.find((c) => c.id === port.country)
@@ -91,8 +100,24 @@ export function PortSheet({
 
   // Every call at a harbour starts with the hold: what am I carrying, and
   // does anyone here want it. From there the Makler's button walks the rest.
-  const [tab, setTab] = useState<Tab>('verkaufen')
-  useEffect(() => setTab('verkaufen'), [portId])
+  const [ownTab, setOwnTab] = useState<Tab>('verkaufen')
+  // Announced as well as set, so a watcher who arrives mid-visit is not left
+  // looking at whatever panel the last harbour ended on.
+  useEffect(() => {
+    setOwnTab('verkaufen')
+    onTabChange?.('verkaufen')
+    // The announcement belongs to the harbour, not to the callback's identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portId])
+
+  // A watcher is shown the active player's panel; whoever holds the wheel
+  // keeps their own and reports it onward.
+  const following = followTab != null
+  const tab = followTab ?? ownTab
+  const setTab = (next: Tab) => {
+    setOwnTab(next)
+    onTabChange?.(next)
+  }
 
   // Where the walk stands, and what comes after it. Reading the position out
   // of the visible tab rather than a counter means the plan can grow or
@@ -155,6 +180,11 @@ export function PortSheet({
       subtitle={country?.name}
       accent={color.ink}
       footer={
+        following ? (
+          <p className="text-ink-soft py-1 text-center text-[13px]">
+            {player.name} ist am Zug — Sie sehen mit.
+          </p>
+        ) : (
         <button
           className={`btn w-full text-base ${
             confirmEmpty ? 'btn-warn' : next || laden ? 'btn-primary' : ''
@@ -181,6 +211,7 @@ export function PortSheet({
                   ? 'Ohne Ladung ablegen'
                   : 'Ablegen'}
         </button>
+        )
       }
     >
       {/* Was zählt, in einer Zeile */}

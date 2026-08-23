@@ -41,12 +41,15 @@ export function PlayerHUD({
   player,
   cargoCount,
   purchasesLeft,
+  rank,
   onOpen,
 }: {
   ctx: EngineContext
   player: PlayerState
   cargoCount: number
   purchasesLeft: number | null
+  /** Place in the standings by Vermögen, so "how am I doing" is never a guess. */
+  rank: number | null
   onOpen: () => void
 }) {
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
@@ -68,7 +71,7 @@ export function PlayerHUD({
       onClick={onOpen}
       className="paper anim-rise pointer-events-auto flex max-w-[min(78vw,22rem)] items-center gap-2.5 rounded-lg border-l-4 py-2 pr-3 pl-2.5 text-left shadow-lg"
       style={{ borderLeftColor: color.ink }}
-      aria-label={`${player.name}, ${player.cash.toLocaleString('de-DE')} Einheiten. Kontor öffnen.`}
+      aria-label={`${rank !== null ? `Platz ${rank}, ` : ''}${player.name}, ${player.cash.toLocaleString('de-DE')} Einheiten. Kontor öffnen.`}
     >
       <span
         className="shrink-0 rounded-full ring-2 ring-offset-1"
@@ -78,8 +81,11 @@ export function PlayerHUD({
       </span>
 
       <span className="min-w-0">
-        <span className="block truncate text-[13px] leading-tight font-semibold">
-          {player.name}
+        {/* The rank rides with the name rather than in a corner of its own:
+            "3. Ada" reads as one fact, and it is the fact players ask for. */}
+        <span className="flex items-baseline gap-1 text-[13px] leading-tight font-semibold">
+          {rank !== null && <span className="tnum text-ink-soft shrink-0">{rank}.</span>}
+          <span className="truncate">{player.name}</span>
         </span>
         <span
           className={`tnum block rounded-sm text-lg leading-tight font-bold ${flash ? 'anim-flash' : ''}`}
