@@ -1,4 +1,5 @@
 import type { Good, KonjunkturCard } from '@engine/types'
+import { GoodIcon } from './GoodIcon'
 
 const fmt = (n: number) => n.toLocaleString('de-DE')
 
@@ -37,25 +38,32 @@ export function Warenkarte({
       disabled={disabled}
       type={onClick ? 'button' : undefined}
     >
-      {/* The name and the two figures are what the eye is hunting for, so
-          they carry the weight; everything else on the card is a label. */}
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="smallcaps press-green text-[15px] leading-tight font-bold">
-          {good.name}
-        </span>
-        <span className="display press-green text-xl leading-none">{good.id}</span>
-      </div>
+      {/* The vignette sits where a stencil would be on the real crate, and
+          the name and the two figures keep the weight — they are what the eye
+          is hunting for; everything else on the card is a label. */}
+      <div className="flex items-start gap-2.5">
+        <GoodIcon goodId={good.id} size={38} className={disabled ? 'opacity-60' : ''} />
 
-      <dl className="teletype mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5 text-[13px]">
-        <div className="flex items-baseline gap-1.5">
-          <dt className="smallcaps text-ink-soft text-[11px]">Einkauf</dt>
-          <dd className="tnum press-green font-bold">{fmt(good.buy)}</dd>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="smallcaps press-green text-[15px] leading-tight font-bold">
+              {good.name}
+            </span>
+            <span className="display press-green text-xl leading-none">{good.id}</span>
+          </div>
+
+          <dl className="teletype mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5 text-[13px]">
+            <div className="flex items-baseline gap-1.5">
+              <dt className="smallcaps text-ink-soft text-[11px]">Einkauf</dt>
+              <dd className="tnum press-green font-bold">{fmt(good.buy)}</dd>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <dt className="smallcaps text-ink-soft text-[11px]">Verkauf</dt>
+              <dd className={`tnum font-bold ${toneClass}`}>{fmt(price ?? good.sell)}</dd>
+            </div>
+          </dl>
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <dt className="smallcaps text-ink-soft text-[11px]">Verkauf</dt>
-          <dd className={`tnum font-bold ${toneClass}`}>{fmt(price ?? good.sell)}</dd>
-        </div>
-      </dl>
+      </div>
 
       {/* Reason and call to action share a row, so neither can sit on top of
           the other however long the reason runs. */}
