@@ -574,15 +574,22 @@ function RealtimeBar({
   if (voyage) {
     const eta = arrivalAt(ctx, state, player) ?? now
     const destination = ctx.portsById.get(voyage.destination)?.name ?? voyage.destination
+    // The course is set but the hatches are still open: say so, or a ship
+    // sitting at the quay for two minutes looks like a game that has hung.
+    const loading = now < voyage.departsAt
     return wrap(
       <div className="paper flex items-center gap-3 rounded-xl px-4 py-2.5 shadow-xl">
-        <span className="text-2xl" aria-hidden>
-          ⛴
+        <span className={`text-2xl ${loading ? 'opacity-60' : ''}`} aria-hidden>
+          {loading ? '🏗' : '⛴'}
         </span>
         <div>
-          <p className="text-sm leading-tight font-semibold">Kurs auf {destination}</p>
+          <p className="text-sm leading-tight font-semibold">
+            {loading ? `Wird beladen · Kurs auf ${destination}` : `Kurs auf ${destination}`}
+          </p>
           <p className="text-ink-soft text-[11px]">
-            Ankunft {untilText(eta, now)} · {clockText(eta)} Uhr
+            {loading
+              ? `Legt ab ${untilText(voyage.departsAt, now)} · Ankunft ${untilText(eta, now)}`
+              : `Ankunft ${untilText(eta, now)} · ${clockText(eta)} Uhr`}
           </p>
         </div>
       </div>,

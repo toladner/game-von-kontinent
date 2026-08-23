@@ -5,6 +5,7 @@ import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
 import {
   buyOffers,
+  castOffMs,
   legalSteps,
   legMsFor,
   portAt,
@@ -308,6 +309,61 @@ describe('real-time sailing', () => {
     const lane = [...ctx.graph.edgeKm.entries()].find(([, km]) => km === median)!
     const [a, b] = lane[0].split('|') as [string, string]
     expect(legMsFor(ctx, s, ship, a, b)).toBeCloseTo(1 * (ship.kind.speedFactor || 1) * 60_000, 0)
+  })
+
+  it('keeps the ship alongside while the cargo is worked', () => {
+    // Setting a course is instant; casting off is not. A break-bulk freighter
+    // spent days in port, and the game charges a short parcel call for it.
+    let s = afloat()
+    const from = flagship(s.players[0]!).nodeId
+    const target = [...ctx.portsById.keys()].find((id) => {
+      if (id === from) return false
+      const r = routeTo(ctx, from, null, id)
+      return r.length >= 2 && r.length <= 6
+    })!
+
+    s = applyAction(ctx, s, { type: 'setCourse', to: target, by: 'a' }).state
+    const voyage = flagship(s.players[0]!).voyage!
+    expect(voyage.departsAt).toBeGreaterThan(T0)
+
+    // Still tied up a moment later, and still where she was.
+    const loading = applyAction(ctx, s, { type: 'tick', at: voyage.departsAt - 1000 }).state
+    expect(flagship(loading.players[0]!).nodeId).toBe(from)
+    expect(flagship(loading.players[0]!).voyage).not.toBeNull()
+  })
+
+  it('lets a merchant keep trading until she casts off', () => {
+    // The hatches are still open, so a change of mind is allowed — and a
+    // course set by mistake should not lock the quay.
+    let s = afloat()
+    const here = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    const target = [...ctx.portsById.keys()].find(
+      (id) => id !== here && routeTo(ctx, flagship(s.players[0]!).nodeId, null, id).length >= 2,
+    )!
+    s = applyAction(ctx, s, { type: 'setCourse', to: target, by: 'a' }).state
+
+    const offer = buyOffers(ctx, s, s.players[0]!, here).find((o) => o.status === 'ok')!
+    const bought = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId, by: 'a' })
+    expect(bought.events.some((e) => e.type === 'rejected')).toBe(false)
+    expect(flagship(bought.state.players[0]!).cargo).toHaveLength(1)
+
+    // Once she is away, the quay is shut.
+    const departs = flagship(s.players[0]!).voyage!.departsAt
+    const sailed = applyAction(ctx, bought.state, { type: 'tick', at: departs + 1000 }).state
+    const second = buyOffers(ctx, sailed, sailed.players[0]!, here).find(
+      (o) => o.goodId !== offer.goodId && o.status === 'ok',
+    )
+    if (second) {
+      const refused = applyAction(ctx, sailed, { type: 'buy', goodId: second.goodId, by: 'a' })
+      expect(refused.events.some((e) => e.type === 'rejected')).toBe(true)
+    }
+  })
+
+  it('turns a lumbering ship round more slowly', () => {
+    const s = afloat()
+    const ship = flagship(s.players[0]!)
+    const slow = { ...ship, kind: { ...ship.kind, speedFactor: 2 } }
+    expect(castOffMs(s, slow)).toBeCloseTo(castOffMs(s, ship) * 2, 5)
   })
 
   it('will not trade from the open sea', () => {

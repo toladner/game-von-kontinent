@@ -19,6 +19,7 @@ import {
   distancesFrom,
   fleetLimitNote,
   legalSteps,
+  castOffMs,
   legMsFor,
   portAt,
   quoteSale,
@@ -152,6 +153,19 @@ function payPlayer(
 // ---------------------------------------------------------------------------
 // Konjunktur effects
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether a ship has actually left the quay.
+ *
+ * A course may be set while the cargo is still being worked, and for that
+ * stretch she is alongside with her hatches open — so the merchant may keep
+ * trading and change their mind. Only once she has cast off is she at sea.
+ */
+function atSea(state: GameState, vehicle: VehicleInstance): boolean {
+  const voyage = vehicle.voyage
+  if (!voyage) return false
+  return state.now >= voyage.departsAt
+}
 
 /**
  * Which continent a node lies off.
@@ -602,7 +616,9 @@ export function applyAction(
     case 'buy': {
       const buyer = flagship(player)
       if (realtime) {
-        if (buyer.voyage) return reject(state, 'Auf See wird nicht gehandelt.')
+        if (atSea(draft as GameState, buyer)) {
+          return reject(state, 'Auf See wird nicht gehandelt.')
+        }
       } else if (draft.phase !== 'port') {
         return reject(state, 'Das Kontor ist geschlossen.')
       }
@@ -647,7 +663,9 @@ export function applyAction(
     case 'sell': {
       const seller = flagship(player)
       if (realtime) {
-        if (seller.voyage) return reject(state, 'Auf See wird nicht gehandelt.')
+        if (atSea(draft as GameState, seller)) {
+          return reject(state, 'Auf See wird nicht gehandelt.')
+        }
       } else if (draft.phase !== 'port') {
         return reject(state, 'Das Kontor ist geschlossen.')
       }
@@ -695,12 +713,17 @@ export function applyAction(
       if (route.length === 0) return reject(state, 'Dorthin führt keine Linie.')
 
       const legMs = legMsFor(ctx, draft as GameState, ship, ship.nodeId, route[0]!)
+      // She is still alongside until the cargo is worked; the first leg only
+      // begins when she casts off, which is why the delay lands here rather
+      // than as a separate phase nobody would think to look for.
+      const castOff = castOffMs(draft as GameState, ship)
       patchVehicle(draft, index, ship.id, {
         voyage: {
           route,
-          legStartedAt: draft.now,
-          legArrivesAt: draft.now + legMs,
+          legStartedAt: draft.now + castOff,
+          legArrivesAt: draft.now + castOff + legMs,
           destination: action.to,
+          departsAt: draft.now + castOff,
         },
       })
       events.push({
@@ -719,7 +742,9 @@ export function applyAction(
         return reject(state, fleetLimitNote(draft.config.maxFleetSize))
       }
       const buyerShip = flagship(player)
-      if (buyerShip.voyage) return reject(state, 'Auf See kauft man kein Schiff.')
+      if (atSea(draft as GameState, buyerShip)) {
+        return reject(state, 'Auf See kauft man kein Schiff.')
+      }
       const yard = portAt(ctx, buyerShip.nodeId)
       if (!yard) return reject(state, 'Werften gibt es nur im Hafen.')
 
@@ -957,6 +982,7 @@ function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
                   legStartedAt: voyage.legArrivesAt,
                   legArrivesAt: voyage.legArrivesAt + legMs,
                   destination: voyage.destination,
+                  departsAt: 0,
                 },
         })
 
@@ -1030,12 +1056,14 @@ function resolvePigeons(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
       const route = routeTo(ctx, ship.nodeId, ship.cameFrom, pigeon.order.destination)
       if (route.length > 0) {
         const legMs = legMsFor(ctx, draft as GameState, ship, ship.nodeId, route[0]!)
+        const castOff = castOffMs(draft as GameState, ship)
         patchVehicle(draft, index, ship.id, {
           voyage: {
             route,
-            legStartedAt: draft.now,
-            legArrivesAt: draft.now + legMs,
+            legStartedAt: draft.now + castOff,
+            legArrivesAt: draft.now + castOff + legMs,
             destination: pigeon.order.destination,
+            departsAt: draft.now + castOff,
           },
         })
       }

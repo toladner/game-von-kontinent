@@ -230,8 +230,28 @@ export interface KonjunkturCard {
 export type TravelMode = 'runde' | 'echtzeit'
 
 export interface RealtimeConfig {
-  /** Real minutes a ship needs for one pip of sea lane. */
+  /**
+   * Real minutes a ship needs for one pip of sea lane.
+   *
+   * The map is cut at 550 km to the pip, and a 1950s general-cargo steamer
+   * made about 14 knots — 622 km a day — so one pip is very nearly one day of
+   * steaming. At six real minutes to the pip a whole day of play is about
+   * seven months of trading, Hamburg to New York takes 67 real minutes, and
+   * the figures the plan produces match the real crossings: 9.9 days across
+   * the Atlantic, 14 from Kapstadt to Fremantle.
+   */
   readonly minutesPerPip: number
+  /**
+   * How long a ship lies alongside before it can sail, as a fraction of a pip.
+   *
+   * A break-bulk freighter of the period spent three to seven days in port
+   * and something like half its life alongside — but a house here loads at
+   * most two Warenkarten, a parcel rather than a full hold, so a short call
+   * is the honest figure. 0.4 of a pip is about eight hours: a working day of
+   * loading, and two and a half real minutes at the default pace. Multiplied
+   * by the vessel's speedFactor, so a Großfrachter is slower to turn round.
+   */
+  readonly portCallPips: number
   /** How often the world market turns a new Konjunktur card. */
   readonly marketIntervalMinutes: number
   /** The season closes this many real hours after departure. */

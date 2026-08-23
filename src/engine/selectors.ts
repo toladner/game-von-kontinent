@@ -216,6 +216,18 @@ export function legMsFor(
 }
 
 /**
+ * How long this vessel lies alongside before she can sail.
+ *
+ * The course may be set the instant a merchant decides, but the cargo still
+ * has to be worked and the hatches closed. Charged against the same clock as
+ * the sea legs, so changing the pace of the game moves both together.
+ */
+export function castOffMs(state: GameState, vehicle: VehicleInstance): number {
+  const pips = state.config.realtime.portCallPips ?? 0
+  return pips * state.config.realtime.minutesPerPip * (vehicle.kind.speedFactor || 1) * 60_000
+}
+
+/**
  * When a voyage in progress reaches its destination.
  *
  * The leg under way has a known arrival; the rest are priced from the map,

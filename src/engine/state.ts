@@ -31,6 +31,14 @@ export interface Voyage {
   readonly legStartedAt: number
   readonly legArrivesAt: number
   readonly destination: PortId
+  /**
+   * When the ship actually casts off. Until then she is still alongside with
+   * the hatches open: the course is set, the cargo is being worked, and the
+   * merchant may still change their mind and buy something else.
+   *
+   * Zero on a voyage already under way, and on legs after the first.
+   */
+  readonly departsAt: number
 }
 
 /**

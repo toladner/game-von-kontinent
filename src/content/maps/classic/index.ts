@@ -29,6 +29,7 @@ export const CLASSIC_CONFIG: RuleConfig = {
   realtime: {
     // A ten-pip Atlantic crossing takes about an hour at this pace.
     minutesPerPip: 6,
+    portCallPips: 0.4,
     marketIntervalMinutes: 20,
     durationHours: 24,
   },
