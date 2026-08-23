@@ -26,6 +26,7 @@ import {
   verkaufszwangOpen,
 } from './selectors'
 import type { KonjunkturEffect, Money, NodeId } from './types'
+import { exportsAt } from './market'
 
 type Draft = { -readonly [K in keyof GameState]: GameState[K] } & {
   players: PlayerState[]
@@ -327,7 +328,7 @@ function resolveFinalRun(ctx: EngineContext, draft: Draft, events: GameEvent[]):
       if (!portId) continue
 
       for (const item of start.cargo) {
-        const local = ctx.exportsOf(portId).includes(item.goodId)
+        const local = exportsAt(ctx, draft as GameState, portId).includes(item.goodId)
         const price = local
           ? Math.round(item.pricePaid * draft.config.finalRoundGlutSaleRate)
           : goodOf(ctx, item.goodId).sell
@@ -502,7 +503,7 @@ export function applyAction(
       }
       const portId = portAt(ctx, buyer.nodeId)
       if (!portId) return reject(state, 'Ihr Schiff liegt nicht im Hafen.')
-      if (!ctx.exportsOf(portId).includes(action.goodId)) {
+      if (!exportsAt(ctx, draft as GameState, portId).includes(action.goodId)) {
         return reject(state, 'Diese Ware führt der Hafen nicht aus.')
       }
       if (buyer.purchasesThisVisit.length >= draft.config.maxPurchasesPerPort) {

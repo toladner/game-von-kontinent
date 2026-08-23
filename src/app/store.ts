@@ -6,6 +6,7 @@ import type { Gender } from '@engine/persona'
 import { applyAction, replay } from '@engine/reducer'
 import type { GameAction, GameEvent } from '@engine/actions'
 import type { GameState, JoinPolicy, PlayerState } from '@engine/state'
+import type { AngebotMode, PreisMode } from '@engine/types'
 import { projectFor } from '@engine/fog'
 import {
   createOnlineGame,
@@ -26,6 +27,8 @@ interface SaveFile {
   durationHours?: number
   sicht?: 'normal' | 'realistisch'
   maxFleetSize?: number
+  angebot?: AngebotMode
+  preise?: PreisMode
   readonly actions: GameAction[]
 }
 
@@ -39,6 +42,10 @@ export interface BeginOptions {
   readonly sicht?: 'normal' | 'realistisch'
   /** Vessels one house may run; 1 (the printed game) closes the yards. */
   readonly maxFleetSize?: number
+  /** 'zufaellig' deals the trade routes afresh from the seed. */
+  readonly angebot?: AngebotMode
+  /** 'entfernung' pays more the further a good is from its source. */
+  readonly preise?: PreisMode
 }
 
 export interface LogLine {
@@ -248,6 +255,8 @@ export const useGame = create<Store>((set, get) => ({
         ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),
         ...(options.durationHours ? { durationHours: options.durationHours } : {}),
         ...(options.maxFleetSize ? { maxFleetSize: options.maxFleetSize } : {}),
+        ...(options.angebot ? { angebot: options.angebot } : {}),
+        ...(options.preise ? { preise: options.preise } : {}),
       }),
       opening,
     )
@@ -257,6 +266,10 @@ export const useGame = create<Store>((set, get) => ({
     if (options.durationHours) saved.durationHours = options.durationHours
     if (options.sicht) saved.sicht = options.sicht
     if (options.maxFleetSize) saved.maxFleetSize = options.maxFleetSize
+    // Without these in the save file a resumed game would deal itself fresh
+    // trade routes and disagree with the log it is replaying.
+    if (options.angebot) saved.angebot = options.angebot
+    if (options.preise) saved.preise = options.preise
     persist()
     const firstActing = state.players[0]?.id ?? null
     session?.close()
@@ -291,6 +304,8 @@ export const useGame = create<Store>((set, get) => ({
       minutesPerPip: options.minutesPerPip ?? 6,
       durationHours: options.durationHours ?? 24,
       maxFleetSize: options.maxFleetSize ?? 1,
+      angebot: options.angebot ?? 'fest',
+      preise: options.preise ?? 'fest',
     })
     get().join(code, who.name, who.gender)
     return code
@@ -463,6 +478,8 @@ export const useGame = create<Store>((set, get) => ({
         ...(file.durationHours ? { durationHours: file.durationHours } : {}),
         ...(file.sicht ? { sicht: file.sicht } : {}),
         ...(file.maxFleetSize ? { maxFleetSize: file.maxFleetSize } : {}),
+        ...(file.angebot ? { angebot: file.angebot } : {}),
+        ...(file.preise ? { preise: file.preise } : {}),
       })
       const state = replay(ctx, initial, file.actions ?? [])
       saved = file

@@ -203,6 +203,12 @@ export interface RealtimeConfig {
   readonly durationHours: number
 }
 
+/** How goods are distributed over the harbours. */
+export type AngebotMode = 'fest' | 'zufaellig'
+
+/** How a sale price is arrived at. */
+export type PreisMode = 'fest' | 'entfernung'
+
 /** How much of the world a house may see. */
 export type Sicht = 'normal' | 'realistisch'
 
@@ -218,6 +224,17 @@ export interface PigeonConfig {
 export interface RuleConfig {
   readonly travel: TravelMode
   readonly sicht: Sicht
+  /**
+   * 'fest'      - harbours ship what the Warenverzeichnis says they ship.
+   * 'zufaellig' - the trade routes are rolled from the seed instead.
+   */
+  readonly angebot: AngebotMode
+  /**
+   * 'fest'       - one printed Verkaufspreis, good the world over.
+   * 'entfernung' - a good is worth more the further it has been carried from
+   *                the nearest harbour that ships it.
+   */
+  readonly preise: PreisMode
   readonly pigeon: PigeonConfig
   /** Characters a player's notebook holds. */
   readonly notebookLimit: number

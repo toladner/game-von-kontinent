@@ -138,7 +138,7 @@ export function PortSheet({
   }, [at, plan])
 
   const report = useMemo(
-    () => marketReport(ctx, player, 6),
+    () => marketReport(ctx, state, player, 6),
     [ctx, player],
   )
 
@@ -274,7 +274,7 @@ export function PortSheet({
           ) : (
             <div className="stagger space-y-2">
               {quotes.map((q) => {
-                const elsewhere = sellDestinations(ctx, player, q.item, 2)
+                const elsewhere = sellDestinations(ctx, state, player, q.item, 2)
                 return (
                   <div key={q.item.uid} className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">

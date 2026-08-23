@@ -139,7 +139,7 @@ export function GameScreen() {
   }
 
   const highlights = useMemo(
-    () => marketReport(ctx, player, 5).map((d) => d.portId),
+    () => marketReport(ctx, state, player, 5).map((d) => d.portId),
     [ctx, player],
   )
 
@@ -723,7 +723,7 @@ function KontorSheet({
   const [tab, setTab] = useState<'kasse' | 'wohin'>('kasse')
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
   const worth = useCountUp(netWorth(player))
-  const report = useMemo(() => marketReport(ctx, player, 6), [ctx, player])
+  const report = useMemo(() => marketReport(ctx, state, player, 6), [ctx, player])
 
   return (
     <Sheet

@@ -2,6 +2,7 @@ import type { CargoItem, GameState, PlayerState } from './state'
 import { activePlayer, flagship, netWorth, type VehicleInstance } from './state'
 import { goodOf, type EngineContext } from './context'
 import { edgeKey, isPort } from './mapbuild'
+import { exportsAt, sellPriceAt } from './market'
 import type { GoodId, Money, NodeId, PortId } from './types'
 
 /** The port the given ship lies in, or null if it is on open water. */
@@ -45,12 +46,12 @@ export function quoteSale(
   item: CargoItem,
   portId: PortId,
 ): SaleQuote {
-  const local = ctx.exportsOf(portId).includes(item.goodId)
+  const local = exportsAt(ctx, state, portId).includes(item.goodId)
   if (local) {
     const price = Math.round(item.pricePaid * state.config.localGlutSaleRate)
     return { item, price, kind: 'ueberfluss', profit: price - item.pricePaid }
   }
-  const base = goodOf(ctx, item.goodId).sell
+  const base = sellPriceAt(ctx, state, portId, item.goodId)
   const price = Math.round(base * (1 + state.saleModifierPercent / 100))
   return { item, price, kind: 'markt', profit: price - item.pricePaid }
 }
@@ -88,7 +89,7 @@ export function buyOffers(
   portId: PortId,
 ): readonly BuyOffer[] {
   const max = state.config.maxPurchasesPerPort
-  return ctx.exportsOf(portId).map((goodId) => {
+  return exportsAt(ctx, state, portId).map((goodId) => {
     const g = goodOf(ctx, goodId)
     const stock = state.bankStock[goodId] ?? 0
     let status: BuyBlock = 'ok'
@@ -114,7 +115,9 @@ export function verkaufszwangOpen(
   portId: PortId,
 ): boolean {
   if (!state.mustSellForeign) return false
-  return flagship(player).cargo.some((item) => !ctx.exportsOf(portId).includes(item.goodId))
+  return flagship(player).cargo.some(
+    (item) => !exportsAt(ctx, state, portId).includes(item.goodId),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -155,20 +158,21 @@ export interface SellDestination {
  */
 export function sellDestinations(
   ctx: EngineContext,
+  state: GameState,
   player: PlayerState,
   item: CargoItem,
   limit = 3,
 ): readonly SellDestination[] {
   const ship = flagship(player)
   const dist = distancesFrom(ctx, ship.nodeId, ship.cameFrom)
-  const price = goodOf(ctx, item.goodId).sell
 
   const rows: SellDestination[] = []
   for (const port of ctx.portsById.values()) {
     const distance = dist.get(port.id)
     if (distance === undefined || distance === 0) continue
-    // A port that grows it itself will only pay a loss price.
-    if (ctx.exportsOf(port.id).includes(item.goodId)) continue
+    // A port that ships it itself will only pay a loss price.
+    if (exportsAt(ctx, state, port.id).includes(item.goodId)) continue
+    const price = sellPriceAt(ctx, state, port.id, item.goodId)
     rows.push({
       portId: port.id,
       name: port.name,
@@ -177,8 +181,12 @@ export function sellDestinations(
       profit: price - item.pricePaid,
     })
   }
-  // Same price everywhere, so nearness is the whole of it.
-  return rows.sort((a, b) => a.distance - b.distance).slice(0, limit)
+  // Under 'fest' the price is the same everywhere and nearness decides;
+  // under 'entfernung' a long haul can be worth the extra sea, so rank by
+  // what is actually earned and let distance break the tie.
+  return rows
+    .sort((a, b) => b.profit - a.profit || a.distance - b.distance)
+    .slice(0, limit)
 }
 
 /**
@@ -309,6 +317,7 @@ export function routeTo(
  */
 export function marketReport(
   ctx: EngineContext,
+  state: GameState,
   player: PlayerState,
   limit = 6,
 ): readonly Destination[] {
@@ -320,13 +329,13 @@ export function marketReport(
     const distance = dist.get(port.id)
     if (distance === undefined || distance === 0) continue
 
-    const exports = ctx.exportsOf(port.id)
+    const exports = exportsAt(ctx, state, port.id)
     let proceeds = 0
     let profit = 0
     const sells: { goodId: GoodId; price: Money; profit: Money }[] = []
     for (const item of flagship(player).cargo) {
       if (exports.includes(item.goodId)) continue // only a loss price there
-      const price = goodOf(ctx, item.goodId).sell
+      const price = sellPriceAt(ctx, state, port.id, item.goodId)
       proceeds += price
       profit += price - item.pricePaid
       sells.push({ goodId: item.goodId, price, profit: price - item.pricePaid })

@@ -23,6 +23,25 @@ export type JoinPolicy = 'nur-zu-beginn' | 'jederzeit'
  */
 export type Sicht = 'normal' | 'realistisch'
 
+/**
+ * Where the goods are.
+ *
+ * 'fest'      - the Warenverzeichnis as printed: Hamburg ships Chemikalien
+ *               and always will.
+ * 'zufaellig' - the trade routes are dealt afresh from the seed, so nobody's
+ *               memory of the board is worth anything.
+ */
+export type Angebot = 'fest' | 'zufaellig'
+
+/**
+ * What a harbour pays.
+ *
+ * 'fest'       - one Verkaufspreis per good, the world over.
+ * 'entfernung' - the price climbs with the distance to the nearest harbour
+ *                that ships the good, so a long haul is the earner.
+ */
+export type Preise = 'fest' | 'entfernung'
+
 export interface GameOptions {
   readonly mode: GameMode
   readonly packId: string
@@ -40,6 +59,8 @@ export interface GameOptions {
   readonly fleetLimit: number
   readonly table: Table
   readonly sicht: Sicht
+  readonly angebot: Angebot
+  readonly preise: Preise
   readonly joinPolicy: JoinPolicy
   /** Only for joining: the code of a running game. */
   readonly joinCode: string
@@ -56,6 +77,8 @@ export const DEFAULT_OPTIONS: GameOptions = {
   fleetLimit: 1,
   table: 'lokal',
   sicht: 'normal',
+  angebot: 'fest',
+  preise: 'fest',
   joinPolicy: 'nur-zu-beginn',
   joinCode: '',
 }
@@ -108,6 +131,10 @@ export const CAPABILITIES: Record<string, Capability> = {
   'table:lokal': { ready: true, note: '' },
   'table:online-eroeffnen': { ready: true, note: '' },
   'table:online-beitreten': { ready: true, note: '' },
+  'angebot:fest': { ready: true, note: '' },
+  'angebot:zufaellig': { ready: true, note: '' },
+  'preise:fest': { ready: true, note: '' },
+  'preise:entfernung': { ready: true, note: '' },
 }
 
 export function isReady(key: string): boolean {

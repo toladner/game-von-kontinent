@@ -209,6 +209,14 @@ export interface GameState {
   readonly phase: Phase
   readonly players: readonly PlayerState[]
   /** Remaining Warenkarten per good; the bank owns two of each. */
+  /**
+   * Trade routes rolled for this table under Angebot "zufällig": which goods
+   * each harbour ships. Null means the content pack's own list stands.
+   *
+   * Part of the state rather than the context because it is decided by the
+   * seed, and therefore has to travel with the save, the replay and the wire.
+   */
+  readonly exports: Readonly<Record<string, readonly GoodId[]>> | null
   readonly bankStock: Readonly<Record<number, number>>
   /** Konjunktur deck as card ids, drawn from the top, returned to the bottom. */
   readonly deck: readonly string[]

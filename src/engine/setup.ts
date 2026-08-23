@@ -1,9 +1,10 @@
 import type { EngineContext } from './context'
 import type { GameAction } from './actions'
 import type { GameState, JoinPolicy } from './state'
-import type { Sicht, TravelMode } from './types'
+import type { AngebotMode, GoodId, PreisMode, Sicht, TravelMode } from './types'
 import type { Gender } from './persona'
 import { seedFrom, shuffle, type RngState } from './rng'
+import { rollExports } from './market'
 
 export interface NewGameOptions {
   /** Any string; the same seed and the same actions give the same game. */
@@ -25,6 +26,10 @@ export interface NewGameOptions {
    * that wants a fleet has to ask for it.
    */
   readonly maxFleetSize?: number
+  /** 'zufaellig' rolls which goods each harbour ships from the seed. */
+  readonly angebot?: AngebotMode
+  /** 'entfernung' pays more for a good the further it is from its source. */
+  readonly preise?: PreisMode
 }
 
 /**
@@ -43,6 +48,8 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     ...(options.travel ? { travel: options.travel } : {}),
     ...(options.sicht ? { sicht: options.sicht } : {}),
     ...(options.maxFleetSize ? { maxFleetSize: options.maxFleetSize } : {}),
+    ...(options.angebot ? { angebot: options.angebot } : {}),
+    ...(options.preise ? { preise: options.preise } : {}),
     realtime: {
       ...ctx.pack.config.realtime,
       ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),
@@ -60,6 +67,15 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
   )
   rng = rngAfterDeck
 
+  // Rolled here rather than looked up later, so the trade routes are decided
+  // by the seed and travel with the game like everything else.
+  let exports: Record<string, GoodId[]> | null = null
+  if (config.angebot === 'zufaellig') {
+    const [rolled, rngAfterExports] = rollExports(ctx, rng)
+    exports = rolled
+    rng = rngAfterExports
+  }
+
   const bankStock: Record<number, number> = {}
   for (const g of ctx.pack.goods) bankStock[g.id] = config.cardCopiesPerGood
 
@@ -75,6 +91,7 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     activeIndex: 0,
     phase: 'lobby',
     players: [],
+    exports,
     bankStock,
     deck,
     pendingCard: null,

@@ -10,6 +10,8 @@ import {
   type GameOptions,
   type JoinPolicy,
   type Sicht,
+  type Angebot,
+  type Preise,
   type Table,
   type Travel,
 } from '@app/options'
@@ -76,6 +78,8 @@ export function Setup() {
           minutesPerPip: options.minutesPerPip,
           durationHours: options.durationHours,
           maxFleetSize: options.fleetLimit,
+          angebot: options.angebot,
+          preise: options.preise,
         })
       } catch (error) {
         setProblem(
@@ -94,6 +98,8 @@ export function Setup() {
       minutesPerPip: options.minutesPerPip,
       durationHours: options.durationHours,
       maxFleetSize: options.fleetLimit,
+      angebot: options.angebot,
+      preise: options.preise,
     })
   }
 
@@ -422,6 +428,37 @@ function StepOptionen({
               fleetLimit: Math.max(o.fleetLimit, 2),
             }))
           }}
+        />
+      </div>
+
+      <Legend>Der Markt</Legend>
+      <div className="space-y-2">
+        <Choice
+          title="Angebot: fest"
+          blurb="Jeder Hafen führt aus, was im Warenverzeichnis steht. So ist der Plan gedruckt."
+          selected={options.angebot === 'fest'}
+          onClick={() => set('angebot', 'fest' as Angebot)}
+        />
+        <Choice
+          title="Angebot: zufällig"
+          blurb="Die Handelswege werden zu Spielbeginn neu ausgelost. Jeder Hafen behält seine Größe, aber niemand weiß mehr auswendig, wo der Kaffee liegt."
+          selected={options.angebot === 'zufaellig'}
+          onClick={() => set('angebot', 'zufaellig' as Angebot)}
+        />
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <Choice
+          title="Preise: fest"
+          blurb="Ein Verkaufspreis je Ware, überall auf der Welt derselbe."
+          selected={options.preise === 'fest'}
+          onClick={() => set('preise', 'fest' as Preise)}
+        />
+        <Choice
+          title="Preise: nach Entfernung"
+          blurb="Je weiter eine Ware vom nächsten Hafen entfernt ist, der sie selbst ausführt, desto mehr bringt sie. Kurze Wege lohnen dann nicht mehr — die weite Fahrt zahlt sich aus."
+          selected={options.preise === 'entfernung'}
+          onClick={() => set('preise', 'entfernung' as Preise)}
         />
       </div>
 

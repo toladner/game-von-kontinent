@@ -18,7 +18,7 @@ import { flagship } from '../src/engine/state'
 import type { GameState, JoinPolicy } from '../src/engine/state'
 import { nextEventAt } from '../src/engine/selectors'
 import { projectFor } from '../src/engine/fog'
-import type { TravelMode } from '../src/engine/types'
+import type { AngebotMode, PreisMode, TravelMode } from '../src/engine/types'
 import type { Gender } from '../src/engine/persona'
 
 export interface Env {
@@ -37,6 +37,12 @@ export interface GameMeta {
   readonly durationHours: number
   /** Vessels one house may run at once; 1 is the printed game. */
   readonly maxFleetSize: number
+  /**
+   * Market options. Optional because tables opened before they existed have
+   * no such field stored, and must keep replaying to the game they were.
+   */
+  readonly angebot?: AngebotMode
+  readonly preise?: PreisMode
   readonly packId: string
   readonly createdAt: number
 }
@@ -116,6 +122,8 @@ export default {
         minutesPerPip: clampF(body.minutesPerPip ?? 6, 0.02, 240),
         durationHours: clamp(body.durationHours ?? 24, 1, 720),
         maxFleetSize: clamp(body.maxFleetSize ?? 1, 1, 6),
+        angebot: body.angebot === 'zufaellig' ? 'zufaellig' : 'fest',
+        preise: body.preise === 'entfernung' ? 'entfernung' : 'fest',
         packId: 'classic',
         createdAt: Date.now(),
       }
@@ -196,6 +204,10 @@ export class GameRoom {
       minutesPerPip: this.meta.minutesPerPip,
       durationHours: this.meta.durationHours,
       maxFleetSize: this.meta.maxFleetSize,
+      // Absent on tables opened before these options existed; createGame then
+      // falls back to the pack's own defaults, which is the old behaviour.
+      ...(this.meta.angebot ? { angebot: this.meta.angebot } : {}),
+      ...(this.meta.preise ? { preise: this.meta.preise } : {}),
     })
     for (const a of this.actions) s = applyAction(ctx, s, a).state
     this.state = s

@@ -22,6 +22,9 @@ export interface GameMeta {
   readonly durationHours: number
   /** Vessels one house may run at once; absent on tables opened before fleets. */
   readonly maxFleetSize?: number
+  /** Market options; absent on tables opened before they existed. */
+  readonly angebot?: 'fest' | 'zufaellig'
+  readonly preise?: 'fest' | 'entfernung'
   readonly packId: string
   readonly createdAt: number
 }
@@ -76,6 +79,8 @@ export async function createOnlineGame(options: {
   minutesPerPip: number
   durationHours: number
   maxFleetSize: number
+  angebot?: 'fest' | 'zufaellig'
+  preise?: 'fest' | 'entfernung'
 }): Promise<{ code: string; meta: GameMeta }> {
   const res = await fetch('/api/games', {
     method: 'POST',

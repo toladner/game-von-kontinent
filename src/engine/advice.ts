@@ -2,6 +2,7 @@ import { goodOf, portOf, type EngineContext } from './context'
 import { flagship, type GameState, type PlayerState } from './state'
 import { buyOffers, marketReport, portAt, saleQuotes, verkaufszwangOpen } from './selectors'
 import type { KonjunkturCard, PortId } from './types'
+import { exportsAt } from './market'
 
 /**
  * The round the Kontormakler walks you through a harbour.
@@ -154,7 +155,7 @@ export function harbourPlan(
   }
 
   // --- 3. The chart.
-  const target = cargo.length > 0 ? marketReport(ctx, player, 1)[0] : undefined
+  const target = cargo.length > 0 ? marketReport(ctx, state, player, 1)[0] : undefined
   const wohin: Stage =
     cargo.length === 0
       ? {
@@ -336,7 +337,7 @@ export function harbourGreeting(
   // Deterministic per harbour, so the same Makler always opens the same way.
   const offer = OFFERS[[...portId].reduce((n, c) => n + c.charCodeAt(0), 0) % OFFERS.length]!
 
-  const exports = ctx.exportsOf(portId).map((id) => goodOf(ctx, id).name)
+  const exports = exportsAt(ctx, state, portId).map((id) => goodOf(ctx, id).name)
   const named = exports.slice(0, 3).join(', ')
   const ware =
     exports.length === 0

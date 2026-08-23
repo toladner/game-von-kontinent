@@ -12,6 +12,10 @@ import { LEGS } from './legs'
  */
 export const CLASSIC_CONFIG: RuleConfig = {
   travel: 'runde',
+  // The printed game: the Warenverzeichnis stands, and a Verkaufspreis is
+  // the same figure in every harbour on the board.
+  angebot: 'fest',
+  preise: 'fest',
   sicht: 'normal',
   pigeon: {
     // Birds outpace steamers, but not by as much as one would like.
