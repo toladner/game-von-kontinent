@@ -505,7 +505,13 @@ export function MarketReport({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[14px] font-bold">{d.name}</span>
               <span className="text-ink-soft block text-[12px] leading-snug">
-                {d.distance} {d.distance === 1 ? 'Punkt' : 'Punkte'} Fahrt · nimmt{' '}
+                {/* Points are the rule; hours are what a player is actually
+                    deciding about once ships sail on a clock, so the clock
+                    takes the word "Fahrt" when there is one to take it. */}
+                {d.distance} {d.distance === 1 ? 'Punkt' : 'Punkte'}
+                {d.travelMs === undefined
+                  ? ' Fahrt · nimmt '
+                  : ` · ${durationText(d.travelMs)} Fahrt · nimmt `}
                 {ctx
                   ? d.sells
                       .map((x) => ctx.goodsById.get(x.goodId)?.name ?? '')

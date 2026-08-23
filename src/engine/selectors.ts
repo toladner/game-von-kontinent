@@ -129,6 +129,12 @@ export interface Destination {
   readonly name: string
   /** Sea miles in pips, i.e. how many dice points away. */
   readonly distance: number
+  /**
+   * Real milliseconds to get there, cast-off included. Only set in real-time
+   * play — in round play a voyage costs throws, not hours, and quoting a
+   * duration would be inventing one.
+   */
+  readonly travelMs?: number
   /** What the hold would fetch there at market prices. */
   readonly proceeds: Money
   /** Proceeds minus what was paid for the goods that would sell. */
@@ -228,6 +234,47 @@ export function castOffMs(state: GameState, vehicle: VehicleInstance): number {
 }
 
 /**
+ * Travel time from a ship's berth to every node it can reach, in ms.
+ *
+ * Walks the same breadth-first tree `routeTo` walks — fewest pips wins, and
+ * ties are broken the same way — and adds up the real cost of each leg along
+ * the way. It has to be the same tree: a cheaper path measured in hours is no
+ * use as an estimate if the ship is going to sail the shorter one in pips.
+ *
+ * Cast-off is not included; callers that are quoting a departure add it.
+ */
+export function voyageTimesFrom(
+  ctx: EngineContext,
+  state: GameState,
+  vehicle: VehicleInstance,
+): ReadonlyMap<NodeId, number> {
+  const from = vehicle.nodeId
+  const all = ctx.graph.neighbours.get(from) ?? []
+  const forward = all.filter((n) => n !== vehicle.cameFrom)
+  const seeds = forward.length > 0 ? forward : all
+
+  const times = new Map<NodeId, number>([[from, 0]])
+  for (const seed of seeds) {
+    if (!times.has(seed)) times.set(seed, legMsFor(ctx, state, vehicle, from, seed))
+  }
+
+  let frontier = [...seeds]
+  while (frontier.length > 0) {
+    const next: NodeId[] = []
+    for (const node of frontier) {
+      const so_far = times.get(node)!
+      for (const neighbour of ctx.graph.neighbours.get(node) ?? []) {
+        if (times.has(neighbour)) continue
+        times.set(neighbour, so_far + legMsFor(ctx, state, vehicle, node, neighbour))
+        next.push(neighbour)
+      }
+    }
+    frontier = next
+  }
+  return times
+}
+
+/**
  * What a voyage to `target` would cost in real time, if ordered now.
  *
  * Cast-off included, because from the merchant's point of view the wait
@@ -241,16 +288,9 @@ export function sailingTimeMs(
   target: PortId,
 ): number | null {
   if (vehicle.nodeId === target) return null
-  const route = routeTo(ctx, vehicle.nodeId, vehicle.cameFrom, target)
-  if (route.length === 0) return null
-
-  let ms = castOffMs(state, vehicle)
-  let from = vehicle.nodeId
-  for (const to of route) {
-    ms += legMsFor(ctx, state, vehicle, from, to)
-    from = to
-  }
-  return ms
+  const sailing = voyageTimesFrom(ctx, state, vehicle).get(target)
+  if (sailing === undefined) return null
+  return castOffMs(state, vehicle) + sailing
 }
 
 /**
@@ -359,8 +399,13 @@ export function marketReport(
   player: PlayerState,
   limit = 6,
 ): readonly Destination[] {
-  const dist = distancesFrom(ctx, flagship(player).nodeId, flagship(player).cameFrom)
-  const held = new Set(flagship(player).cargo.map((c) => c.goodId))
+  const ship = flagship(player)
+  const dist = distancesFrom(ctx, ship.nodeId, ship.cameFrom)
+  const held = new Set(ship.cargo.map((c) => c.goodId))
+  // Computed once for the whole chart rather than per harbour: one traversal
+  // instead of a hundred.
+  const clock = state.config.travel === 'echtzeit' ? voyageTimesFrom(ctx, state, ship) : null
+  const castOff = clock ? castOffMs(state, ship) : 0
 
   const rows: Destination[] = []
   for (const port of ctx.portsById.values()) {
@@ -379,10 +424,12 @@ export function marketReport(
       sells.push({ goodId: item.goodId, price, profit: price - item.pricePaid })
     }
 
+    const sailing = clock?.get(port.id)
     rows.push({
       portId: port.id,
       name: port.name,
       distance,
+      ...(sailing === undefined ? {} : { travelMs: castOff + sailing }),
       proceeds,
       profit,
       sellable: sells.length,

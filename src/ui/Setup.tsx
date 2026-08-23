@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { askToNotify, notifyState, type NotifyState } from '@app/notify'
 import { makePersona, type Gender } from '@engine/persona'
 import type { Seat } from '@engine/setup'
 import { Portrait } from './Portrait'
@@ -392,6 +393,57 @@ function Nav({
       {onNext && (
         <button className="btn btn-primary" onClick={onNext} disabled={nextDisabled}>
           {nextLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Offer to let the ship speak up, before the first voyage rather than after.
+ *
+ * Only on the real-time path, because it is the only one where anything
+ * happens while you are not looking — in round play nothing moves until
+ * somebody throws. Asked here rather than mid-game: a permission prompt in
+ * the middle of a harbour visit is an ambush, and by the time the first ship
+ * is at sea it is already too late to be useful.
+ */
+function NotifyCheck() {
+  const [state, setState] = useState<NotifyState>(() => notifyState())
+  const [asking, setAsking] = useState(false)
+
+  if (state === 'unsupported') return null
+
+  const ask = async () => {
+    setAsking(true)
+    setState(await askToNotify())
+    setAsking(false)
+  }
+
+  return (
+    <div className="paper-card mt-4 flex items-center gap-3 rounded-md px-3.5 py-3">
+      <span className="text-xl leading-none" aria-hidden>
+        {state === 'granted' ? '🔔' : state === 'denied' ? '🔕' : '🔔'}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] leading-tight font-semibold">
+          {state === 'granted'
+            ? 'Ihr Schiff meldet sich'
+            : state === 'denied'
+              ? 'Meldungen sind abgeschaltet'
+              : 'Soll sich Ihr Schiff melden?'}
+        </p>
+        <p className="text-ink-faint mt-0.5 text-[12px] leading-snug">
+          {state === 'granted'
+            ? 'Sie erfahren, wenn ein Hafen erreicht ist und wenn die Saison schließt — solange die Seite geöffnet bleibt oder im Hintergrund läuft.'
+            : state === 'denied'
+              ? 'Ihr Browser hat Meldungen für diese Seite gesperrt. Das läßt sich nur in den Einstellungen des Browsers wieder ändern.'
+              : 'Eine Fahrt dauert echte Stunden. Mit Meldungen können Sie das Gerät weglegen und erfahren trotzdem, wenn der Hafen erreicht ist.'}
+        </p>
+      </div>
+      {state === 'default' && (
+        <button className="btn btn-sm shrink-0" onClick={ask} disabled={asking}>
+          {asking ? '…' : 'Erlauben'}
         </button>
       )}
     </div>
@@ -810,6 +862,8 @@ function StepNamen({
           Die anderen tragen sich selbst ein, sobald sie den Code haben.
         </p>
       )}
+
+      {options.travel === 'echtzeit' && <NotifyCheck />}
 
       <p className="text-ink-faint mt-5 text-center text-[11px]">
         {options.mode === 'klassisch'

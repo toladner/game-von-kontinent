@@ -3,7 +3,15 @@ import { CLASSIC_PACK } from '@content/maps/classic'
 import { createContext } from './context'
 import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
-import { buyOffers, marketReport, portAt, quoteSale, saleQuotes } from './selectors'
+import {
+  buyOffers,
+  marketReport,
+  portAt,
+  quoteSale,
+  sailingTimeMs,
+  saleQuotes,
+  voyageEndsAt,
+} from './selectors'
 import { flagship, type GameState } from './state'
 import { distanceToSource, exportsAt, sellPriceAt } from './market'
 import type { KonjunkturCard } from './types'
@@ -311,6 +319,63 @@ describe('the Wohin? list under distance pricing', () => {
     expect(profits.size).toBe(1)
     for (let i = 1; i < report.length; i++) {
       expect(report[i]!.distance).toBeGreaterThanOrEqual(report[i - 1]!.distance)
+    }
+  })
+})
+
+describe('what the chart says a voyage will take', () => {
+  const T0 = 1_800_000_000_000
+
+  const afloat = (options: NewGameOptions = {}) =>
+    replay(
+      ctx,
+      createGame(ctx, { seed: 'uhr', travel: 'echtzeit', minutesPerPip: 6, ...options }),
+      [
+        { type: 'tick', at: T0 },
+        { type: 'join', playerId: 'a', name: 'Ada' },
+        { type: 'join', playerId: 'b', name: 'Bo' },
+        { type: 'start' },
+      ],
+    )
+
+  it('quotes nothing in round play, where a voyage costs throws', () => {
+    const s = table()
+    for (const row of marketReport(ctx, s, s.players[0]!, 6)) {
+      expect(row.travelMs).toBeUndefined()
+    }
+  })
+
+  it('quotes a time for every destination once ships sail on a clock', () => {
+    const s = afloat()
+    const rows = marketReport(ctx, s, s.players[0]!, 6)
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.travelMs, row.name).toBeGreaterThan(0)
+    }
+  })
+
+  it('quotes the time the ship will actually take, cast-off included', () => {
+    // The chart and the helm have to agree, or the estimate is decoration.
+    const s = afloat()
+    const ship = flagship(s.players[0]!)
+    for (const row of marketReport(ctx, s, s.players[0]!, 6)) {
+      expect(row.travelMs, row.name).toBe(sailingTimeMs(ctx, s, ship, row.portId))
+    }
+  })
+
+  it('agrees with the voyage once it has actually been ordered', () => {
+    const s = afloat()
+    const target = marketReport(ctx, s, s.players[0]!, 6)[0]!
+    const ordered = applyAction(ctx, s, { type: 'setCourse', to: target.portId, by: 'a' }).state
+    const eta = voyageEndsAt(ctx, ordered, flagship(ordered.players[0]!))!
+    expect(eta - T0).toBeCloseTo(target.travelMs!, -3)
+  })
+
+  it('says a longer haul takes longer', () => {
+    const s = afloat({ preise: 'entfernung' })
+    const rows = marketReport(ctx, s, s.players[0]!, 6)
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i]!.travelMs!, rows[i]!.name).toBeGreaterThan(rows[i - 1]!.travelMs!)
     }
   })
 })

@@ -23,6 +23,7 @@ import {
 } from '@engine/state'
 import type { EngineContext } from '@engine/context'
 import { clockText, durationText, untilText, useNow } from './useNow'
+import { useArrivalNotice } from './useArrivalNotice'
 import { PLAYER_COLORS as COLORS } from '@app/store'
 
 type SheetKind =
@@ -158,6 +159,10 @@ export function GameScreen() {
   const focusNonce = useFocusNonce(focusKey)
 
   const waitingMail = portId ? (player.knowledge.waiting[flagship(player).nodeId] ?? []).length : 0
+
+  // A voyage takes real hours and the point of that is being able to put the
+  // phone down, so the ship says when it has made port.
+  useArrivalNotice(ctx, state, player, realtime)
 
   return (
     <div className="relative h-full w-full overflow-hidden">
