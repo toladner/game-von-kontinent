@@ -8,6 +8,12 @@ Die Spielsprache ist Deutsch. Regeln, Warenverzeichnis und Kartensätze sind
 den Originalen entnommen; die Regeln stehen zusammengefaßt in
 [`rules.md`](rules.md).
 
+**Spielen:** <https://von-kontinent-zu-kontinent.toladner.workers.dev>
+
+Dieselbe Adresse trägt das Spiel und den Partieserver — ein Cloudflare Worker
+mit je einem Durable Object pro Partie, der denselben Reducer fährt wie der
+Browser.
+
 ## Loslegen
 
 ```bash

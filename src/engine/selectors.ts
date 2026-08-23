@@ -228,6 +228,32 @@ export function castOffMs(state: GameState, vehicle: VehicleInstance): number {
 }
 
 /**
+ * What a voyage to `target` would cost in real time, if ordered now.
+ *
+ * Cast-off included, because from the merchant's point of view the wait
+ * alongside is part of getting there. Null when there is no route, or when
+ * the ship is already at sea and cannot be given a new destination.
+ */
+export function sailingTimeMs(
+  ctx: EngineContext,
+  state: GameState,
+  vehicle: VehicleInstance,
+  target: PortId,
+): number | null {
+  if (vehicle.nodeId === target) return null
+  const route = routeTo(ctx, vehicle.nodeId, vehicle.cameFrom, target)
+  if (route.length === 0) return null
+
+  let ms = castOffMs(state, vehicle)
+  let from = vehicle.nodeId
+  for (const to of route) {
+    ms += legMsFor(ctx, state, vehicle, from, to)
+    from = to
+  }
+  return ms
+}
+
+/**
  * When a voyage in progress reaches its destination.
  *
  * The leg under way has a known arrival; the rest are priced from the map,
@@ -368,10 +394,91 @@ export function marketReport(
   const score = (d: Destination) =>
     flagship(player).cargo.length > 0 ? d.profit / (d.distance + 2) : d.offers / (d.distance + 2)
 
-  return rows
+  const usable = rows
     .filter((d) => (flagship(player).cargo.length > 0 ? d.sellable > 0 : d.offers > 0))
     .sort((a, b) => score(b) - score(a))
-    .slice(0, limit)
+
+  // Under fixed prices a good fetches the same figure in every harbour, so
+  // profit is flat and the only question is which is nearest — the best few
+  // by score are exactly the right answer.
+  if (state.config.preise !== 'entfernung') return usable.slice(0, limit)
+
+  /*
+   * Under distance pricing the far harbours pay more, so ranking by score
+   * alone hands back six variations of "sail a long way" and the decision
+   * makes itself. The interesting question is what the extra sea is worth,
+   * and that can only be weighed against something close by — so the list is
+   * spread over the range of distances actually available and then read from
+   * near to far, which is the order the comparison wants to be read in.
+   */
+  const worthwhile = efficientFrontier(usable)
+  const spread = spreadByDistance(worthwhile, limit)
+  return [...spread].sort((a, b) => a.distance - b.distance)
+}
+
+/**
+ * Drop every destination that some nearer harbour already beats.
+ *
+ * The price rise flattens out at the ceiling, so past a certain distance the
+ * extra sea buys nothing — and a list offering Acapulco at sixty-two pips for
+ * the same money as Laurenço-Marques at thirty-seven is offering a choice
+ * nobody would make. What is left is the frontier: every harbour on it is
+ * either closer or richer than every other, so each row is a real decision.
+ */
+function efficientFrontier(byScore: readonly Destination[]): readonly Destination[] {
+  const kept: Destination[] = []
+  let best = -Infinity
+  for (const row of [...byScore].sort((a, b) => a.distance - b.distance)) {
+    if (row.profit <= best) continue
+    kept.push(row)
+    best = row.profit
+  }
+  // Handed back best-first, because that is what the spread expects.
+  return kept.sort(
+    (a, b) => b.profit / (b.distance + 2) - a.profit / (a.distance + 2),
+  )
+}
+
+/**
+ * Pick `limit` destinations covering the whole range of distances on offer.
+ *
+ * The candidates arrive best-first. They are split into as many distance
+ * bands as there are slots, and the best of each band is taken in turn; any
+ * slot left over by an empty band falls back to the next best overall, so a
+ * map with nothing far away still returns a full list.
+ */
+function spreadByDistance(
+  candidates: readonly Destination[],
+  limit: number,
+): readonly Destination[] {
+  if (candidates.length <= limit) return candidates
+
+  const distances = candidates.map((d) => d.distance)
+  const near = Math.min(...distances)
+  const far = Math.max(...distances)
+  if (far === near) return candidates.slice(0, limit)
+
+  const bands: Destination[][] = Array.from({ length: limit }, () => [])
+  for (const row of candidates) {
+    const share = (row.distance - near) / (far - near)
+    bands[Math.min(limit - 1, Math.floor(share * limit))]!.push(row)
+  }
+
+  const picked: Destination[] = []
+  const taken = new Set<string>()
+  for (const band of bands) {
+    const best = band[0]
+    if (!best) continue
+    picked.push(best)
+    taken.add(best.portId)
+  }
+  for (const row of candidates) {
+    if (picked.length >= limit) break
+    if (taken.has(row.portId)) continue
+    picked.push(row)
+    taken.add(row.portId)
+  }
+  return picked.slice(0, limit)
 }
 
 export interface Standing {

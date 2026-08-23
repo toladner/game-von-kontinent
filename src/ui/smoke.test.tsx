@@ -79,27 +79,45 @@ describe('the front page', () => {
   it('opens the option page on the full path', () => {
     render(<App />)
     fireEvent.click(screen.getByText('Vollständig'))
-    expect(screen.getByText('Spielplan')).toBeTruthy()
-    expect(screen.getByText('Originalplan')).toBeTruthy()
-    // Every plan in the registry is playable, the world and the regions
-    // included — this used to be an "in Vorbereitung" placeholder.
-    for (const plan of ['Ganze Welt', 'Europa', 'Asien und Ozeanien']) {
-      expect((screen.getByText(plan).closest('button') as HTMLButtonElement).disabled).toBe(false)
+
+    // Settings are grouped under headings and worked through dropdowns; the
+    // page used to be fourteen full-width cards in a flat list.
+    for (const heading of ['Der Spielplan', 'Die Fahrt', 'Der Markt', 'Das Handelshaus']) {
+      expect(screen.getByText(heading), heading).toBeTruthy()
     }
-    expect((screen.getByText('In Echtzeit').closest('button') as HTMLButtonElement).disabled).toBe(
-      false,
-    )
-    // Dauer and Kapital are sliders, not fixed buttons.
+
+    // Every plan in the registry is offered, the world and the regions
+    // included — the world used to be an "in Vorbereitung" placeholder.
+    const plan = screen.getByLabelText('Spielplan') as HTMLSelectElement
+    const offered = [...plan.options].map((o) => o.text)
+    for (const name of ['Originalplan', 'Ganze Welt', 'Europa', 'Asien und Ozeanien']) {
+      expect(offered, name).toContain(name)
+    }
+    expect([...plan.options].every((o) => !o.disabled)).toBe(true)
+
+    // Every mode has a dropdown of its own.
+    for (const label of ['Fahrtweise', 'Sicht', 'Angebot', 'Preise', 'Konjunktur']) {
+      expect((screen.getByLabelText(label) as HTMLSelectElement).tagName, label).toBe('SELECT')
+    }
+
+    // Dauer and Kapital stay sliders: a range is the right control for a number.
     expect((screen.getByLabelText('Runden') as HTMLInputElement).type).toBe('range')
     expect((screen.getByLabelText('Betriebskapital') as HTMLInputElement).type).toBe('range')
 
     // Choosing real time swaps the round count for a pace and a season.
-    fireEvent.click(screen.getByText('In Echtzeit'))
+    fireEvent.change(screen.getByLabelText('Fahrtweise'), { target: { value: 'echtzeit' } })
     expect(screen.queryByLabelText('Runden')).toBeNull()
     expect((screen.getByLabelText('Fahrzeit je Punkt') as HTMLInputElement).type).toBe('range')
     expect((screen.getByLabelText('Länge der Saison') as HTMLInputElement).type).toBe('range')
-    fireEvent.click(screen.getByText('Mit Würfel'))
 
+    // Fog has no meaning without real time, so choosing it brings that along.
+    fireEvent.change(screen.getByLabelText('Fahrtweise'), { target: { value: 'wuerfel' } })
+    expect(screen.queryByLabelText('Runden')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Sicht'), { target: { value: 'realistisch' } })
+    expect((screen.getByLabelText('Fahrtweise') as HTMLSelectElement).value).toBe('echtzeit')
+
+    fireEvent.change(screen.getByLabelText('Sicht'), { target: { value: 'normal' } })
+    fireEvent.change(screen.getByLabelText('Fahrtweise'), { target: { value: 'wuerfel' } })
     fireEvent.click(screen.getByText('Weiter'))
     expect(
       (screen.getByText('Partie eröffnen').closest('button') as HTMLButtonElement).disabled,

@@ -359,6 +359,50 @@ describe('real-time sailing', () => {
     }
   })
 
+  it('lets a course be changed while she is still alongside', () => {
+    let s = afloat()
+    const from = flagship(s.players[0]!).nodeId
+    const reachable = [...ctx.portsById.keys()].filter(
+      (id) => id !== portAt(ctx, from) && routeTo(ctx, from, null, id).length >= 2,
+    )
+    const [first, second] = [reachable[0]!, reachable[1]!]
+
+    s = applyAction(ctx, s, { type: 'setCourse', to: first, by: 'a' }).state
+    expect(flagship(s.players[0]!).voyage!.destination).toBe(first)
+
+    const changed = applyAction(ctx, s, { type: 'setCourse', to: second, by: 'a' })
+    expect(changed.events.some((e) => e.type === 'rejected')).toBe(false)
+    expect(flagship(changed.state.players[0]!).voyage!.destination).toBe(second)
+
+    // Once she has cast off, the decision is made.
+    const departs = flagship(changed.state.players[0]!).voyage!.departsAt
+    const sailed = applyAction(ctx, changed.state, { type: 'tick', at: departs + 1000 }).state
+    const late = applyAction(ctx, sailed, { type: 'setCourse', to: first, by: 'a' })
+    expect(late.events.some((e) => e.type === 'rejected')).toBe(true)
+  })
+
+  it('reports an arrival time that matches the voyage it describes', () => {
+    // The announced ETA multiplied one leg by the route length, which stopped
+    // being true the moment legs were charged by the sea mile.
+    let s = afloat()
+    const from = flagship(s.players[0]!).nodeId
+    const target = [...ctx.portsById.keys()].find((id) => {
+      if (id === portAt(ctx, from)) return false
+      const r = routeTo(ctx, from, null, id)
+      return r.length >= 3 && r.length <= 6
+    })!
+
+    const ordered = applyAction(ctx, s, { type: 'setCourse', to: target, by: 'a' })
+    const announced = ordered.events.find((e) => e.type === 'setSail')
+    expect(announced?.type).toBe('setSail')
+    s = ordered.state
+
+    const actual = voyageEndsAt(ctx, s, flagship(s.players[0]!))!
+    if (announced?.type === 'setSail') {
+      expect(announced.arrivesAt).toBeCloseTo(actual, -3)
+    }
+  })
+
   it('turns a lumbering ship round more slowly', () => {
     const s = afloat()
     const ship = flagship(s.players[0]!)

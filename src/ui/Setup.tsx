@@ -250,7 +250,7 @@ function Slider({
   onChange: (v: number) => void
 }) {
   return (
-    <div className="paper-card rounded-md px-3.5 py-3">
+    <div className="px-3.5 py-3">
       <div className="flex items-baseline justify-between gap-3">
         <span className="smallcaps text-ink-soft text-[11px]">{label}</span>
         <span className="tnum display text-xl">{format(value)}</span>
@@ -272,6 +272,105 @@ function Slider({
       </div>
     </div>
   )
+}
+
+/**
+ * A group of related settings on one sheet of paper.
+ *
+ * The options page had grown to fourteen full-width cards in a flat list, so
+ * every setting shouted as loudly as every other and the eye had nothing to
+ * hold on to. Grouping them under headings and putting the group on one card
+ * is what turns a list into a form.
+ */
+function Section({
+  title,
+  hint,
+  children,
+}: {
+  title: string
+  hint?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="mt-7 first:mt-0">
+      <h2 className="smallcaps text-ink-soft mb-1 text-[11px] tracking-[0.2em]">{title}</h2>
+      {hint && <p className="text-ink-faint mb-2 text-[12px] leading-snug">{hint}</p>}
+      <div className="paper-card divide-y divide-black/10 rounded-md">{children}</div>
+    </section>
+  )
+}
+
+/**
+ * One setting: what it is called, the control, and a line on what it does.
+ *
+ * The explanation stays — it is the reason the long cards existed — but it
+ * sits under the control as a note rather than being the size of a headline.
+ */
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="px-3.5 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="smallcaps text-ink-soft shrink-0 text-[11px]">{label}</span>
+        {children}
+      </div>
+      {hint && <p className="text-ink-faint mt-1.5 text-[12px] leading-snug">{hint}</p>}
+    </div>
+  )
+}
+
+export interface DropdownOption<T extends string> {
+  readonly id: T
+  readonly label: string
+  /** Shown under the control once chosen, so the choice explains itself. */
+  readonly hint?: string
+  readonly disabled?: boolean
+}
+
+/**
+ * A native select, dressed for the Kontor.
+ *
+ * Native on purpose: it is the one control that already knows how to be a
+ * wheel on a phone, a listbox on a desktop and a focusable element for a
+ * screen reader, and none of that is worth rebuilding to gain a typeface.
+ */
+function Dropdown<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T
+  options: readonly DropdownOption<T>[]
+  onChange: (value: T) => void
+  label: string
+}) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value as T)}
+      className="focusable teletype border-ink/25 bg-paper text-ink min-w-0 flex-1 rounded-[2px] border px-2 py-1.5 text-right text-[13px] font-semibold"
+    >
+      {options.map((option) => (
+        <option key={option.id} value={option.id} disabled={option.disabled}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/** The note belonging to whichever option is currently chosen. */
+function hintFor<T extends string>(options: readonly DropdownOption<T>[], value: T): string {
+  return options.find((o) => o.id === value)?.hint ?? ''
 }
 
 function Nav({
@@ -298,6 +397,79 @@ function Nav({
     </div>
   )
 }
+
+/*
+ * What each setting offers, and what choosing it means.
+ *
+ * Kept as data next to the control rather than as prose inside it, so the
+ * blurb that used to fill a whole card can sit under the dropdown as one
+ * line — and so adding a mode is a row here rather than another card.
+ */
+
+const TRAVEL_OPTIONS: readonly DropdownOption<Travel>[] = [
+  {
+    id: 'wuerfel',
+    label: 'Mit Würfel',
+    hint: 'Ein Wurf, so viele Punkte weit. Wie auf dem Brett.',
+  },
+  {
+    id: 'echtzeit',
+    label: 'In Echtzeit',
+    hint: 'Schiffe brauchen echte Zeit von Hafen zu Hafen. Kurs setzen, weggehen, später nachsehen — auch wenn niemand zuschaut, fahren die Schiffe weiter.',
+  },
+]
+
+const SICHT_OPTIONS: readonly DropdownOption<Sicht>[] = [
+  {
+    id: 'normal',
+    label: 'Normal',
+    hint: 'Sie sehen jederzeit, wo jedes Fahrzeug steht, und Befehle wirken sofort.',
+  },
+  {
+    id: 'realistisch',
+    label: 'Realistisch',
+    hint: 'Sie wissen nur, wo Sie selbst sind. Befehle an entfernte Kapitäne gehen per Brieftaube — ob sie ankommt, erfahren Sie nie. Schaltet die Echtzeitfahrt mit ein.',
+  },
+]
+
+const ANGEBOT_OPTIONS: readonly DropdownOption<Angebot>[] = [
+  {
+    id: 'fest',
+    label: 'Fest',
+    hint: 'Jeder Hafen führt aus, was im Warenverzeichnis steht. So ist der Plan gedruckt.',
+  },
+  {
+    id: 'zufaellig',
+    label: 'Zufällig',
+    hint: 'Die Handelswege werden zu Spielbeginn neu ausgelost. Jeder Hafen behält seine Größe, aber niemand weiß mehr auswendig, wo der Kaffee liegt.',
+  },
+]
+
+const PREISE_OPTIONS: readonly DropdownOption<Preise>[] = [
+  {
+    id: 'fest',
+    label: 'Fest',
+    hint: 'Ein Verkaufspreis je Ware, überall auf der Welt derselbe.',
+  },
+  {
+    id: 'entfernung',
+    label: 'Nach Entfernung',
+    hint: 'Je weiter eine Ware vom nächsten Hafen entfernt ist, der sie selbst ausführt, desto mehr bringt sie. Kurze Wege lohnen dann nicht mehr — die weite Fahrt zahlt sich aus.',
+  },
+]
+
+const KONJUNKTUR_OPTIONS: readonly DropdownOption<Konjunktur>[] = [
+  {
+    id: 'klassisch',
+    label: 'Klassisch',
+    hint: 'Die 27 gedruckten Karten. Hausse, Baisse, Steuer, Telegramm.',
+  },
+  {
+    id: 'erweitert',
+    label: 'Erweitert',
+    hint: 'Dazu Stürme, die Ladung über Bord gehen lassen, Hausse und Baisse über einzelnen Erdteilen, Seeräuber und örtliche Gebühren. Wo Sie stehen, zählt dann mit.',
+  },
+]
 
 /** Turns a pace in minutes into something a person can picture. */
 function paceHint(minutesPerPip: number): string {
@@ -377,131 +549,52 @@ function StepOptionen({
 }) {
   return (
     <div className="anim-fade">
-      <Legend>Spielplan</Legend>
-      <div className="space-y-2">
-        {PACKS.map((p) => (
-          <Choice
-            key={p.id}
-            title={p.name}
-            blurb={p.blurb}
-            selected={options.packId === p.id}
-            disabled={!p.ready}
-            onClick={p.ready ? () => set('packId', p.id) : undefined}
+      <Section title="Der Spielplan" hint="Welche Küsten befahren werden.">
+        <Field label="Plan" hint={PACKS.find((p) => p.id === options.packId)?.blurb}>
+          <Dropdown
+            label="Spielplan"
+            value={options.packId}
+            options={PACKS.filter((p) => p.ready).map((p) => ({ id: p.id, label: p.name }))}
+            onChange={(id) => set('packId', id)}
           />
-        ))}
-      </div>
+        </Field>
+      </Section>
 
-      <Legend>Fahrtweise</Legend>
-      <div className="space-y-2">
-        <Choice
-          title="Mit Würfel"
-          blurb="Ein Wurf, so viele Punkte weit. Wie auf dem Brett."
-          selected={options.travel === 'wuerfel'}
-          onClick={() => setOptions((o) => ({ ...o, travel: 'wuerfel', sicht: 'normal' }))}
-        />
-        <Choice
-          title="In Echtzeit"
-          blurb="Schiffe brauchen echte Zeit von Hafen zu Hafen. Kurs setzen, weggehen, später nachsehen — auch wenn niemand zuschaut, fahren die Schiffe weiter."
-          selected={options.travel === 'echtzeit'}
-          disabled={!CAPABILITIES['travel:echtzeit']!.ready}
-          note={CAPABILITIES['travel:echtzeit']!.note}
-          onClick={() => set('travel', 'echtzeit' as Travel)}
-        />
-      </div>
+      <Section title="Die Fahrt" hint="Wie die Schiffe von Hafen zu Hafen kommen.">
+        <Field label="Fahrtweise" hint={hintFor(TRAVEL_OPTIONS, options.travel)}>
+          <Dropdown
+            label="Fahrtweise"
+            value={options.travel}
+            options={TRAVEL_OPTIONS}
+            onChange={(travel) =>
+              // Fog only means anything once ships take real time to arrive,
+              // so going back to dice has to take it with them.
+              setOptions((o) => ({
+                ...o,
+                travel,
+                sicht: travel === 'wuerfel' ? 'normal' : o.sicht,
+              }))
+            }
+          />
+        </Field>
 
-      <Legend>Sicht</Legend>
-      <div className="space-y-2">
-        <Choice
-          title="Normal"
-          blurb="Sie sehen jederzeit, wo jedes Fahrzeug steht, und Befehle wirken sofort."
-          selected={options.sicht === 'normal'}
-          onClick={() => set('sicht', 'normal' as Sicht)}
-        />
-        <Choice
-          title="Realistisch"
-          blurb="Sie wissen nur, wo Sie selbst sind. Befehle an entfernte Kapitäne gehen per Brieftaube — ob sie ankommt, erfahren Sie nie. Braucht Echtzeitfahrt."
-          selected={options.sicht === 'realistisch'}
-          disabled={!CAPABILITIES['sicht:realistisch']!.ready}
-          note={CAPABILITIES['sicht:realistisch']!.note}
-          onClick={() => {
-            // Fog only means anything once ships take real time to arrive —
-            // and once there is a captain elsewhere to lose sight of.
-            setOptions((o) => ({
-              ...o,
-              sicht: 'realistisch',
-              travel: 'echtzeit',
-              fleetLimit: Math.max(o.fleetLimit, 2),
-            }))
-          }}
-        />
-      </div>
+        <Field label="Sicht" hint={hintFor(SICHT_OPTIONS, options.sicht)}>
+          <Dropdown
+            label="Sicht"
+            value={options.sicht}
+            options={SICHT_OPTIONS}
+            onChange={(sicht) =>
+              setOptions((o) =>
+                sicht === 'realistisch'
+                  ? // Nothing to lose sight of without real time and a second
+                    // captain, so choosing fog brings both with it.
+                    { ...o, sicht, travel: 'echtzeit', fleetLimit: Math.max(o.fleetLimit, 2) }
+                  : { ...o, sicht },
+              )
+            }
+          />
+        </Field>
 
-      <Legend>Der Markt</Legend>
-      <div className="space-y-2">
-        <Choice
-          title="Angebot: fest"
-          blurb="Jeder Hafen führt aus, was im Warenverzeichnis steht. So ist der Plan gedruckt."
-          selected={options.angebot === 'fest'}
-          onClick={() => set('angebot', 'fest' as Angebot)}
-        />
-        <Choice
-          title="Angebot: zufällig"
-          blurb="Die Handelswege werden zu Spielbeginn neu ausgelost. Jeder Hafen behält seine Größe, aber niemand weiß mehr auswendig, wo der Kaffee liegt."
-          selected={options.angebot === 'zufaellig'}
-          onClick={() => set('angebot', 'zufaellig' as Angebot)}
-        />
-      </div>
-
-      <div className="mt-3 space-y-2">
-        <Choice
-          title="Preise: fest"
-          blurb="Ein Verkaufspreis je Ware, überall auf der Welt derselbe."
-          selected={options.preise === 'fest'}
-          onClick={() => set('preise', 'fest' as Preise)}
-        />
-        <Choice
-          title="Preise: nach Entfernung"
-          blurb="Je weiter eine Ware vom nächsten Hafen entfernt ist, der sie selbst ausführt, desto mehr bringt sie. Kurze Wege lohnen dann nicht mehr — die weite Fahrt zahlt sich aus."
-          selected={options.preise === 'entfernung'}
-          onClick={() => set('preise', 'entfernung' as Preise)}
-        />
-      </div>
-
-      <div className="mt-3 space-y-2">
-        <Choice
-          title="Konjunktur: klassisch"
-          blurb="Die 27 gedruckten Karten. Hausse, Baisse, Steuer, Telegramm."
-          selected={options.konjunktur === 'klassisch'}
-          onClick={() => set('konjunktur', 'klassisch' as Konjunktur)}
-        />
-        <Choice
-          title="Konjunktur: erweitert"
-          blurb="Dazu Stürme, die Ladung über Bord gehen lassen, Hausse und Baisse über einzelnen Erdteilen, Seeräuber und örtliche Gebühren. Wo Sie stehen, zählt dann mit."
-          selected={options.konjunktur === 'erweitert'}
-          onClick={() => set('konjunktur', 'erweitert' as Konjunktur)}
-        />
-      </div>
-
-      <Legend>Reederei</Legend>
-      <div className="space-y-2.5">
-        <Slider
-          label="Schiffe je Haus"
-          value={options.fleetLimit}
-          min={1}
-          max={4}
-          step={1}
-          hint={
-            options.fleetLimit === 1
-              ? 'wie im Original — keine Werft'
-              : 'Werften verkaufen; ein zweites Schiff kostet ein halbes Vermögen'
-          }
-          format={(v) => String(v)}
-          onChange={(v) => set('fleetLimit', v)}
-        />
-      </div>
-
-      <Legend>Dauer und Kapital</Legend>
-      <div className="space-y-2.5">
         {options.travel === 'echtzeit' ? (
           <>
             <Slider
@@ -543,6 +636,36 @@ function StepOptionen({
             onChange={(v) => set('totalRounds', v)}
           />
         )}
+      </Section>
+
+      <Section title="Der Markt" hint="Wo die Waren liegen und was sie einbringen.">
+        <Field label="Angebot" hint={hintFor(ANGEBOT_OPTIONS, options.angebot)}>
+          <Dropdown
+            label="Angebot"
+            value={options.angebot}
+            options={ANGEBOT_OPTIONS}
+            onChange={(v) => set('angebot', v)}
+          />
+        </Field>
+        <Field label="Preise" hint={hintFor(PREISE_OPTIONS, options.preise)}>
+          <Dropdown
+            label="Preise"
+            value={options.preise}
+            options={PREISE_OPTIONS}
+            onChange={(v) => set('preise', v)}
+          />
+        </Field>
+        <Field label="Konjunktur" hint={hintFor(KONJUNKTUR_OPTIONS, options.konjunktur)}>
+          <Dropdown
+            label="Konjunktur"
+            value={options.konjunktur}
+            options={KONJUNKTUR_OPTIONS}
+            onChange={(v) => set('konjunktur', v)}
+          />
+        </Field>
+      </Section>
+
+      <Section title="Das Handelshaus" hint="Womit jeder Mitspieler anfängt.">
         <Slider
           label="Betriebskapital"
           value={options.startingCapital}
@@ -553,7 +676,21 @@ function StepOptionen({
           format={(v) => v.toLocaleString('de-DE')}
           onChange={(v) => set('startingCapital', v)}
         />
-      </div>
+        <Slider
+          label="Schiffe je Haus"
+          value={options.fleetLimit}
+          min={1}
+          max={4}
+          step={1}
+          hint={
+            options.fleetLimit === 1
+              ? 'wie im Original — keine Werft'
+              : 'Werften verkaufen; ein zweites Schiff kostet ein halbes Vermögen'
+          }
+          format={(v) => String(v)}
+          onChange={(v) => set('fleetLimit', v)}
+        />
+      </Section>
 
       <Nav onBack={onBack} onNext={onNext} />
     </div>

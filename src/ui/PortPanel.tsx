@@ -10,10 +10,14 @@ import {
 import {
   buyOffers,
   marketReport,
+  routeTo,
+  sailingTimeMs,
   saleQuotes,
   sellDestinations,
   verkaufszwangOpen,
 } from '@engine/selectors'
+import { exportsAt } from '@engine/market'
+import { durationText } from './useNow'
 import { goodOf, portOf } from '@engine/context'
 import type { EngineContext } from '@engine/context'
 import { flagship, type GameState, type PlayerState } from '@engine/state'
@@ -539,4 +543,138 @@ export function MarketReport({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-ink-faint py-6 text-center text-sm italic">{children}</p>
+}
+
+/**
+ * A harbour looked at from the sea, before committing to sail there.
+ *
+ * Tapping a port on the plan used to set a course on the spot, which is a
+ * long voyage bought with one careless thumb. It opens this instead: what the
+ * place ships, what it would pay for what you are carrying, and how long
+ * getting there takes. Only then is there a button to go.
+ *
+ * The same panel serves a harbour you are looking at while lying in another,
+ * so it never assumes your ship is anywhere near it.
+ */
+export function PortPreviewSheet({
+  ctx,
+  state,
+  player,
+  portId,
+  snap,
+  onSnap,
+  onSetCourse,
+}: {
+  ctx: EngineContext
+  state: GameState
+  player: PlayerState
+  portId: string
+  snap: SheetSnap
+  onSnap: (s: SheetSnap) => void
+  /** Absent when the ship cannot be given a course right now. */
+  onSetCourse?: (portId: string) => void
+}) {
+  const port = portOf(ctx, portId)
+  const country = ctx.pack.map.countries.find((c) => c.id === port.country)
+  const ship = flagship(player)
+  const here = ship.nodeId === portId
+
+  const exports = exportsAt(ctx, state, portId)
+  const quotes = saleQuotes(ctx, state, player, portId)
+  const earners = quotes.filter((q) => q.kind === 'markt')
+  const takings = earners.reduce((sum, q) => sum + q.price, 0)
+
+  const route = here ? [] : routeTo(ctx, ship.nodeId, ship.cameFrom, portId)
+  const eta = here ? null : sailingTimeMs(ctx, state, ship, portId)
+
+  return (
+    <Sheet
+      snap={snap}
+      onSnap={onSnap}
+      title={port.name}
+      subtitle={country?.name}
+      footer={
+        here ? (
+          <p className="text-ink-soft py-1 text-center text-[13px]">Sie liegen bereits hier.</p>
+        ) : onSetCourse && route.length > 0 ? (
+          <button className="btn btn-primary w-full text-base" onClick={() => onSetCourse(portId)}>
+            Kurs auf {port.name} setzen
+          </button>
+        ) : (
+          <p className="text-ink-soft py-1 text-center text-[13px]">
+            {route.length === 0 ? 'Dorthin führt keine Linie.' : 'Das Schiff ist unterwegs.'}
+          </p>
+        )
+      }
+    >
+      {!here && (
+        <div className="teletype mb-3 flex items-center justify-between gap-2 rounded-sm border border-black/15 bg-black/5 px-2.5 py-2 text-[13px]">
+          <span>
+            <span className="smallcaps text-ink-soft text-[11px]">Entfernung</span>{' '}
+            <span className="tnum font-bold">
+              {route.length} {route.length === 1 ? 'Punkt' : 'Punkte'}
+            </span>
+          </span>
+          {eta !== null && (
+            <span>
+              <span className="smallcaps text-ink-soft text-[11px]">Fahrt</span>{' '}
+              <span className="tnum font-bold">{durationText(eta)}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      <h3 className="smallcaps text-ink-soft mb-1.5 text-[11px]">
+        {earners.length > 0 ? 'Nimmt Ihnen ab' : 'Ihre Ladung'}
+      </h3>
+      {ship.cargo.length === 0 ? (
+        <p className="text-ink-faint mb-3 text-[13px] italic">
+          Ihr Laderaum ist leer — hier wäre nichts abzusetzen.
+        </p>
+      ) : earners.length === 0 ? (
+        <p className="text-ink-faint mb-3 text-[13px] italic">
+          Dieser Hafen führt Ihre Waren selbst. Er zahlte nur den Verlustpreis.
+        </p>
+      ) : (
+        <ul className="mb-3 space-y-0.5 text-[13px]">
+          {earners.map((q) => (
+            <li key={q.item.uid} className="flex items-baseline justify-between gap-2">
+              <span className="min-w-0 flex-1 truncate font-semibold">
+                {goodOf(ctx, q.item.goodId).name}
+              </span>
+              <span className="tnum">{q.price.toLocaleString('de-DE')}</span>
+              <span
+                className={`tnum w-20 text-right font-bold ${q.profit >= 0 ? 'text-press' : 'text-rot'}`}
+              >
+                {q.profit >= 0 ? '+' : '−'}
+                {Math.abs(q.profit).toLocaleString('de-DE')}
+              </span>
+            </li>
+          ))}
+          <li className="flex items-baseline justify-between gap-2 border-t border-black/10 pt-1 font-bold">
+            <span className="smallcaps text-[11px]">Erlös</span>
+            <span className="tnum">{takings.toLocaleString('de-DE')}</span>
+            <span className="w-20" />
+          </li>
+        </ul>
+      )}
+
+      <h3 className="smallcaps text-ink-soft mb-1.5 text-[11px]">Führt aus</h3>
+      {exports.length === 0 ? (
+        <p className="text-ink-faint text-[13px] italic">Von hier geht nichts hinaus.</p>
+      ) : (
+        <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[13px]">
+          {exports.map((goodId) => {
+            const good = goodOf(ctx, goodId)
+            return (
+              <li key={goodId} className="flex items-baseline justify-between gap-1.5">
+                <span className="min-w-0 flex-1 truncate">{good.name}</span>
+                <span className="tnum text-ink-soft">{good.buy.toLocaleString('de-DE')}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Sheet>
+  )
 }

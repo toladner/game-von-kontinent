@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Board } from './Board'
-import { PortSheet, MarketReport } from './PortPanel'
+import { PortSheet, MarketReport, PortPreviewSheet } from './PortPanel'
 import { KonjunkturSlip } from './Cards'
 import { Portrait } from './Portrait'
 import { PlayerHUD, RoundPill, useCountUp } from './PlayerHUD'
@@ -34,6 +34,7 @@ type SheetKind =
   | 'flotte'
   | 'taube'
   | 'nachrichten'
+  | 'vorschau'
   | null
 
 export function GameScreen() {
@@ -70,6 +71,8 @@ export function GameScreen() {
   const [pigeonFor, setPigeonFor] = useState<string | null>(null)
   const [greeting, setGreeting] = useState(true)
   const [marked, setMarked] = useState<{ portId: string; nonce: number } | null>(null)
+  /** A harbour being looked at from the sea, before deciding to sail there. */
+  const [preview, setPreview] = useState<string | null>(null)
 
   /**
    * A new harbour under the keel, or the wheel in somebody else's hands: the
@@ -170,8 +173,17 @@ export function GameScreen() {
         course={voyage ? [flagship(player).nodeId, ...voyage.route] : []}
         markedPort={marked?.portId ?? null}
         markNonce={marked?.nonce ?? 0}
-        {...(realtime && portId
-          ? { onPickPort: (to: string) => to !== portId && dispatch({ type: 'setCourse', to }) }
+        {...(realtime
+          ? {
+              // A tap opens the harbour rather than committing to it. A long
+              // voyage bought with one careless thumb was the old behaviour.
+              onPickPort: (to: string) => {
+                setPreview(to)
+                setMarked((m) => ({ portId: to, nonce: (m?.nonce ?? 0) + 1 }))
+                setKind('vorschau')
+                setSnap('peek')
+              },
+            }
           : {})}
       />
 
@@ -324,6 +336,26 @@ export function GameScreen() {
       )}
 
       {kind === 'nachrichten' && <NewsSheet log={log} sinceId={newsMark} snap={snap} onSnap={close} />}
+
+      {kind === 'vorschau' && preview && (
+        <PortPreviewSheet
+          ctx={ctx}
+          state={state}
+          player={player}
+          portId={preview}
+          snap={snap}
+          onSnap={close}
+          // Only offered when the ship is actually free to be given a course.
+          onSetCourse={
+            portId && !voyage
+              ? (to) => {
+                  dispatch({ type: 'setCourse', to })
+                  setKind(null)
+                }
+              : undefined
+          }
+        />
+      )}
 
       {kind === 'runde' &&
         (realtime ? (

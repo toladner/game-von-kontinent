@@ -173,6 +173,8 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
       return line(`${nameOf(event.playerId)} würfelt ${event.value}.`)
     case 'arrived':
       return line(`${nameOf(event.playerId)} läuft ${portOf(event.portId)} an.`, 'wichtig')
+    case 'setSail':
+      return line(`${nameOf(event.playerId)} setzt Segel nach ${portOf(event.to)}.`, 'wichtig')
     case 'stoppedAtSea':
       return line(`${nameOf(event.playerId)} liegt auf freier See.`)
     case 'collision':

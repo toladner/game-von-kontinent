@@ -3,7 +3,7 @@ import { CLASSIC_PACK } from '@content/maps/classic'
 import { createContext } from './context'
 import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
-import { buyOffers, portAt, quoteSale, saleQuotes } from './selectors'
+import { buyOffers, marketReport, portAt, quoteSale, saleQuotes } from './selectors'
 import { flagship, type GameState } from './state'
 import { distanceToSource, exportsAt, sellPriceAt } from './market'
 import type { KonjunkturCard } from './types'
@@ -256,5 +256,61 @@ describe('Konjunktur "erweitert"', () => {
     expect(kept.length).toBe(before.length - 1)
     expect(kept.some((c) => c.uid === dearest.uid)).toBe(false)
     expect(after.events.some((e) => e.type === 'cargoLost')).toBe(true)
+  })
+})
+
+describe('the Wohin? list under distance pricing', () => {
+  /** Load a hold, then see what the chart offers. */
+  const laden = (options: NewGameOptions) => {
+    const s = table(options)
+    const portId = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    const offer = buyOffers(ctx, s, s.players[0]!, portId).find((o) => o.status === 'ok')!
+    return applyAction(ctx, s, { type: 'buy', goodId: offer.goodId }).state
+  }
+
+  it('offers both near and far harbours to weigh against each other', () => {
+    // Ranking by profit-per-pip alone hands back six variations of "sail a
+    // long way", and then there is nothing to decide.
+    const s = laden({ preise: 'entfernung' })
+    const report = marketReport(ctx, s, s.players[0]!, 6)
+    expect(report.length).toBeGreaterThan(3)
+
+    const distances = report.map((d) => d.distance)
+    const near = Math.min(...distances)
+    const far = Math.max(...distances)
+    expect(far - near).toBeGreaterThan(2)
+  })
+
+  it('reads from near to far, so the trade-off is in order', () => {
+    const s = laden({ preise: 'entfernung' })
+    const report = marketReport(ctx, s, s.players[0]!, 6)
+    for (let i = 1; i < report.length; i++) {
+      expect(report[i]!.distance).toBeGreaterThanOrEqual(report[i - 1]!.distance)
+    }
+  })
+
+  it('never offers a harbour that a nearer one already beats', () => {
+    // The price rise flattens at the ceiling, so past a point the extra sea
+    // buys nothing. Offering it anyway is offering a choice nobody would
+    // make; every row here has to be either closer or richer than the last.
+    const s = laden({ preise: 'entfernung' })
+    const report = marketReport(ctx, s, s.players[0]!, 6)
+    expect(report.length).toBeGreaterThan(3)
+    for (let i = 1; i < report.length; i++) {
+      expect(report[i]!.profit, `${report[i]!.name} is no better than ${report[i - 1]!.name}`)
+        .toBeGreaterThan(report[i - 1]!.profit)
+    }
+  })
+
+  it('leaves the fixed-price list alone, where nearness is the whole question', () => {
+    // Every harbour pays the same figure, so a far one is strictly worse and
+    // padding the list with distance would be noise.
+    const s = laden({})
+    const report = marketReport(ctx, s, s.players[0]!, 6)
+    const profits = new Set(report.map((d) => d.profit))
+    expect(profits.size).toBe(1)
+    for (let i = 1; i < report.length; i++) {
+      expect(report[i]!.distance).toBeGreaterThanOrEqual(report[i - 1]!.distance)
+    }
   })
 })

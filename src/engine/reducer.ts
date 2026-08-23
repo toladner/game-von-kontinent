@@ -22,6 +22,7 @@ import {
   castOffMs,
   legMsFor,
   portAt,
+  sailingTimeMs,
   quoteSale,
   routeTo,
   verkaufszwangOpen,
@@ -704,7 +705,12 @@ export function applyAction(
           return reject(state, 'Zu diesem Kapitän müssen Sie eine Taube schicken.')
         }
       }
-      if (ship.voyage) return reject(state, 'Das Schiff ist bereits unterwegs.')
+      // A course may be changed while she is still alongside: the hatches are
+      // open, the merchant may trade, and shutting them out of the one
+      // decision that matters would be an odd place to draw the line.
+      if (atSea(draft as GameState, ship)) {
+        return reject(state, 'Das Schiff ist bereits unterwegs.')
+      }
       const here = portAt(ctx, ship.nodeId)
       if (!here) return reject(state, 'Das Schiff liegt nicht im Hafen.')
       if (action.to === here) return reject(state, 'Es liegt bereits dort.')
@@ -730,7 +736,10 @@ export function applyAction(
         type: 'setSail',
         playerId: player.id,
         to: action.to,
-        arrivesAt: draft.now + legMs * route.length,
+        // Summed leg by leg. Multiplying one leg by the route length was
+        // right only while every leg cost the same, which stopped being true
+        // when voyages started being charged by the sea mile.
+        arrivesAt: draft.now + (sailingTimeMs(ctx, draft as GameState, ship, action.to) ?? legMs),
       })
       break
     }
