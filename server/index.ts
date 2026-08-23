@@ -9,7 +9,7 @@
  * A game therefore survives between visits, which is what makes both
  * cross-device play and "let the ship sail, come back this evening" possible.
  */
-import { CLASSIC_PACK } from '../src/content/maps/classic'
+import { packById } from '../src/content/packs'
 import { createContext } from '../src/engine/context'
 import { createGame } from '../src/engine/setup'
 import { applyAction } from '../src/engine/reducer'
@@ -74,7 +74,22 @@ type ServerMessage =
   | { t: 'error'; reason: string }
   | { t: 'pong' }
 
-const ctx = createContext(CLASSIC_PACK)
+/**
+ * One context per plan, built on demand.
+ *
+ * The Durable Object runs the same reducer as the browser, so it has to run
+ * it against the same map — a table opened on the world plan cannot be
+ * folded against the printed board.
+ */
+const contexts = new Map<string, ReturnType<typeof createContext>>()
+function contextFor(packId: string | undefined) {
+  const pack = packById(packId)
+  const existing = contexts.get(pack.id)
+  if (existing) return existing
+  const made = createContext(pack)
+  contexts.set(pack.id, made)
+  return made
+}
 
 // Unambiguous alphabet: no I/1, no O/0.
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -124,7 +139,7 @@ export default {
         maxFleetSize: clamp(body.maxFleetSize ?? 1, 1, 6),
         angebot: body.angebot === 'zufaellig' ? 'zufaellig' : 'fest',
         preise: body.preise === 'entfernung' ? 'entfernung' : 'fest',
-        packId: 'classic',
+        packId: typeof body.packId === 'string' ? body.packId : 'classic',
         createdAt: Date.now(),
       }
       const stub = env.GAMES.get(env.GAMES.idFromName(code))
@@ -194,6 +209,7 @@ export class GameRoom {
       this.state = null
       return
     }
+    const ctx = contextFor(this.meta.packId)
     let s = createGame(ctx, {
       seed: this.meta.seed,
       totalRounds: this.meta.totalRounds,
@@ -439,7 +455,7 @@ export class GameRoom {
   private async commit(
     action: GameAction,
   ): Promise<{ ok: true } | { ok: false; reason: string }> {
-    const result = applyAction(ctx, this.state!, action)
+    const result = applyAction(contextFor(this.meta?.packId), this.state!, action)
     const rejection = result.events.find((e) => e.type === 'rejected')
     if (rejection && rejection.type === 'rejected') {
       return { ok: false, reason: rejection.reason }
@@ -473,7 +489,7 @@ export class GameRoom {
    */
   private async scheduleWake(): Promise<void> {
     if (!this.state) return
-    const at = nextEventAt(ctx, this.state)
+    const at = nextEventAt(contextFor(this.meta?.packId), this.state)
     if (at === null) {
       await this.storage.storage.deleteAlarm()
       return

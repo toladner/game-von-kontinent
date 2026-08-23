@@ -81,6 +81,7 @@ export async function createOnlineGame(options: {
   maxFleetSize: number
   angebot?: 'fest' | 'zufaellig'
   preise?: 'fest' | 'entfernung'
+  packId?: string
 }): Promise<{ code: string; meta: GameMeta }> {
   const res = await fetch('/api/games', {
     method: 'POST',

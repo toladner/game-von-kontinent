@@ -70,6 +70,7 @@ export function Setup() {
       setBusy(true)
       try {
         await host(filled[0] ?? { name: 'Handelshaus' }, {
+          packId: options.packId,
           totalRounds: options.totalRounds,
           startingCapital: options.startingCapital,
           joinPolicy: options.joinPolicy,
@@ -91,6 +92,7 @@ export function Setup() {
       return
     }
     begin(filled, {
+      packId: options.packId,
       totalRounds: options.totalRounds,
       startingCapital: options.startingCapital,
       travel: options.travel === 'echtzeit' ? 'echtzeit' : 'runde',

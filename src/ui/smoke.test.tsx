@@ -81,10 +81,11 @@ describe('the front page', () => {
     fireEvent.click(screen.getByText('Vollständig'))
     expect(screen.getByText('Spielplan')).toBeTruthy()
     expect(screen.getByText('Originalplan')).toBeTruthy()
-    // Unbuilt features are shown, but never offered as working buttons.
-    expect((screen.getByText('Ganze Welt').closest('button') as HTMLButtonElement).disabled).toBe(
-      true,
-    )
+    // Every plan in the registry is playable, the world and the regions
+    // included — this used to be an "in Vorbereitung" placeholder.
+    for (const plan of ['Ganze Welt', 'Europa', 'Asien und Ozeanien']) {
+      expect((screen.getByText(plan).closest('button') as HTMLButtonElement).disabled).toBe(false)
+    }
     expect((screen.getByText('In Echtzeit').closest('button') as HTMLButtonElement).disabled).toBe(
       false,
     )

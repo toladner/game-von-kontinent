@@ -1,4 +1,4 @@
-import { CLASSIC_PACK } from '@content/maps/classic'
+import { PACK_ENTRIES, packById as packFromRegistry } from '@content/packs'
 import type { ContentPack } from '@engine/types'
 
 /**
@@ -84,8 +84,9 @@ export const DEFAULT_OPTIONS: GameOptions = {
 }
 
 /**
- * Available content packs. `ready: false` entries are shown but not offered —
- * better an honest "in Vorbereitung" than a button that does nothing.
+ * The plans on offer, taken from the content registry rather than listed
+ * again here. `ready` survives as a field so the setup screen can still show
+ * something it cannot yet offer, but every plan in the registry is playable.
  */
 export interface PackEntry {
   readonly id: string
@@ -95,26 +96,16 @@ export interface PackEntry {
   readonly pack?: ContentPack
 }
 
-export const PACKS: readonly PackEntry[] = [
-  {
-    id: 'classic',
-    name: 'Originalplan',
-    blurb: 'Europa, Afrika, Nord- und Südamerika — der gedruckte Spielplan.',
-    ready: true,
-    pack: CLASSIC_PACK,
-  },
-  {
-    id: 'welt',
-    name: 'Ganze Welt',
-    blurb: 'Mit Asien, Australien und dem Pazifik. Häfen werden noch erfaßt.',
-    ready: false,
-  },
-]
+export const PACKS: readonly PackEntry[] = PACK_ENTRIES.map((entry) => ({
+  id: entry.id,
+  name: entry.label,
+  blurb: entry.blurb,
+  ready: true,
+  pack: entry.pack,
+}))
 
 export function packById(id: string): ContentPack {
-  const entry = PACKS.find((p) => p.id === id && p.ready)
-  if (!entry?.pack) return CLASSIC_PACK
-  return entry.pack
+  return packFromRegistry(id)
 }
 
 export interface Capability {

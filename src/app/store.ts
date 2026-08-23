@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { CLASSIC_PACK } from '@content/maps/classic'
-import { createContext, type EngineContext } from '@engine/context'
+import { contextFor, DEFAULT_PACK_ID } from '@content/packs'
+import type { EngineContext } from '@engine/context'
 import { createGame, openingActions, type Seat } from '@engine/setup'
 import type { Gender } from '@engine/persona'
 import { applyAction, replay } from '@engine/reducer'
@@ -19,6 +19,8 @@ const SAVE_KEY = 'vkzk.partie.v1'
 
 interface SaveFile {
   readonly names: string[]
+  /** Which plan the game is played on; absent on saves from before maps. */
+  packId?: string
   readonly seed: string
   readonly totalRounds: number
   startingCapital?: number
@@ -33,6 +35,8 @@ interface SaveFile {
 }
 
 export interface BeginOptions {
+  /** Which plan to play on. Defaults to the printed board. */
+  readonly packId?: string
   readonly totalRounds?: number
   readonly startingCapital?: number
   readonly seed?: string
@@ -121,7 +125,21 @@ interface Store {
   acting: () => GameState['players'][number] | null
 }
 
-const ctx = createContext(CLASSIC_PACK)
+/**
+ * The plan currently in play.
+ *
+ * Reassigned whenever a game is begun, resumed or joined, because which map
+ * is in use is a property of the game and not of the app. The store mirrors
+ * it so components re-render; this binding exists so the many small helpers
+ * below do not each have to reach into the store for it.
+ */
+let ctx: EngineContext = contextFor(DEFAULT_PACK_ID)
+
+/** Switch to the plan a game is played on, and report it for the store. */
+function usePack(packId: string | undefined): EngineContext {
+  ctx = contextFor(packId)
+  return ctx
+}
 
 let saved: SaveFile | null = null
 let logId = 0
@@ -231,11 +249,19 @@ export const useGame = create<Store>((set, get) => ({
   localActing: null,
 
   begin(seats, options = {}) {
+    const active = usePack(options.packId)
     const names = seats.map((s) => (typeof s === 'string' ? s : s.name))
     const totalRounds = options.totalRounds ?? 30
     const startingCapital = options.startingCapital ?? ctx.pack.config.startingCapital
     const realSeed = options.seed ?? `${Date.now().toString(36)}-${names.join('|')}`
-    saved = { names, seed: realSeed, totalRounds, startingCapital, actions: [] }
+    saved = {
+      names,
+      seed: realSeed,
+      totalRounds,
+      startingCapital,
+      packId: active.pack.id,
+      actions: [],
+    }
     persist()
     const travel = options.travel ?? 'runde'
     const realtime = travel === 'echtzeit'
@@ -275,6 +301,7 @@ export const useGame = create<Store>((set, get) => ({
     session?.close()
     session = null
     set({
+      ctx,
       state: projectFor(state, firstActing),
       truth: state,
       net: null,
@@ -306,6 +333,7 @@ export const useGame = create<Store>((set, get) => ({
       maxFleetSize: options.maxFleetSize ?? 1,
       angebot: options.angebot ?? 'fest',
       preise: options.preise ?? 'fest',
+      packId: options.packId ?? DEFAULT_PACK_ID,
     })
     get().join(code, who.name, who.gender)
     return code
@@ -322,6 +350,8 @@ export const useGame = create<Store>((set, get) => ({
         set((s) => ({ net: s.net ? { ...s.net, status } : s.net })),
 
       onWelcome: (playerId, meta, actions) => {
+        // The host chose the plan; we replay against that one or drift.
+        usePack(meta.packId)
         const initial = createGame(ctx, {
           seed: meta.seed,
           totalRounds: meta.totalRounds,
@@ -332,10 +362,13 @@ export const useGame = create<Store>((set, get) => ({
           durationHours: meta.durationHours,
           // Must match the server exactly, or our replay drifts from its truth.
           ...(meta.maxFleetSize ? { maxFleetSize: meta.maxFleetSize } : {}),
+          ...(meta.angebot ? { angebot: meta.angebot } : {}),
+          ...(meta.preise ? { preise: meta.preise } : {}),
         })
         // Under fog the log is withheld; a view arrives separately.
         const rebuilt = meta.sicht === 'realistisch' ? null : replay(ctx, initial, actions)
         set((s) => ({
+          ctx,
           ...(rebuilt ? { state: rebuilt, truth: null } : {}),
           net: s.net ? { ...s.net, playerId } : s.net,
           notice: null,
@@ -469,6 +502,9 @@ export const useGame = create<Store>((set, get) => ({
       if (!raw) return false
       const file = JSON.parse(raw) as SaveFile
       if (!Array.isArray(file.names) || file.names.length === 0) return false
+      // The plan has to be restored before the log is folded, or the replay
+      // would run against a different map than the one it was recorded on.
+      usePack(file.packId)
       const initial = createGame(ctx, {
         seed: file.seed,
         totalRounds: file.totalRounds,
@@ -484,6 +520,7 @@ export const useGame = create<Store>((set, get) => ({
       const state = replay(ctx, initial, file.actions ?? [])
       saved = file
       set({
+        ctx,
         state: projectFor(state, state.players[0]?.id ?? null),
         truth: state,
         log: [],

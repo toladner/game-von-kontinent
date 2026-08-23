@@ -35,7 +35,23 @@ export function buildMap(input: BuildMapInput): GameMap {
   const nodes: AnyNode[] = [...input.ports]
   const lanes: Lane[] = []
 
+  /*
+   * Two legs joining the same pair of harbours would generate the same sea
+   * node ids twice, quietly welding the two chains together and leaving
+   * interior nodes with four neighbours instead of two. That breaks counting
+   * off a throw, so it is an error in the map, not something to paper over —
+   * and it is exactly the mistake made when one map is built by adding legs
+   * to another.
+   */
+  const seenPairs = new Set<string>()
+
   for (const leg of input.legs) {
+    const pair = leg.a < leg.b ? `${leg.a}~${leg.b}` : `${leg.b}~${leg.a}`
+    if (seenPairs.has(pair)) {
+      throw new Error(`Duplicate leg between "${leg.a}" and "${leg.b}"`)
+    }
+    seenPairs.add(pair)
+
     const a = portsById.get(leg.a)
     const b = portsById.get(leg.b)
     if (!a) throw new Error(`Leg references unknown port "${leg.a}"`)
