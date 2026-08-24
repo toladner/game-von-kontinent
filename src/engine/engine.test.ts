@@ -461,6 +461,197 @@ describe('real-time sailing', () => {
   })
 })
 
+/**
+ * A Konjunktur card with nobody to draw it.
+ *
+ * In round play the card is turned by a merchant standing on a quay, which is
+ * what its wording takes for granted. Real-time play turns one for the whole
+ * world every twenty minutes, and charging the entire fleet the moment it
+ * turned put an unloading fee on ships in mid-ocean. A standing card settles
+ * with a ship when that ship does the thing the card is about, and not before.
+ */
+describe('the world market in real time', () => {
+  const T0 = 1_800_000_000_000
+  const MIN = 60_000
+  const INTERVAL = CLASSIC_PACK.config.realtime.marketIntervalMinutes
+
+  const afloat = () =>
+    replay(
+      ctx,
+      createGame(ctx, { seed: 'markt', travel: 'echtzeit', minutesPerPip: 1, durationHours: 8 }),
+      [
+        { type: 'tick', at: T0 },
+        { type: 'join', playerId: 'a', name: 'Ada' },
+        { type: 'join', playerId: 'b', name: 'Bo' },
+        { type: 'start' },
+      ],
+    )
+
+  /** The one card in the deck carrying a given effect. */
+  const cardWith = (kind: string) =>
+    CLASSIC_PACK.konjunktur.find((c) => c.effects.some((e) => e.kind === kind))!
+
+  /**
+   * Turn the market once, with a chosen card on top of the deck.
+   *
+   * By backdating the last turn rather than jumping the clock forward, so
+   * that a ship put to sea for one of these tests is still at sea when the
+   * card lands on her.
+   */
+  const turn = (s: GameState, cardId: string) =>
+    applyAction(
+      ctx,
+      {
+        ...s,
+        deck: [cardId, ...s.deck.filter((d) => d !== cardId)],
+        marketSince: s.now - INTERVAL * MIN,
+      },
+      { type: 'tick', at: s.now + 1000 },
+    )
+
+  /** Send a ship out of harbour and leave her there, at sea. */
+  const putToSea = (s: GameState, by: string): GameState => {
+    const index = s.players.findIndex((p) => p.id === by)
+    const from = flagship(s.players[index]!).nodeId
+    const target = [...ctx.portsById.keys()].find(
+      (id) => id !== portAt(ctx, from) && routeTo(ctx, from, null, id).length >= 6,
+    )!
+    const ordered = applyAction(ctx, s, { type: 'setCourse', to: target, by }).state
+    const away = flagship(ordered.players[index]!).voyage!.departsAt
+    const sailed = applyAction(ctx, ordered, { type: 'tick', at: away + 1000 }).state
+    expect(flagship(sailed.players[index]!).voyage).not.toBeNull()
+    return sailed
+  }
+
+  const cashOf = (s: GameState, by: string) => s.players.find((p) => p.id === by)!.cash
+
+  it('does not bill a ship at sea for unloading', () => {
+    // The complaint this is all about: an Entladegeld while three days out.
+    const s = putToSea(afloat(), 'a')
+    const before = cashOf(s, 'a')
+
+    const fee = cardWith('feeForDrawer')
+    const turned = turn(s, fee.id)
+    expect(turned.state.marketCardId).toBe(fee.id)
+    expect(cashOf(turned.state, 'a')).toBe(before)
+    expect(turned.events.some((e) => e.type === 'paid' && e.reason === 'entladegeld')).toBe(false)
+  })
+
+  it('charges it when cargo actually comes ashore, once per ship', () => {
+    let s = afloat()
+    const here = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    // Two lots aboard, so a second sale can show the fee is not per lot.
+    for (const offer of buyOffers(ctx, s, s.players[0]!, here)
+      .filter((o) => o.status === 'ok')
+      .slice(0, 2)) {
+      s = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId, by: 'a' }).state
+    }
+    const lots = flagship(s.players[0]!).cargo
+    expect(lots).toHaveLength(2)
+
+    const fee = cardWith('feeForDrawer')
+    const charge = fee.effects.find((e) => e.kind === 'feeForDrawer')!
+    const amount = charge.kind === 'feeForDrawer' ? charge.amount : 0
+    s = turn(s, fee.id).state
+
+    // Berthed, and nothing landed yet: nothing owed yet either.
+    const beforeSelling = cashOf(s, 'a')
+
+    const first = applyAction(ctx, s, { type: 'sell', uid: lots[0]!.uid, by: 'a' })
+    expect(first.events.some((e) => e.type === 'paid' && e.reason === 'entladegeld')).toBe(true)
+
+    const second = applyAction(ctx, first.state, { type: 'sell', uid: lots[1]!.uid, by: 'a' })
+    expect(second.events.some((e) => e.type === 'paid' && e.reason === 'entladegeld')).toBe(false)
+
+    // Sale proceeds aside, the fee came off exactly once.
+    const proceeds = [...first.events, ...second.events].reduce(
+      (sum, e) => sum + (e.type === 'sold' ? e.price : 0),
+      0,
+    )
+    expect(cashOf(second.state, 'a')).toBe(beforeSelling + proceeds - amount)
+  })
+
+  it('does not deliver a telegram to the open sea', () => {
+    const s = putToSea(afloat(), 'a')
+    const atSeaBefore = cashOf(s, 'a')
+    const inPortBefore = cashOf(s, 'b')
+
+    const turned = turn(s, cardWith('payoutToDrawer').id)
+    // Bo is tied up alongside and takes it at once; Ada cannot be reached.
+    expect(cashOf(turned.state, 'b')).toBeGreaterThan(inPortBefore)
+    expect(cashOf(turned.state, 'a')).toBe(atSeaBefore)
+  })
+
+  it('delivers it when she makes port, and only once', () => {
+    let s = putToSea(afloat(), 'a')
+    s = turn(s, cardWith('payoutToDrawer').id).state
+    const before = cashOf(s, 'a')
+
+    const eta = voyageEndsAt(ctx, s, flagship(s.players[0]!))!
+    // Short of the market's next turn, so the same card is still standing.
+    expect(eta).toBeLessThan(s.marketSince + INTERVAL * MIN)
+
+    const arrived = applyAction(ctx, s, { type: 'tick', at: eta + 1000 })
+    expect(flagship(arrived.state.players[0]!).voyage ?? null).toBeNull()
+    const wires = arrived.events.filter((e) => e.type === 'received' && e.reason === 'telegramm')
+    expect(wires).toHaveLength(1)
+    expect(cashOf(arrived.state, 'a')).toBeGreaterThan(before)
+  })
+
+  it('charges harbour dues to whoever is lying in a harbour', () => {
+    const s = putToSea(afloat(), 'a')
+    const atSeaBefore = cashOf(s, 'a')
+    const inPortBefore = cashOf(s, 'b')
+
+    const turned = turn(s, cardWith('portFeeAllInPort').id)
+    expect(cashOf(turned.state, 'b')).toBeLessThan(inPortBefore)
+    expect(cashOf(turned.state, 'a')).toBe(atSeaBefore)
+  })
+
+  it('keeps charging the levy every so often, not once a season', () => {
+    // The grace period counted rounds, and a real-time game has no rounds:
+    // `round - last` was always nought, so each levy was charged once and
+    // then quietly suppressed for the rest of the season.
+    let s = afloat()
+    const here = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    const offer = buyOffers(ctx, s, s.players[0]!, here).find((o) => o.status === 'ok')!
+    s = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId, by: 'a' }).state
+
+    const levy = CLASSIC_PACK.konjunktur.find((c) => c.title === 'Steuer')!
+    const first = turn(s, levy.id)
+    expect(first.events.some((e) => e.type === 'paid' && e.reason === 'steuer')).toBe(true)
+
+    // Straight away again: still inside the grace period.
+    const again = turn(first.state, levy.id)
+    expect(again.events.some((e) => e.type === 'levySkipped')).toBe(true)
+
+    // And once the grace has run out, it is due once more.
+    const graceMs = CLASSIC_PACK.config.levyGracePeriodRounds * INTERVAL * MIN
+    const waited = applyAction(ctx, again.state, {
+      type: 'tick',
+      at: again.state.now + graceMs,
+    }).state
+    const third = turn(waited, levy.id)
+    expect(third.events.some((e) => e.type === 'paid' && e.reason === 'steuer')).toBe(true)
+  })
+
+  it('still moves prices for everyone the moment it turns', () => {
+    // The part that always worked, and has to go on working: a Hausse needs
+    // no ship to be anywhere in particular.
+    const hausse = CLASSIC_PACK.konjunktur.find((c) => c.title === 'Hausse')!
+    const turned = turn(afloat(), hausse.id)
+    expect(turned.state.saleModifierPercent).toBeGreaterThan(0)
+  })
+
+  it('starts each card with a clean slate', () => {
+    const s = turn(afloat(), cardWith('portFeeAllInPort').id).state
+    expect(s.marketSettled.length).toBeGreaterThan(0)
+
+    const next = turn(s, CLASSIC_PACK.konjunktur.find((c) => c.title === 'Hausse')!.id)
+    expect(next.state.marketSettled).toHaveLength(0)
+  })
+})
+
 describe('scoring', () => {
   it('ranks by cash plus cargo', () => {
     const game = seated(['Ada', 'Bo'], { seed: 'score' })

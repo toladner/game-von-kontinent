@@ -110,6 +110,11 @@ export interface PlayerState {
   readonly hasDeparted: boolean
   /** Round in which a levy of each kind was last settled (grace period). */
   readonly levyPaidRound: { readonly steuer: number | null; readonly versicherung: number | null }
+  /**
+   * The same, on the clock, for real-time play — where the round counter
+   * never turns and so could never measure a grace period at all.
+   */
+  readonly levyPaidAt: { readonly steuer: number | null; readonly versicherung: number | null }
   /** Only meaningful under Sicht "realistisch". */
   readonly knowledge: PlayerKnowledge
 }
@@ -292,6 +297,13 @@ export interface GameState {
   /** The Konjunktur card the world market is currently under, if any. */
   readonly marketCardId: string | null
   readonly marketSince: number
+  /**
+   * Who the standing card has already settled with — ships that have paid its
+   * dues, houses that have taken its money order. Cleared when the next card
+   * turns. See `settleStandingCard` for why a world card settles one ship at
+   * a time instead of all at once.
+   */
+  readonly marketSettled: readonly string[]
   /** Birds currently in the air. Empty unless Sicht is "realistisch". */
   readonly pigeons: readonly Pigeon[]
   readonly seq: number

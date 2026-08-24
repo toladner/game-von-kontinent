@@ -82,7 +82,42 @@ export function Warenkarte({
 }
 
 /** A Konjunkturkarte: pale green slip, typewriter face, scissor-cut edge. */
-export function KonjunkturSlip({ card }: { card: KonjunkturCard }) {
+/**
+ * When and to whom a standing world card applies.
+ *
+ * The card face is the printed one, and it was written for a game where you
+ * drew it yourself at a quayside. Left at that in real-time play it reads as a
+ * bill with no date on it — which is exactly how it felt when the whole fleet
+ * was charged the moment it turned. The card is unchanged; what it needs is a
+ * line saying when it will reach you.
+ */
+function standingNote(card: KonjunkturCard): string | null {
+  for (const effect of card.effects) {
+    switch (effect.kind) {
+      case 'feeForDrawer':
+        return 'Fällig, sobald gelöscht wird — einmal je Schiff, solange die Karte steht. Wer nichts an Land bringt, zahlt nichts.'
+      case 'payoutToDrawer':
+        return 'Geht an jedes Haus, das einen Hafen anläuft: ein Telegramm erreicht niemanden auf See.'
+      case 'portFeeAllInPort':
+        return 'Zahlt, wessen Schiff im Hafen liegt oder anlegt, solange die Karte steht.'
+      case 'leviedOnAllShips':
+        return 'Zahlbar von allen Schiffen, auch auf See — ein Zehntel der Ladung, die an Bord ist. Ein leerer Laderaum kostet nichts.'
+      default:
+        continue
+    }
+  }
+  return null
+}
+
+export function KonjunkturSlip({
+  card,
+  standing = false,
+}: {
+  card: KonjunkturCard
+  /** Turned for the whole world and in force until the next one. */
+  standing?: boolean
+}) {
+  const note = standing ? standingNote(card) : null
   return (
     <div className="paper-slip coupon-edge w-full rotate-[-1.2deg] px-4 py-5">
       <p className="smallcaps text-center text-[10px] tracking-[0.3em] text-black/55">
@@ -95,6 +130,12 @@ export function KonjunkturSlip({ card }: { card: KonjunkturCard }) {
           <p key={i}>{line}</p>
         ))}
       </div>
+      {note && (
+        <>
+          <hr className="mt-3 mb-2 border-t border-dashed border-black/20" />
+          <p className="text-center text-[11px] leading-snug text-black/60">{note}</p>
+        </>
+      )}
     </div>
   )
 }

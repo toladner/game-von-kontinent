@@ -827,7 +827,7 @@ function SeasonSheet({
     >
       <h3 className="smallcaps text-ink-soft mb-2 text-[11px]">Weltmarkt</h3>
       {card ? (
-        <KonjunkturSlip card={card} />
+        <KonjunkturSlip card={card} standing />
       ) : (
         <p className="text-ink-faint text-xs italic">
           Noch keine Notierung. Die erste Karte fällt {untilText(nextTurn, now)}.

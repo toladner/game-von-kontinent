@@ -223,6 +223,59 @@ function jettison(
   }
 }
 
+/**
+ * What the standing world card does to one ship, when that ship does the
+ * thing the card is about.
+ *
+ * In round play every Konjunktur card is drawn by somebody, at a quayside,
+ * on arrival. That is what makes its wording sensible: you pay the Entladegeld
+ * because you are unloading, you take the Telegramm because the wire is
+ * addressed to your house, you pay the Hafengebühr because your ship is lying
+ * in a harbour. Real-time play has no drawer — a card turns every twenty
+ * minutes and stands for the whole world — and the first answer to that was
+ * to charge and pay the entire fleet wherever it happened to be. Which is how
+ * a merchant three days out into the Atlantic came to be billed for unloading.
+ *
+ * So the card stands, and settles with each ship at the quayside instead:
+ * dues and telegrams when she berths, the unloading fee when she actually
+ * lands cargo. Once each per card, so waiting one out is a real choice and
+ * not merely a delay. What the card does to prices needs no ship and is
+ * applied the moment it turns, exactly as before.
+ */
+function settleStandingCard(
+  ctx: EngineContext,
+  draft: Draft,
+  index: number,
+  vehicle: VehicleInstance,
+  trigger: 'berth' | 'unload',
+  events: GameEvent[],
+): void {
+  const card = draft.marketCardId ? ctx.cardsById.get(draft.marketCardId) : null
+  if (!card) return
+  if (!portAt(ctx, vehicle.nodeId)) return
+  if (atSea(draft as GameState, vehicle)) return
+
+  const playerId = draft.players[index]!.id
+  for (const effect of card.effects) {
+    // A telegram is addressed to a house; dues and fees are charged to the
+    // ship that incurred them, so a second vessel pays its own.
+    const subject = effect.kind === 'payoutToDrawer' ? playerId : vehicle.id
+    const key = `${effect.kind}:${subject}`
+    if (draft.marketSettled.includes(key)) continue
+
+    if (effect.kind === 'payoutToDrawer' && trigger === 'berth') {
+      payPlayer(draft, index, effect.amount, 'telegramm', events)
+    } else if (effect.kind === 'portFeeAllInPort' && trigger === 'berth') {
+      chargePlayer(draft, index, effect.amount, 'hafengebuehr', events)
+    } else if (effect.kind === 'feeForDrawer' && trigger === 'unload') {
+      chargePlayer(draft, index, effect.amount, 'entladegeld', events)
+    } else {
+      continue
+    }
+    draft.marketSettled = [...draft.marketSettled, key]
+  }
+}
+
 function applyEffect(
   ctx: EngineContext,
   draft: Draft,
@@ -304,11 +357,27 @@ function applyEffect(
       // Valid for every player, in port or at sea, but only once per grace
       // period: "Innerhalb von 5 Runden ist eine Steuer- bzw.
       // Versicherungsvorschreibung nur je einmal zu begleichen."
+      //
+      // This one is charged at sea on purpose, and is the only card that is:
+      // it is a tenth of the cargo lying in the hold, so an empty ship pays
+      // nothing and a laden one pays wherever she is. Cargo in transit is
+      // precisely what a marine insurer writes a premium against.
+      //
+      // Real-time play has to count the grace period on the clock. It used to
+      // count rounds here too — but the round never turns in a real-time game,
+      // so `round - last` was always nought, and each levy was charged once
+      // and then silently suppressed for the rest of the season.
+      const realtime = draft.config.travel === 'echtzeit'
       const grace = draft.config.levyGracePeriodRounds
+      const graceMs = grace * draft.config.realtime.marketIntervalMinutes * 60_000
       for (let i = 0; i < draft.players.length; i++) {
         const p = draft.players[i]!
-        const last = p.levyPaidRound[effect.levy]
-        if (last !== null && draft.round - last < grace) {
+        const lastAt = p.levyPaidAt[effect.levy]
+        const lastRound = p.levyPaidRound[effect.levy]
+        const tooSoon = realtime
+          ? lastAt !== null && draft.now - lastAt < graceMs
+          : lastRound !== null && draft.round - lastRound < grace
+        if (tooSoon) {
           events.push({ type: 'levySkipped', playerId: p.id, levy: effect.levy })
           continue
         }
@@ -318,8 +387,11 @@ function applyEffect(
         )
         const due = Math.round((value * effect.percentOfCargoValue) / 100)
         chargePlayer(draft, i, due, effect.levy, events)
+        const settled = draft.players[i]!
         patchPlayer(draft, i, {
-          levyPaidRound: { ...draft.players[i]!.levyPaidRound, [effect.levy]: draft.round },
+          ...(realtime
+            ? { levyPaidAt: { ...settled.levyPaidAt, [effect.levy]: draft.now } }
+            : { levyPaidRound: { ...settled.levyPaidRound, [effect.levy]: draft.round } }),
         })
       }
       return
@@ -699,6 +771,12 @@ export function applyAction(
         kind: quote.kind,
       })
       if (quote.kind === 'markt') draft.mustSellForeign = false
+      if (realtime) {
+        // Something has actually been landed, which is the moment a standing
+        // Entladegeld is about.
+        const unloaded = draft.players[index]!.fleet.find((v) => v.id === seller.id)
+        if (unloaded) settleStandingCard(ctx, draft, index, unloaded, 'unload', events)
+      }
       break
     }
 
@@ -1015,6 +1093,10 @@ function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
             // out the way it came in.
             patchVehicle(draft, i, vehicle.id, { cameFrom: null })
             events.push({ type: 'arrived', playerId: draft.players[i]!.id, portId })
+            // Berthing is what a standing Hafengebühr charges for and what a
+            // standing Telegramm needs in order to reach anyone.
+            const berthed = draft.players[i]!.fleet.find((v) => v.id === vehicle.id)
+            if (berthed) settleStandingCard(ctx, draft, i, berthed, 'berth', events)
           }
         }
 
@@ -1202,29 +1284,32 @@ function turnMarket(ctx: EngineContext, draft: Draft, events: GameEvent[]): void
     draft.marketCardId = cardId
     if (!card) continue
 
-    // A world card has no single drawer, so what the printed rules charge one
-    // player is charged to the whole fleet.
     draft.saleModifierPercent = 0
+    draft.marketSettled = []
     for (const effect of card.effects) {
       switch (effect.kind) {
         case 'salePriceDelta':
+          // Prices need no ship: the new level stands at once, for everyone.
           draft.saleModifierPercent += effect.percent
           break
         case 'payoutToDrawer':
-          for (let i = 0; i < draft.players.length; i++) {
-            payPlayer(draft, i, effect.amount, 'telegramm', events)
-          }
-          break
         case 'feeForDrawer':
-          for (let i = 0; i < draft.players.length; i++) {
-            chargePlayer(draft, i, effect.amount, 'entladegeld', events)
-          }
+        case 'portFeeAllInPort':
+          // Money changes hands at a quayside, so these wait for one. Ships
+          // already berthed settle now; the rest as they come in, or as they
+          // unload. See `settleStandingCard`.
           break
         default:
           applyEffect(ctx, draft, effect, 0, events)
       }
     }
     events.push({ type: 'marketTurned', cardId })
+
+    for (let i = 0; i < draft.players.length; i++) {
+      for (const vehicle of draft.players[i]!.fleet) {
+        settleStandingCard(ctx, draft, i, vehicle, 'berth', events)
+      }
+    }
   }
 }
 
@@ -1279,6 +1364,7 @@ function applyJoin(
     homePort,
     hasDeparted: false,
     levyPaidRound: { steuer: null, versicherung: null },
+    levyPaidAt: { steuer: null, versicherung: null },
     knowledge: {
       sightings: {
         [firstShip.id]: {

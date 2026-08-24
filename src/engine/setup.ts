@@ -119,6 +119,7 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     endsAt: 0,
     marketCardId: null,
     marketSince: 0,
+    marketSettled: [],
     pigeons: [],
     seq: 0,
   }
