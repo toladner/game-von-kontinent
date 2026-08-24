@@ -413,6 +413,43 @@ describe('the set course on the plan', () => {
     expect(marching).toHaveLength(1)
   })
 
+  it('draws the whole voyage, from the harbour left behind', () => {
+    // A course drawn from the ship's current position tells you where she is
+    // going but never where she came from, and shrinks away as she sails.
+    const { to } = setSail('ganze-fahrt')
+    act(() => useGame.getState().dispatch({ type: 'setCourse', to }))
+
+    /** The full course, which is the longest of the strokes drawn for it. */
+    const line = () =>
+      [...document.querySelectorAll('path[stroke="#1f4f8f"]')]
+        .map((p) => p.getAttribute('d')!)
+        .sort((a, b) => b.length - a.length)[0]!
+    const atCastOff = line()
+    expect(atCastOff.split('L').length).toBeGreaterThan(2)
+
+    // Minute by minute until she is through a leg but not yet in — a single
+    // long jump would land her at the destination with no voyage left.
+    const before = flagship(useGame.getState().state!.players[0]!).nodeId
+    for (let minute = 0; minute < 90; minute++) {
+      const ship = flagship(useGame.getState().state!.players[0]!)
+      if (ship.nodeId !== before) break
+      act(() =>
+        useGame.getState().dispatch({ type: 'tick', at: useGame.getState().state!.now + 60_000 }),
+      )
+    }
+    const after = flagship(useGame.getState().state!.players[0]!)
+    expect(after.nodeId).not.toBe(before)
+    expect(after.voyage).not.toBeNull()
+
+    // Same line on the chart: the origin has not been dropped off the back.
+    expect(line()).toBe(atCastOff)
+    // And the water already covered is marked as such.
+    const wake = [...document.querySelectorAll('path[stroke="#1f4f8f"]')].filter(
+      (p) => p.getAttribute('d') !== atCastOff,
+    )
+    expect(wake.length).toBeGreaterThan(0)
+  })
+
   it('shows a rival heading somewhere without letting them shout', () => {
     const { to } = setSail('rivale')
     act(() => useGame.getState().dispatch({ type: 'setCourse', to }))

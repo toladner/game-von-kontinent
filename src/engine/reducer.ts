@@ -726,6 +726,7 @@ export function applyAction(
       patchVehicle(draft, index, ship.id, {
         voyage: {
           route,
+          plan: [ship.nodeId, ...route],
           legStartedAt: draft.now + castOff,
           legArrivesAt: draft.now + castOff + legMs,
           destination: action.to,
@@ -988,6 +989,9 @@ function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
               ? null
               : {
                   route: rest,
+                  // Carried unchanged: the chart wants the whole voyage,
+                  // including the water already under the keel.
+                  plan: voyage.plan,
                   legStartedAt: voyage.legArrivesAt,
                   legArrivesAt: voyage.legArrivesAt + legMs,
                   destination: voyage.destination,
@@ -1069,6 +1073,7 @@ function resolvePigeons(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
         patchVehicle(draft, index, ship.id, {
           voyage: {
             route,
+            plan: [ship.nodeId, ...route],
             legStartedAt: draft.now + castOff,
             legArrivesAt: draft.now + castOff + legMs,
             destination: pigeon.order.destination,

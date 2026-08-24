@@ -267,6 +267,56 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
   }
 }
 
+/**
+ * How many entries the Börsenblatt keeps. A fifty-round game with six houses
+ * runs to a few hundred, so this holds a whole one.
+ */
+const MAX_LOG = 500
+
+/**
+ * Fold an action log into a state *and* the journal that goes with it.
+ *
+ * The journal used to be written only by `onAppend` — that is, only for
+ * things that happened while this device was watching. Everything that
+ * rebuilds a game from its log (resuming a save, joining a table, and now
+ * walking back into the last one at start-up) called `replay`, which throws
+ * the events away, so the Nachrichten sheet opened empty on a game fifty
+ * rounds old and filled up again from whatever happened next.
+ *
+ * The events were there all along; nobody was catching them.
+ */
+function foldWithLog(
+  ctx: EngineContext,
+  initial: GameState,
+  actions: readonly GameAction[],
+): { state: GameState; log: LogLine[] } {
+  let state = initial
+  // First, so that it takes the lowest id: the journal is read newest-first
+  // and `markNewsRead` uses the head's id as the high-water mark, so an entry
+  // sitting at the bottom of the list with the highest number would count as
+  // unread for ever.
+  const lines: LogLine[] = [openingLine(initial.config.startingCapital)]
+  for (const action of actions) {
+    const result = applyAction(ctx, state, action)
+    state = result.state
+    for (const event of result.events) {
+      const line = describe(ctx, state, event)
+      if (line) lines.push(line)
+    }
+  }
+  // The store keeps the journal newest first; a fold produces it oldest first.
+  return { state, log: lines.reverse().slice(0, MAX_LOG) }
+}
+
+/** The line every game opens with, written where the oldest entries go. */
+function openingLine(startingCapital: number): LogLine {
+  return {
+    id: ++logId,
+    text: `Die Exportbank kreditiert jedem Mitspieler ${startingCapital.toLocaleString('de-DE')} Einheiten Betriebskapital.`,
+    tone: 'wichtig',
+  }
+}
+
 let session: Session | null = null
 let ticker: ReturnType<typeof setInterval> | null = null
 
@@ -367,13 +417,7 @@ export const useGame = create<Store>((set, get) => ({
       truth: state,
       net: null,
       localActing: firstActing,
-      log: [
-        {
-          id: ++logId,
-          text: `Die Exportbank kreditiert jedem Mitspieler ${startingCapital.toLocaleString('de-DE')} Einheiten Betriebskapital.`,
-          tone: 'wichtig',
-        },
-      ],
+      log: [openingLine(startingCapital)],
       newsSeen: 0,
       lastEvents: [],
       notice: null,
@@ -430,11 +474,19 @@ export const useGame = create<Store>((set, get) => ({
           ...(meta.angebot ? { angebot: meta.angebot } : {}),
           ...(meta.preise ? { preise: meta.preise } : {}),
         })
-        // Under fog the log is withheld; a view arrives separately.
-        const rebuilt = meta.sicht === 'realistisch' ? null : replay(ctx, initial, actions)
+        // Under fog the log is withheld — you know only what you witnessed,
+        // which is the point — and a finished view arrives separately.
+        const rebuilt = meta.sicht === 'realistisch' ? null : foldWithLog(ctx, initial, actions)
         set((s) => ({
           ctx,
-          ...(rebuilt ? { state: rebuilt, truth: null } : {}),
+          ...(rebuilt
+            ? {
+                state: rebuilt.state,
+                truth: null,
+                log: rebuilt.log,
+                newsSeen: rebuilt.log[0]?.id ?? 0,
+              }
+            : {}),
           net: s.net ? { ...s.net, playerId } : s.net,
           notice: null,
         }))
@@ -460,7 +512,7 @@ export const useGame = create<Store>((set, get) => ({
         set((s) => ({
           state: next,
           lastEvents: [],
-          log: [...fresh.reverse(), ...s.log].slice(0, 200),
+          log: [...fresh.reverse(), ...s.log].slice(0, MAX_LOG),
         }))
       },
 
@@ -561,7 +613,7 @@ export const useGame = create<Store>((set, get) => ({
       state: projectFor(result.state, s.localActing),
       truth: result.state,
       lastEvents: result.events,
-      log: [...fresh.reverse(), ...s.log].slice(0, 200),
+      log: [...fresh.reverse(), ...s.log].slice(0, MAX_LOG),
       notice: null,
     }))
   },
@@ -588,14 +640,17 @@ export const useGame = create<Store>((set, get) => ({
         ...(file.preise ? { preise: file.preise } : {}),
         ...(file.konjunktur ? { konjunktur: file.konjunktur } : {}),
       })
-      const state = replay(ctx, initial, file.actions ?? [])
+      const { state, log } = foldWithLog(ctx, initial, file.actions ?? [])
       saved = file
       set({
         ctx,
         state: projectFor(state, state.players[0]?.id ?? null),
         truth: state,
-        log: [],
-        newsSeen: 0,
+        log,
+        // Everything in a rebuilt journal has already been lived through, so
+        // it opens read. The alternative is a badge reading "247 neu" every
+        // time the app is opened, which teaches the player to ignore it.
+        newsSeen: log[0]?.id ?? 0,
         lastEvents: [],
         notice: null,
         net: null,

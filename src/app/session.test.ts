@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { useGame } from './store'
 import { hasSeatAt, rememberedTable } from './net'
+import { legalSteps } from '@engine/selectors'
 
 /**
  * Staying logged in.
@@ -66,6 +67,64 @@ describe('coming back to a table', () => {
     expect(useGame.getState().restore()).toBe(false)
     localStorage.setItem('vkzk.tisch.v1', JSON.stringify({ name: 'niemand' }))
     expect(useGame.getState().restore()).toBe(false)
+  })
+})
+
+describe('the Börsenblatt after a reload', () => {
+  /**
+   * The journal was only ever written by events arriving live, so anything
+   * that rebuilt a game from its action log — resuming, joining, and now
+   * walking back in at start-up — opened the Nachrichten sheet empty on a
+   * game fifty rounds old.
+   */
+  /** Play a couple of rounds, so there is a history worth losing. */
+  function playOn(seed: string): void {
+    useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed })
+    for (let turn = 0; turn < 6; turn++) {
+      for (let guard = 0; guard < 12; guard++) {
+        const g = useGame.getState()
+        const s = g.state!
+        if (s.phase === 'over') return
+        if (s.phase === 'roll') g.dispatch({ type: 'roll' })
+        else if (s.phase === 'move') {
+          const to = legalSteps(g.ctx, s.players[s.activeIndex]!)[0]
+          if (!to) break
+          g.dispatch({ type: 'step', to })
+        } else if (s.phase === 'konjunktur') g.dispatch({ type: 'drawKonjunktur' })
+        else {
+          g.dispatch({ type: 'endTurn' })
+          break
+        }
+      }
+    }
+  }
+
+  it('rebuilds the whole history from the log, not just what happens next', () => {
+    playOn('blatt')
+    const before = useGame.getState().log
+    // Dice, harbours, rounds — a real trail, not two lines.
+    expect(before.length).toBeGreaterThan(8)
+
+    // What a reload does.
+    useGame.getState().leave()
+    expect(useGame.getState().resume()).toBe(true)
+
+    const after = useGame.getState().log
+    expect(after.length).toBe(before.length)
+    expect(after.map((l) => l.text)).toEqual(before.map((l) => l.text))
+    // Newest first, and the credit from the Exportbank at the very bottom.
+    expect(after.at(-1)!.text).toMatch(/Exportbank kreditiert/)
+    expect(after.some((l) => /würfelt/.test(l.text))).toBe(true)
+  })
+
+  it('opens read, so the pill does not cry wolf on every launch', () => {
+    playOn('gelesen')
+    useGame.getState().leave()
+    useGame.getState().resume()
+
+    const { log, newsSeen } = useGame.getState()
+    expect(log.length).toBeGreaterThan(8)
+    expect(log.filter((l) => l.id > newsSeen)).toHaveLength(0)
   })
 })
 

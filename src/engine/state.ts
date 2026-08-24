@@ -28,6 +28,16 @@ export interface CargoItem {
 export interface Voyage {
   /** Nodes still to be reached, in order. The last one is the destination. */
   readonly route: readonly NodeId[]
+  /**
+   * The whole voyage as laid out when the course was set: the harbour left
+   * behind, every sea mark on the way, and the destination.
+   *
+   * `route` shrinks leg by leg, which is what the ship needs; this does not,
+   * which is what the chart needs. A course drawn from `route` alone starts
+   * wherever the ship happens to be and grows shorter as she sails — telling
+   * you where she is going but never where she came from.
+   */
+  readonly plan: readonly NodeId[]
   readonly legStartedAt: number
   readonly legArrivesAt: number
   readonly destination: PortId

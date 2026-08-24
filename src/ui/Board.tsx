@@ -494,21 +494,50 @@ export function Board({
    * where everyone is heading without three ships shouting at once.
    */
   const courses = useMemo(() => {
-    const out: { key: string; d: string; ink: string; own: boolean; end: Point | null }[] = []
+    /** A polyline through named nodes, skipping any this plan does not know. */
+    const trace = (ids: readonly string[]) => {
+      let d = ''
+      let last: Point | null = null
+      for (const id of ids) {
+        const p = positions.get(id)
+        if (!p) continue
+        d += `${last ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`
+        last = p
+      }
+      return { d: d.includes('L') ? d : '', end: last }
+    }
+
+    const out: {
+      key: string
+      /** The whole voyage, harbour of departure to destination. */
+      whole: string
+      /** The part already under the keel, drawn as a wake. */
+      sailed: string
+      ink: string
+      own: boolean
+      end: Point | null
+    }[] = []
+
     for (const player of state.players) {
       const ink = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!.ink
       for (const vehicle of player.fleet) {
-        if (vehicle.hidden || !vehicle.voyage) continue
-        let d = ''
-        let last: Point | null = null
-        for (const id of [vehicle.nodeId, ...vehicle.voyage.route]) {
-          const p = positions.get(id)
-          if (!p) continue
-          d += `${last ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`
-          last = p
-        }
-        if (!d.includes('L')) continue
-        out.push({ key: vehicle.id, d, ink, own: player.id === coursePlayerId, end: last })
+        const voyage = vehicle.voyage
+        if (vehicle.hidden || !voyage) continue
+        // `plan` is absent on a voyage begun by an older build; the route from
+        // here on is then all there is to draw.
+        const full = voyage.plan?.length ? voyage.plan : [vehicle.nodeId, ...voyage.route]
+        const { d: whole, end } = trace(full)
+        if (!whole) continue
+        // Everything up to and including where she is now.
+        const passed = full.slice(0, Math.max(2, full.indexOf(vehicle.nodeId) + 1))
+        out.push({
+          key: vehicle.id,
+          whole,
+          sailed: full.indexOf(vehicle.nodeId) > 0 ? trace(passed).d : '',
+          ink,
+          own: player.id === coursePlayerId,
+          end,
+        })
       }
     }
     // The player's own course last, so it lies over the others.
@@ -567,7 +596,7 @@ export function Board({
               {/* Ein weicher Streifen darunter, damit die Linie über Land
                   und über See gleich gut lesbar bleibt. */}
               <path
-                d={c.d}
+                d={c.whole}
                 fill="none"
                 stroke={c.ink}
                 strokeWidth={c.own ? 5 : 3.5}
@@ -575,8 +604,21 @@ export function Board({
                 strokeLinejoin="round"
                 opacity={c.own ? 0.2 : 0.12}
               />
+              {/* Das Kielwasser: durchgezogen und blasser, damit auf einen
+                  Blick zu sehen ist, wie weit die Fahrt gediehen ist. */}
+              {c.sailed && (
+                <path
+                  d={c.sailed}
+                  fill="none"
+                  stroke={c.ink}
+                  strokeWidth={c.own ? 2 : 1.3}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={c.own ? 0.4 : 0.22}
+                />
+              )}
               <path
-                d={c.d}
+                d={c.whole}
                 fill="none"
                 stroke={c.ink}
                 strokeWidth={c.own ? 2 : 1.3}
