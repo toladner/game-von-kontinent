@@ -128,7 +128,21 @@ export const CAPABILITIES: Record<string, Capability> = {
   'travel:wuerfel': { ready: true, note: '' },
   'travel:echtzeit': { ready: true, note: '' },
   'sicht:normal': { ready: true, note: '' },
-  'sicht:realistisch': { ready: true, note: '' },
+  /*
+   * Sicht "realistisch" is switched off at the door rather than removed.
+   *
+   * The engine carries it and the tests exercise it — projection, sightings,
+   * pigeons, the lot — but the game around it is not finished. The plainest
+   * hole: under fog the server withholds the action log by design and sends a
+   * finished view instead, so there is nothing for a returning player to
+   * rebuild a journal from, and the Nachrichten sheet comes back empty after
+   * every reload. That wants a per-seat journal on the server, not a patch
+   * here. Until then this is one word away from being offered again.
+   */
+  'sicht:realistisch': {
+    ready: false,
+    note: 'Nebel, Sichtungen und Brieftauben stehen, aber der Nachrichtenverlauf übersteht kein Neuladen. Kommt zurück, sobald das rund ist.',
+  },
   'table:lokal': { ready: true, note: '' },
   'table:online-eroeffnen': { ready: true, note: '' },
   'table:online-beitreten': { ready: true, note: '' },

@@ -164,14 +164,21 @@ describe('the front page', () => {
     expect((screen.getByLabelText('Fahrzeit je Punkt') as HTMLInputElement).type).toBe('range')
     expect((screen.getByLabelText('Länge der Saison') as HTMLInputElement).type).toBe('range')
 
-    // Fog has no meaning without real time, so choosing it brings that along.
+    // Sicht "realistisch" is on the shelf but not for sale: the engine
+    // carries it, the game around it is unfinished, and the list says so
+    // rather than quietly dropping it.
     choose('Fahrtweise', 'Mit Würfel')
     expect(screen.queryByLabelText('Runden')).toBeTruthy()
-    choose('Sicht', 'Realistisch')
-    expect(opener('Fahrtweise').textContent).toContain('In Echtzeit')
-
-    choose('Sicht', 'Normal')
-    choose('Fahrtweise', 'Mit Würfel')
+    fireEvent.click(opener('Sicht'))
+    const sichten = screen.getByRole('listbox', { name: 'Sicht' })
+    const fog = [...sichten.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Realistisch'),
+    )!
+    expect(fog.disabled).toBe(true)
+    expect(fog.textContent).toContain('in Vorbereitung')
+    fireEvent.click(fog)
+    expect(opener('Sicht').textContent).toContain('Normal')
+    fireEvent.keyDown(opener('Sicht'), { key: 'Escape' })
     fireEvent.click(screen.getByText('Weiter'))
     expect(
       (screen.getByText('Partie eröffnen').closest('button') as HTMLButtonElement).disabled,

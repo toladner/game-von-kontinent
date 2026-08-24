@@ -8,6 +8,7 @@ import { hasSavedGame, PLAYER_COLORS, useGame } from '@app/store'
 import {
   CAPABILITIES,
   DEFAULT_OPTIONS,
+  isReady,
   PACKS,
   type GameOptions,
   type JoinPolicy,
@@ -457,6 +458,12 @@ function Dropdown<T extends string>({
                     >
                       {option.label}
                     </span>
+                    {/* Ein blasser Eintrag ohne Grund ist nur rätselhaft. */}
+                    {option.disabled && (
+                      <span className="smallcaps text-ink-faint shrink-0 text-[9px]">
+                        in Vorbereitung
+                      </span>
+                    )}
                     {selected && (
                       <span className="text-press shrink-0 text-[12px]" aria-hidden>
                         ✓
@@ -538,7 +545,12 @@ const SICHT_OPTIONS: readonly DropdownOption<Sicht>[] = [
   {
     id: 'realistisch',
     label: 'Realistisch',
-    hint: 'Sie wissen nur, wo Sie selbst sind. Befehle an entfernte Kapitäne gehen per Brieftaube — ob sie ankommt, erfahren Sie nie. Schaltet die Echtzeitfahrt mit ein.',
+    hint: isReady('sicht:realistisch')
+      ? 'Sie wissen nur, wo Sie selbst sind. Befehle an entfernte Kapitäne gehen per Brieftaube — ob sie ankommt, erfahren Sie nie. Schaltet die Echtzeitfahrt mit ein.'
+      : CAPABILITIES['sicht:realistisch']!.note,
+    // Fertig genug, um im Verzeichnis zu stehen, nicht fertig genug, um
+    // gespielt zu werden — siehe den Eintrag in options.ts.
+    disabled: !isReady('sicht:realistisch'),
   },
 ]
 
