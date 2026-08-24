@@ -53,6 +53,7 @@ export interface SessionHandlers {
 export type ConnectionStatus = 'verbindet' | 'verbunden' | 'getrennt'
 
 const TOKEN_PREFIX = 'vkzk.token.'
+const TABLE_KEY = 'vkzk.tisch.v1'
 
 export function storedToken(code: string): string | null {
   try {
@@ -67,6 +68,67 @@ function rememberToken(code: string, token: string): void {
     if (token) localStorage.setItem(TOKEN_PREFIX + code, token)
   } catch {
     /* a seat that cannot be remembered still plays for this session */
+  }
+}
+
+/** Whether this device already holds a seat at that table. */
+export function hasSeatAt(code: string): boolean {
+  return storedToken(code) !== null
+}
+
+/** Give the seat up, so the next join asks for a name again. */
+export function forgetSeat(code: string): void {
+  try {
+    localStorage.removeItem(TOKEN_PREFIX + code)
+  } catch {
+    /* nothing to clean up */
+  }
+}
+
+/**
+ * Which table this device was last sitting at.
+ *
+ * The seat token above was only ever half the story. It answers "who am I at
+ * table WZUH", which is why typing any name at all got you back into your own
+ * house — but nothing remembered *that it was WZUH*, so every reload landed on
+ * the title page and the code had to be typed in again. In an installed app,
+ * where closing is what you do rather than reloading, that happened constantly,
+ * and while the player was off the game screen no arrival could be announced.
+ *
+ * So the code is written down beside the token, and the app walks back in on
+ * its own. Cleared when the player leaves deliberately, never otherwise.
+ */
+export interface RememberedTable {
+  readonly code: string
+  readonly name: string
+  readonly gender?: Gender
+}
+
+export function rememberTable(table: RememberedTable): void {
+  try {
+    localStorage.setItem(TABLE_KEY, JSON.stringify(table))
+  } catch {
+    /* private mode: the game plays, it just will not walk back in */
+  }
+}
+
+export function rememberedTable(): RememberedTable | null {
+  try {
+    const raw = localStorage.getItem(TABLE_KEY)
+    if (!raw) return null
+    const table = JSON.parse(raw) as RememberedTable
+    if (typeof table?.code !== 'string' || !table.code) return null
+    return table
+  } catch {
+    return null
+  }
+}
+
+export function forgetTable(): void {
+  try {
+    localStorage.removeItem(TABLE_KEY)
+  } catch {
+    /* nothing to clean up */
   }
 }
 

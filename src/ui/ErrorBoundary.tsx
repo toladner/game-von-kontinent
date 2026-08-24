@@ -1,4 +1,5 @@
 import { Component, Fragment, type ErrorInfo, type ReactNode } from 'react'
+import { forgetTable } from '@app/net'
 
 /**
  * A white screen tells the player nothing and tells us less.
@@ -37,6 +38,10 @@ export class ErrorBoundary extends Component<Props, State> {
     } catch {
       /* nothing to clear */
     }
+    // The app now walks back into the last online table on its own at
+    // start-up. Without this, a reload would land straight back on whatever
+    // was crashing, and "Neu beginnen" would be a loop rather than a way out.
+    forgetTable()
     location.reload()
   }
 

@@ -131,7 +131,7 @@ export function Lobby() {
   )
 }
 
-function ShareRow({ code }: { code: string }) {
+export function ShareRow({ code }: { code: string }) {
   const url = `${location.origin}${location.pathname}#partie=${code}`
   const share = async () => {
     try {

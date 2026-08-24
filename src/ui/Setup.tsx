@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { askToNotify, notifyState, type NotifyState } from '@app/notify'
+import { forgetSeat, hasSeatAt } from '@app/net'
 import { makePersona, type Gender } from '@engine/persona'
 import type { Seat } from '@engine/setup'
+import { NotifyCheck } from './NotifyCheck'
 import { Portrait } from './Portrait'
 import { hasSavedGame, PLAYER_COLORS, useGame } from '@app/store'
 import {
@@ -507,57 +508,6 @@ function Nav({
   )
 }
 
-/**
- * Offer to let the ship speak up, before the first voyage rather than after.
- *
- * Only on the real-time path, because it is the only one where anything
- * happens while you are not looking — in round play nothing moves until
- * somebody throws. Asked here rather than mid-game: a permission prompt in
- * the middle of a harbour visit is an ambush, and by the time the first ship
- * is at sea it is already too late to be useful.
- */
-function NotifyCheck() {
-  const [state, setState] = useState<NotifyState>(() => notifyState())
-  const [asking, setAsking] = useState(false)
-
-  if (state === 'unsupported') return null
-
-  const ask = async () => {
-    setAsking(true)
-    setState(await askToNotify())
-    setAsking(false)
-  }
-
-  return (
-    <div className="paper-card mt-4 flex items-center gap-3 rounded-md px-3.5 py-3">
-      <span className="text-xl leading-none" aria-hidden>
-        {state === 'granted' ? '🔔' : state === 'denied' ? '🔕' : '🔔'}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] leading-tight font-semibold">
-          {state === 'granted'
-            ? 'Ihr Schiff meldet sich'
-            : state === 'denied'
-              ? 'Meldungen sind abgeschaltet'
-              : 'Soll sich Ihr Schiff melden?'}
-        </p>
-        <p className="text-ink-faint mt-0.5 text-[12px] leading-snug">
-          {state === 'granted'
-            ? 'Sie erfahren, wenn ein Hafen erreicht ist und wenn die Saison schließt — solange die Seite geöffnet bleibt oder im Hintergrund läuft.'
-            : state === 'denied'
-              ? 'Ihr Browser hat Meldungen für diese Seite gesperrt. Das läßt sich nur in den Einstellungen des Browsers wieder ändern.'
-              : 'Eine Fahrt dauert echte Stunden. Mit Meldungen können Sie das Gerät weglegen und erfahren trotzdem, wenn der Hafen erreicht ist.'}
-        </p>
-      </div>
-      {state === 'default' && (
-        <button className="btn btn-sm shrink-0" onClick={ask} disabled={asking}>
-          {asking ? '…' : 'Erlauben'}
-        </button>
-      )}
-    </div>
-  )
-}
-
 /*
  * What each setting offers, and what choosing it means.
  *
@@ -1014,8 +964,20 @@ function StepBeitreten({
 }) {
   const [code, setCode] = useState(initialCode)
   const [trader, setTrader] = useState<Trader>({ name: '' })
+  /** Bumped when a seat is given up, so the check below runs again. */
+  const [given, setGiven] = useState(0)
   const clean = code.trim().toUpperCase()
-  const ready = clean.length >= 3 && trader.name.trim().length > 0
+
+  /*
+   * A seat already held at this table.
+   *
+   * The server recognises the device by its token, not by what is typed, so
+   * any name at all used to walk you back into your own house — which looks
+   * like the app ignoring you. It is not ignoring you: there is nothing to
+   * ask. So it stops asking, and says whose seat it is going back to.
+   */
+  const known = useMemo(() => (clean.length >= 3 ? hasSeatAt(clean) : false), [clean, given])
+  const ready = clean.length >= 3 && (known || trader.name.trim().length > 0)
 
   return (
     <div className="anim-fade">
@@ -1032,13 +994,36 @@ function StepBeitreten({
         aria-label="Code der Partie"
       />
 
-      <Legend>Ihr Name</Legend>
-      <TraderSlot index={0} trader={trader} onChange={setTrader} />
+      {known ? (
+        <div className="paper-card mt-4 rounded-md px-3.5 py-3">
+          <p className="text-[13px] leading-tight font-semibold">
+            Sie haben an diesem Tisch bereits einen Platz.
+          </p>
+          <p className="text-ink-faint mt-0.5 text-[12px] leading-snug">
+            Ihr Handelshaus wartet dort mit Namen, Kasse und Ladung. Ein Name ist nicht mehr
+            einzutragen.
+          </p>
+          <button
+            className="btn btn-sm mt-2.5"
+            onClick={() => {
+              forgetSeat(clean)
+              setGiven((n) => n + 1)
+            }}
+          >
+            Platz aufgeben und neu eintragen
+          </button>
+        </div>
+      ) : (
+        <>
+          <Legend>Ihr Name</Legend>
+          <TraderSlot index={0} trader={trader} onChange={setTrader} />
+        </>
+      )}
 
       <Nav
         onBack={onBack}
         onNext={() => onJoin(clean, { ...trader, name: trader.name.trim() })}
-        nextLabel="Beitreten"
+        nextLabel={known ? 'Zurück an Bord' : 'Beitreten'}
         nextDisabled={!ready}
       />
     </div>

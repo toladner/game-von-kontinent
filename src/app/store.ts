@@ -10,6 +10,10 @@ import type { AngebotMode, KonjunkturMode, PreisMode } from '@engine/types'
 import { projectFor } from '@engine/fog'
 import {
   createOnlineGame,
+  forgetSeat,
+  forgetTable,
+  rememberedTable,
+  rememberTable,
   Session,
   type ConnectionStatus,
   type GameMeta,
@@ -115,6 +119,21 @@ interface Store {
   join: (code: string, name: string, gender?: Gender) => void
   dispatch: (action: GameAction) => void
   resume: () => boolean
+  /**
+   * Walk back into the table this device was last sitting at, if any.
+   *
+   * Called once at start-up, before the first render, so a reload or a
+   * reopened app goes straight back aboard rather than to the title page.
+   */
+  restore: () => boolean
+  /**
+   * Put the game down and go back to the title page, keeping the seat.
+   *
+   * Distinct from `abandon`, which gives the seat up and deletes the save.
+   * Leaving is reversible; abandoning is not, and the two must not wear the
+   * same button.
+   */
+  leave: () => void
   abandon: () => void
   dismissNotice: () => void
   /** Called when the Nachrichten sheet is opened: everything is now read. */
@@ -251,6 +270,28 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
 let session: Session | null = null
 let ticker: ReturnType<typeof setInterval> | null = null
 
+/**
+ * A table with nobody at it — what both ways out of a game reset to.
+ *
+ * `focus` belongs here too: it is another seat's whereabouts, and leaving it
+ * behind meant the next game opened following a player who was no longer at
+ * the table.
+ */
+const EMPTY: Pick<
+  Store,
+  'state' | 'truth' | 'log' | 'newsSeen' | 'focus' | 'lastEvents' | 'notice' | 'net' | 'localActing'
+> = {
+  state: null,
+  truth: null,
+  log: [],
+  newsSeen: 0,
+  focus: null,
+  lastEvents: [],
+  notice: null,
+  net: null,
+  localActing: null,
+}
+
 export const useGame = create<Store>((set, get) => ({
   ctx,
   state: null,
@@ -317,6 +358,9 @@ export const useGame = create<Store>((set, get) => ({
     const firstActing = state.players[0]?.id ?? null
     session?.close()
     session = null
+    // A game at this device replaces whatever online table was remembered,
+    // or the next reload would sail off to the old one instead.
+    forgetTable()
     set({
       ctx,
       state: projectFor(state, firstActing),
@@ -360,6 +404,10 @@ export const useGame = create<Store>((set, get) => ({
     session?.close()
     // A networked game is never saved locally; the server holds the log.
     saved = null
+    // Written down before the socket is even open: the point is to come back
+    // here next time the app is opened, and a table you failed to connect to
+    // is exactly the one worth retrying.
+    rememberTable({ code, name, ...(gender ? { gender } : {}) })
     set({ state: null, log: [], newsSeen: 0, lastEvents: [], notice: null, net: { code, status: 'verbindet', playerId: null, online: [] } })
 
     session = new Session(code, name, gender, {
@@ -560,27 +608,41 @@ export const useGame = create<Store>((set, get) => ({
     }
   },
 
+  restore() {
+    const table = rememberedTable()
+    if (!table) return false
+    get().join(table.code, table.name, table.gender)
+    return true
+  },
+
+  leave() {
+    session?.close()
+    session = null
+    if (ticker) clearInterval(ticker)
+    ticker = null
+    // The seat token stays, and so does the local save file: this is putting
+    // the game down, not walking away from it. `saved` is dropped only from
+    // memory, so the next `resume()` reads it back off the disc.
+    saved = null
+    forgetTable()
+    set(EMPTY)
+  },
+
   abandon() {
     session?.close()
     session = null
     if (ticker) clearInterval(ticker)
     ticker = null
     saved = null
+    const code = get().net?.code
+    if (code) forgetSeat(code)
+    forgetTable()
     try {
       localStorage.removeItem(SAVE_KEY)
     } catch {
       /* nothing to clean up */
     }
-    set({
-      state: null,
-      truth: null,
-      log: [],
-      newsSeen: 0,
-      lastEvents: [],
-      notice: null,
-      net: null,
-      localActing: null,
-    })
+    set(EMPTY)
   },
 
   dismissNotice() {

@@ -1105,6 +1105,58 @@ describe('looking a harbour up on the plan', () => {
   })
 })
 
+describe('the settings page', () => {
+  const openSettings = (seed: string) => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed }))
+    enterHarbour()
+    act(() => {
+      fireEvent.click(screen.getByLabelText('Einstellungen'))
+    })
+  }
+
+  it('is reachable from the board at any time', () => {
+    openSettings('einstellungen')
+    expect(screen.getByRole('heading', { name: 'Einstellungen' })).toBeTruthy()
+    // The three things it is for.
+    expect(screen.getByText('Meldungen')).toBeTruthy()
+    expect(screen.getByText('Diese Partie')).toBeTruthy()
+    expect(screen.getByText('Verlassen')).toBeTruthy()
+  })
+
+  it('goes back to the title page without throwing the game away', () => {
+    // The whole point of the second exit: before this, the only way off the
+    // board was the red button that deleted the save.
+    openSettings('titelbild')
+    act(() => {
+      fireEvent.click(screen.getByText('Zum Titelbild'))
+    })
+
+    expect(useGame.getState().state).toBeNull()
+    expect(screen.getByText('Angefangene Partie fortsetzen')).toBeTruthy()
+
+    act(() => {
+      fireEvent.click(screen.getByText('Angefangene Partie fortsetzen'))
+    })
+    expect(useGame.getState().state).not.toBeNull()
+  })
+
+  it('makes giving the game up take a second tap', () => {
+    openSettings('aufgeben-ui')
+    act(() => {
+      fireEvent.click(screen.getByText('Partie aufgeben'))
+    })
+    // Still playing: the first tap only asks.
+    expect(useGame.getState().state).not.toBeNull()
+
+    act(() => {
+      fireEvent.click(screen.getByText(/Wirklich aufgeben/))
+    })
+    expect(useGame.getState().state).toBeNull()
+    expect(screen.queryByText('Angefangene Partie fortsetzen')).toBeNull()
+  })
+})
+
 describe('a second device with no seat', () => {
   /**
    * Two people opened a real-time table on two devices and the second could

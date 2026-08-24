@@ -7,6 +7,7 @@ import { PlayerHUD, RoundPill, useCountUp } from './PlayerHUD'
 import { Die } from './Dice'
 import { CargoHold } from './Cargo'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
+import { SettingsSheet } from './Settings'
 import { FleetSheet } from './FleetSheet'
 import { PigeonSheet } from './PigeonSheet'
 import { formatMoney, PLAYER_COLORS, playerLabel, useGame, type LogLine } from '@app/store'
@@ -36,6 +37,7 @@ type SheetKind =
   | 'taube'
   | 'nachrichten'
   | 'vorschau'
+  | 'einstellungen'
   | null
 
 export function GameScreen() {
@@ -49,6 +51,7 @@ export function GameScreen() {
   const newsSeen = useGame((s) => s.newsSeen)
   const markNewsRead = useGame((s) => s.markNewsRead)
   const abandon = useGame((s) => s.abandon)
+  const leave = useGame((s) => s.leave)
 
   const acting = useGame((s) => s.acting())
   const setActing = useGame((s) => s.setActing)
@@ -202,7 +205,8 @@ export function GameScreen() {
           : {})}
       />
 
-      {/* Kopfzeile */}
+      {/* Kopfzeile. Die Merkzettel rechts brechen um, wenn der Platz nicht
+          reicht — gequetschte Pillen wären die Alternative. */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 px-3"
         style={{ paddingTop: 'calc(var(--safe-t) + 0.6rem)' }}
@@ -228,22 +232,25 @@ export function GameScreen() {
           onOpen={() => open('kontor')}
         />
         )}
-        <NewsPill unread={unread} onOpen={() => open('nachrichten')} />
-        <FleetPill
-          count={player.fleet.length}
-          waiting={waitingMail}
-          onOpen={() => open('flotte')}
-        />
-        {realtime ? (
-          <ClockPill state={state} now={now} onOpen={() => open('runde')} />
-        ) : (
-          <RoundPill
-            round={state.round}
-            total={state.config.totalRounds}
-            red={state.config.redFields.includes(state.round)}
-            onOpen={() => open('runde')}
+        <div className="flex min-w-0 flex-wrap justify-end gap-2">
+          <NewsPill unread={unread} onOpen={() => open('nachrichten')} />
+          <FleetPill
+            count={player.fleet.length}
+            waiting={waitingMail}
+            onOpen={() => open('flotte')}
           />
-        )}
+          {realtime ? (
+            <ClockPill state={state} now={now} onOpen={() => open('runde')} />
+          ) : (
+            <RoundPill
+              round={state.round}
+              total={state.config.totalRounds}
+              red={state.config.redFields.includes(state.round)}
+              onOpen={() => open('runde')}
+            />
+          )}
+          <SettingsPill onOpen={() => open('einstellungen')} />
+        </div>
       </div>
 
       {!seated ? null : realtime ? (
@@ -374,6 +381,17 @@ export function GameScreen() {
 
       {kind === 'nachrichten' && <NewsSheet log={log} sinceId={newsMark} snap={snap} onSnap={close} />}
 
+      {kind === 'einstellungen' && (
+        <SettingsSheet
+          state={state}
+          net={net}
+          snap={snap}
+          onSnap={close}
+          onLeave={leave}
+          onAbandon={abandon}
+        />
+      )}
+
       {kind === 'vorschau' && preview && (
         <PortPreviewSheet
           ctx={ctx}
@@ -402,10 +420,15 @@ export function GameScreen() {
             now={now}
             snap={snap}
             onSnap={close}
-            onAbandon={abandon}
+            onSettings={() => open('einstellungen')}
           />
         ) : (
-          <RoundSheet state={state} snap={snap} onSnap={close} onAbandon={abandon} />
+          <RoundSheet
+            state={state}
+            snap={snap}
+            onSnap={close}
+            onSettings={() => open('einstellungen')}
+          />
         ))}
 
       {kind === 'konjunktur' && (
@@ -460,6 +483,26 @@ function FleetPill({
           {waiting}
         </span>
       )}
+    </button>
+  )
+}
+
+/**
+ * Everything that is about the app rather than the game: meldungen, the table,
+ * and the way out. There was no way out before that did not also give the
+ * game up, which mattered little while a reload took you to the title page
+ * anyway — and matters a great deal now that it does not.
+ */
+function SettingsPill({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      className="paper anim-rise pointer-events-auto flex items-center rounded-lg px-3 py-1.5 shadow-lg"
+      aria-label="Einstellungen"
+    >
+      <span className="text-base leading-none" aria-hidden>
+        ⚙
+      </span>
     </button>
   )
 }
@@ -721,14 +764,14 @@ function SeasonSheet({
   now,
   snap,
   onSnap,
-  onAbandon,
+  onSettings,
 }: {
   ctx: EngineContext
   state: GameState
   now: number
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
-  onAbandon: () => void
+  onSettings: () => void
 }) {
   const card = state.marketCardId ? ctx.cardsById.get(state.marketCardId) : null
   const nextTurn = state.marketSince + state.config.realtime.marketIntervalMinutes * 60_000
@@ -776,8 +819,10 @@ function SeasonSheet({
         })}
       </ul>
 
-      <button className="btn btn-danger mt-6 w-full" onClick={onAbandon}>
-        Partie verlassen
+      {/* Aufgeben steht unter Einstellungen, mit dem Unterschied zwischen
+          Weggehen und Aufgeben daneben — hier war beides derselbe Knopf. */}
+      <button className="btn mt-6 w-full" onClick={onSettings}>
+        Einstellungen
       </button>
     </Sheet>
   )
@@ -858,12 +903,12 @@ function RoundSheet({
   state,
   snap,
   onSnap,
-  onAbandon,
+  onSettings,
 }: {
   state: GameState
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
-  onAbandon: () => void
+  onSettings: () => void
 }) {
   return (
     <Sheet
@@ -890,8 +935,8 @@ function RoundSheet({
           )
         })}
       </div>
-      <button className="btn btn-danger mt-6 w-full" onClick={onAbandon}>
-        Partie aufgeben
+      <button className="btn mt-6 w-full" onClick={onSettings}>
+        Einstellungen
       </button>
     </Sheet>
   )
