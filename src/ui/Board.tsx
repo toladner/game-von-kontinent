@@ -49,7 +49,11 @@ export interface BoardProps {
   readonly highlightPorts?: readonly string[]
   readonly now?: number
   readonly onPickPort?: (portId: string) => void
-  readonly course?: readonly string[]
+  /**
+   * Whose course is drawn in full and animated. Every other visible voyage is
+   * still drawn, faintly, in the colour of the house sailing it.
+   */
+  readonly coursePlayerId?: string | null
   /**
    * Bumping this recentres the plan on `focusNode`. The turn changing is the
    * usual reason: you should never have to hunt for your own ship.
@@ -73,7 +77,7 @@ export function Board({
   highlightPorts = [],
   now = 0,
   onPickPort,
-  course = [],
+  coursePlayerId = null,
   focusNonce = 0,
   markedPort = null,
   markNonce = 0,
@@ -477,18 +481,39 @@ export function Board({
     return r ? r.top + r.height / 2 : 0
   }
 
-  const coursePath = useMemo(() => {
-    if (course.length < 2) return ''
-    let d = ''
-    let started = false
-    for (const id of course) {
-      const p = positions.get(id)
-      if (!p) continue
-      d += `${started ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`
-      started = true
+  /**
+   * Every course currently being sailed, in the colour of the house sailing it.
+   *
+   * Read off the state rather than handed in, which is what lets a house with
+   * two ships see both, and rivals' courses show up as well — under Sicht
+   * realistisch the projection has already set `voyage` to null on anything
+   * the viewer has no business seeing, so there is nothing here to leak.
+   *
+   * The player's own course is drawn in full and the dashes march along it
+   * towards the destination; the others are faint and still, so the chart says
+   * where everyone is heading without three ships shouting at once.
+   */
+  const courses = useMemo(() => {
+    const out: { key: string; d: string; ink: string; own: boolean; end: Point | null }[] = []
+    for (const player of state.players) {
+      const ink = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!.ink
+      for (const vehicle of player.fleet) {
+        if (vehicle.hidden || !vehicle.voyage) continue
+        let d = ''
+        let last: Point | null = null
+        for (const id of [vehicle.nodeId, ...vehicle.voyage.route]) {
+          const p = positions.get(id)
+          if (!p) continue
+          d += `${last ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`
+          last = p
+        }
+        if (!d.includes('L')) continue
+        out.push({ key: vehicle.id, d, ink, own: player.id === coursePlayerId, end: last })
+      }
     }
-    return d
-  }, [course, positions])
+    // The player's own course last, so it lies over the others.
+    return out.sort((a, b) => Number(a.own) - Number(b.own))
+  }, [state.players, positions, coursePlayerId])
 
   return (
     <div ref={hostRef} className="board-shell relative h-full w-full overflow-hidden">
@@ -537,16 +562,48 @@ export function Board({
             </g>
           )}
 
-          {coursePath && (
-            <path
-              d={coursePath}
-              fill="none"
-              stroke="#1c6b4d"
-              strokeWidth={1.8}
-              strokeDasharray="5 4"
-              opacity={0.85}
-            />
-          )}
+          {courses.map((c) => (
+            <g key={`c-${c.key}`} pointerEvents="none">
+              {/* Ein weicher Streifen darunter, damit die Linie über Land
+                  und über See gleich gut lesbar bleibt. */}
+              <path
+                d={c.d}
+                fill="none"
+                stroke={c.ink}
+                strokeWidth={c.own ? 5 : 3.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={c.own ? 0.2 : 0.12}
+              />
+              <path
+                d={c.d}
+                fill="none"
+                stroke={c.ink}
+                strokeWidth={c.own ? 2 : 1.3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="6 5"
+                opacity={c.own ? 0.95 : 0.45}
+                style={
+                  c.own ? { animation: 'course-ants 1.1s linear infinite' } : undefined
+                }
+              />
+              {c.own && c.end && (
+                <>
+                  <circle cx={c.end.x} cy={c.end.y} r={7} fill={c.ink} opacity={0.15} />
+                  <circle
+                    cx={c.end.x}
+                    cy={c.end.y}
+                    r={5}
+                    fill="none"
+                    stroke={c.ink}
+                    strokeWidth={1.6}
+                    opacity={0.9}
+                  />
+                </>
+              )}
+            </g>
+          ))}
 
           {[...targetSet].map((id) => {
             const p = positions.get(id)
@@ -660,35 +717,39 @@ export function Board({
         />
       </svg>
 
-      <div className="pointer-events-none absolute right-3 bottom-3 flex flex-col gap-1.5">
+      {/*
+       * Steuerung des Plans: eine Leiste wie oben, aus demselben Grund.
+       *
+       * Sie stand in der unteren rechten Ecke, wo ein aufgezogenes Blatt sie
+       * verdeckt — auch der Blick, den »Hafen auf der Karte wählen« öffnet,
+       * lässt das Blatt auf halber Höhe stehen. Auf halber Höhe am Rand steht
+       * sie über allem, was von unten kommt, und unter der Kopfleiste.
+       *
+       * »Ganzer Plan« ist fort: zweimal Minus tut dasselbe, und der Knopf war
+       * der einzige, der einen dorthin warf, wo das eigene Schiff nicht ist.
+       */}
+      <div className="paper pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 flex-col divide-y divide-black/15 overflow-hidden rounded-lg shadow-lg">
         <button
-          className="btn btn-sm pointer-events-auto !px-2.5 text-lg leading-none"
+          className="pointer-events-auto px-2.5 py-1.5 text-lg leading-none transition-colors hover:bg-black/5"
           onClick={() => zoomAt(1.4, midX(), midY())}
           aria-label="Näher heran"
         >
           +
         </button>
         <button
-          className="btn btn-sm pointer-events-auto !px-2.5 text-lg leading-none"
+          className="pointer-events-auto px-2.5 py-1.5 text-lg leading-none transition-colors hover:bg-black/5"
           onClick={() => zoomAt(1 / 1.4, midX(), midY())}
           aria-label="Weiter weg"
         >
           −
         </button>
         <button
-          className="btn btn-sm pointer-events-auto !px-2 text-base leading-none"
+          className="pointer-events-auto px-2.5 py-1.5 text-base leading-none transition-colors hover:bg-black/5"
           onClick={() => centreOn(focusNode, 3)}
           aria-label="Zum eigenen Schiff"
           title="Zum eigenen Schiff"
         >
           ⚓
-        </button>
-        <button
-          className="btn btn-sm pointer-events-auto !px-2 text-xs leading-none"
-          onClick={() => setCam(clampCam({ k: 1, cx: BOARD_W / 2, cy: H / 2 }))}
-          aria-label="Ganzer Plan"
-        >
-          ⤢
         </button>
       </div>
     </div>

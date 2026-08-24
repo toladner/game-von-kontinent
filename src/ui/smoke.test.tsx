@@ -358,6 +358,84 @@ describe('real-time play in the interface', () => {
   })
 })
 
+describe('the set course on the plan', () => {
+  /** Put Ada to sea with something in the hold, and hand back the target. */
+  function setSail(seed: string) {
+    render(<App />)
+    act(() =>
+      useGame.getState().begin(['Ada', 'Bo'], {
+        travel: 'echtzeit',
+        minutesPerPip: 1,
+        durationHours: 6,
+        seed,
+      }),
+    )
+    const ctx = useGame.getState().ctx
+    const s = useGame.getState().state!
+    const player = s.players[0]!
+    const offer = buyOffers(ctx, s, player, portAt(ctx, flagship(player).nodeId)!).find(
+      (o) => o.status === 'ok',
+    )!
+    act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+
+    const from = flagship(useGame.getState().state!.players[0]!).nodeId
+    const to = [...ctx.portsById.keys()].find(
+      (id) => id !== from && routeTo(ctx, from, null, id).length >= 3,
+    )!
+    return { to }
+  }
+
+  const hints = () => document.querySelectorAll('circle[stroke="#1c6b4d"]').length
+  // Ada is the first house, and the first house is blue.
+  const ownCourse = () => document.querySelectorAll('path[stroke="#1f4f8f"]').length
+
+  it('takes the advice rings down once the course is set', () => {
+    // The green rings answer "where could this cargo go". Once a course is
+    // set they are last question's answer, and they were arguing with the
+    // drawn route over the same chart.
+    const { to } = setSail('ringe')
+    expect(hints()).toBeGreaterThan(0)
+
+    act(() => useGame.getState().dispatch({ type: 'setCourse', to }))
+    expect(hints()).toBe(0)
+  })
+
+  it('draws the voyage in the colour of the house sailing it', () => {
+    const { to } = setSail('farbe')
+    expect(ownCourse()).toBe(0)
+
+    act(() => useGame.getState().dispatch({ type: 'setCourse', to }))
+    // A soft underlay, the marching line over it — and only one of them moves.
+    expect(ownCourse()).toBe(2)
+    const marching = [...document.querySelectorAll('path[stroke="#1f4f8f"]')].filter((p) =>
+      ((p as SVGElement).style.animation ?? '').includes('course-ants'),
+    )
+    expect(marching).toHaveLength(1)
+  })
+
+  it('shows a rival heading somewhere without letting them shout', () => {
+    const { to } = setSail('rivale')
+    act(() => useGame.getState().dispatch({ type: 'setCourse', to }))
+
+    const ctx = useGame.getState().ctx
+    const bo = useGame.getState().state!.players[1]!
+    const from = flagship(bo).nodeId
+    const target = [...ctx.portsById.keys()].find(
+      (id) => id !== from && routeTo(ctx, from, null, id).length >= 3,
+    )!
+    act(() =>
+      useGame.getState().dispatch({ type: 'setCourse', to: target, by: bo.id }),
+    )
+
+    // Bo is the second house, and the second house is red.
+    const theirs = [...document.querySelectorAll('path[stroke="#b03027"]')]
+    expect(theirs.length).toBe(2)
+    expect(theirs.every((p) => !((p as SVGElement).style.animation ?? '').includes('ants'))).toBe(
+      true,
+    )
+  })
+})
+
 describe('the map on a touch screen', () => {
   const board = () => document.querySelector('svg[aria-label]') as SVGSVGElement
 

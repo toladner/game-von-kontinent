@@ -185,10 +185,14 @@ export function GameScreen() {
         legalTargets={targets}
         onPick={(to) => dispatch({ type: 'step', to })}
         focusNode={flagship(player).nodeId}
-        highlightPorts={state.phase === 'move' ? [] : highlights}
+        // Die grünen Ringe sind Vorschläge, wohin sich die Ladung tragen
+        // ließe. Sobald der Kurs steht, sind sie ein überholter Rat, der mit
+        // der eingezeichneten Fahrt um dieselbe Karte streitet — und beim
+        // Würfeln zählen nur die erreichbaren Felder.
+        highlightPorts={state.phase === 'move' || voyage ? [] : highlights}
         now={now}
         focusNonce={focusNonce}
-        course={voyage ? [flagship(player).nodeId, ...voyage.route] : []}
+        coursePlayerId={player.id}
         markedPort={marked?.portId ?? null}
         markNonce={marked?.nonce ?? 0}
         {...(realtime

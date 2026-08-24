@@ -215,6 +215,20 @@ body {
   }
 }
 
+/*
+ * Marching ants along a set course.
+ *
+ * The dash pattern is written in board units, so the offset has to travel one
+ * whole pattern length (6 + 5) to loop seamlessly. Linear, and slow enough to
+ * read as a current running towards the destination rather than as something
+ * flickering for attention.
+ */
+@keyframes course-ants {
+  to {
+    stroke-dashoffset: -11;
+  }
+}
+
 @keyframes coin-flash {
   0% {
     background-color: rgb(169 134 63 / 0.45);
