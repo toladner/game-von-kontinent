@@ -63,6 +63,15 @@ export interface LogLine {
   readonly id: number
   readonly text: string
   readonly tone: 'neutral' | 'gut' | 'schlecht' | 'wichtig'
+  /**
+   * The houses this entry concerns. Empty means the world at large — a round
+   * opening, a storm, the close of the season — which is what lets the
+   * journal be filtered to one house without losing the scaffolding that
+   * holds it together.
+   *
+   * A collision names two: it happened to both of them.
+   */
+  readonly who: readonly string[]
 }
 
 /** Who is at this device, and how it is connected. */
@@ -181,11 +190,13 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
   const nameOf = (id: string) => state.players.find((p) => p.id === id)?.name ?? id
   const goodOf = (id: number) => ctx.goodsById.get(id)?.name ?? `Ware ${id}`
   const portOf = (id: string) => ctx.portsById.get(id)?.name ?? id
-  const line = (text: string, tone: LogLine['tone'] = 'neutral'): LogLine => ({
-    id: ++logId,
-    text,
-    tone,
-  })
+  // Almost every entry belongs to whoever the event names; the handful that
+  // belong to nobody say so with an empty list.
+  const line = (
+    text: string,
+    tone: LogLine['tone'] = 'neutral',
+    who: readonly string[] = 'playerId' in event ? [event.playerId] : [],
+  ): LogLine => ({ id: ++logId, text, tone, who })
 
   switch (event.type) {
     case 'rolled':
@@ -200,6 +211,7 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
       return line(
         `Zusammenstoß! ${nameOf(event.playerId)} zahlt ${nameOf(event.victimId)} ${money(event.damages)} Schadenersatz und setzt eine Runde aus.`,
         'schlecht',
+        [event.playerId, event.victimId],
       )
     case 'bought':
       return line(
@@ -250,18 +262,23 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
         `${nameOf(event.playerId)} verliert ${goodOf(event.goodId)} (${money(event.value)}) — ${event.reason}.`,
         'schlecht',
       )
+    // Weltnachrichten: sie gehören keinem Haus und bleiben deshalb auch
+    // stehen, wenn das Blatt auf ein einzelnes gefiltert wird — sonst
+    // verlöre der Verlauf die Rundenüberschriften, die ihn gliedern.
     case 'weatherSet':
       return line(
         `${event.title}: Verkaufspreise dort ${event.percent > 0 ? '+' : '−'} ${Math.abs(event.percent)} %.`,
         'wichtig',
+        [],
       )
     case 'roundStarted':
       return line(
         `Runde ${event.round}${event.red ? ' — rotes Feld, die Konjunktur spricht mit.' : '.'}`,
         event.red ? 'wichtig' : 'neutral',
+        [],
       )
     case 'gameOver':
-      return line('Die letzte Runde ist gefahren. Schlußabrechnung.', 'wichtig')
+      return line('Die letzte Runde ist gefahren. Schlußabrechnung.', 'wichtig', [])
     default:
       return null
   }
@@ -314,6 +331,7 @@ function openingLine(startingCapital: number): LogLine {
     id: ++logId,
     text: `Die Exportbank kreditiert jedem Mitspieler ${startingCapital.toLocaleString('de-DE')} Einheiten Betriebskapital.`,
     tone: 'wichtig',
+    who: [],
   }
 }
 

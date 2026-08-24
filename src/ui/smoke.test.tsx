@@ -1227,6 +1227,94 @@ describe('looking a harbour up on the plan', () => {
   })
 })
 
+describe('reading one house’s column', () => {
+  /** Play a few turns so both houses are in the paper, then open it. */
+  function openNews(seed: string) {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed }))
+    for (let turn = 0; turn < 6; turn++) {
+      for (let guard = 0; guard < 12; guard++) {
+        const g = useGame.getState()
+        const s = g.state!
+        if (s.phase === 'over') break
+        if (s.phase === 'roll') act(() => g.dispatch({ type: 'roll' }))
+        else if (s.phase === 'move') {
+          const to = legalSteps(g.ctx, s.players[s.activeIndex]!)[0]
+          if (!to) break
+          act(() => g.dispatch({ type: 'step', to }))
+        } else if (s.phase === 'konjunktur') act(() => g.dispatch({ type: 'drawKonjunktur' }))
+        else {
+          act(() => g.dispatch({ type: 'endTurn' }))
+          break
+        }
+      }
+    }
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+  }
+
+  /** Older rounds fold away by default; unfold them all before counting. */
+  function unfold(): void {
+    for (let guard = 0; guard < 30; guard++) {
+      const shut = document.querySelector(
+        'aside.sheet section button[aria-expanded="false"]',
+      ) as HTMLButtonElement | null
+      if (!shut) return
+      act(() => {
+        fireEvent.click(shut)
+      })
+    }
+  }
+
+  const entries = () => {
+    unfold()
+    return [...document.querySelectorAll('aside.sheet ol li p')].map((p) => p.textContent ?? '')
+  }
+
+  it('narrows the paper to one house and back again', () => {
+    openNews('spalte')
+    const all = entries()
+    expect(all.some((t) => t.startsWith('Ada'))).toBe(true)
+    expect(all.some((t) => t.startsWith('Bo'))).toBe(true)
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Ada', pressed: false }))
+    })
+    const onlyAda = entries()
+    expect(onlyAda.length).toBeLessThan(all.length)
+    expect(onlyAda.some((t) => t.startsWith('Ada'))).toBe(true)
+    expect(onlyAda.some((t) => t.startsWith('Bo'))).toBe(false)
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Alle' }))
+    })
+    expect(entries()).toHaveLength(all.length)
+  })
+
+  it('keeps the world news, so the rounds still divide it up', () => {
+    // The round headings are not anybody's news, and without them a filtered
+    // journal collapses into one undated heap.
+    openNews('gerueste')
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Ada', pressed: false }))
+    })
+    const headings = [...document.querySelectorAll('aside.sheet section button')].map(
+      (b) => b.textContent ?? '',
+    )
+    expect(headings.filter((h) => /Runde \d/.test(h)).length).toBeGreaterThan(0)
+  })
+
+  it('offers no filter at a table for one', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'allein' }))
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    expect(screen.queryByRole('button', { name: 'Alle' })).toBeNull()
+  })
+})
+
 describe('the settings page', () => {
   const openSettings = (seed: string) => {
     render(<App />)

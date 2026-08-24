@@ -430,7 +430,15 @@ export function GameScreen() {
         <KontorSheet ctx={ctx} state={state} player={player} snap={snap} onSnap={close} />
       )}
 
-      {kind === 'nachrichten' && <NewsSheet log={log} sinceId={newsMark} snap={snap} onSnap={close} />}
+      {kind === 'nachrichten' && (
+        <NewsSheet
+          log={log}
+          players={state.players}
+          sinceId={newsMark}
+          snap={snap}
+          onSnap={close}
+        />
+      )}
 
       {kind === 'einstellungen' && (
         <SettingsSheet
@@ -1185,18 +1193,34 @@ function FinalSheet({
  */
 function NewsSheet({
   log,
+  players,
   sinceId,
   snap,
   onSnap,
 }: {
   log: LogLine[]
+  readonly players: readonly PlayerState[]
   /** Entries above this id are new since the sheet was last opened. */
   sinceId: number
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
 }) {
-  const fresh = log.filter((l) => l.id > sinceId).length
-  const rounds = useMemo(() => groupByRound(log), [log])
+  /** Null reads the whole paper; an id reads one house's column. */
+  const [only, setOnly] = useState<string | null>(null)
+
+  /*
+   * Filtering keeps the world news — round openings, storms, the close of
+   * the season — because those are the scaffolding the journal hangs on. A
+   * round in which the chosen house did nothing drops out by itself: its
+   * heading has no entries under it, and empty groups are not drawn.
+   */
+  const shown = useMemo(
+    () => (only ? log.filter((l) => l.who.length === 0 || l.who.includes(only)) : log),
+    [log, only],
+  )
+  const fresh = shown.filter((l) => l.id > sinceId).length
+  const rounds = useMemo(() => groupByRound(shown), [shown])
+  const named = only ? (players.find((p) => p.id === only)?.name ?? null) : null
 
   // The current round is the one you came to read; older ones fold away so a
   // fifty-round game does not become a scroll to nowhere.
@@ -1211,14 +1235,41 @@ function NewsSheet({
       subtitle={
         log.length === 0
           ? 'Noch ist nichts eingegangen'
-          : fresh > 0
-            ? `${fresh} neu · ${log.length} insgesamt`
-            : `${log.length} Meldungen`
+          : named
+            ? `${shown.length} zu ${named} · ${log.length} insgesamt`
+            : fresh > 0
+              ? `${fresh} neu · ${log.length} insgesamt`
+              : `${log.length} Meldungen`
       }
     >
+      {/* Die Spalten des Blattes: das ganze Blatt oder ein Haus. Bei einem
+          einzigen Mitspieler gibt es nichts auseinanderzuhalten. */}
+      {players.length > 1 && log.length > 0 && (
+        <div
+          className="-mx-1 mb-2.5 flex gap-1 overflow-x-auto px-1 pb-1"
+          role="group"
+          aria-label="Nachrichten filtern"
+        >
+          <FilterChip label="Alle" active={only === null} onPick={() => setOnly(null)} />
+          {players.map((p) => (
+            <FilterChip
+              key={p.id}
+              label={p.name}
+              ink={PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!.ink}
+              active={only === p.id}
+              onPick={() => setOnly(only === p.id ? null : p.id)}
+            />
+          ))}
+        </div>
+      )}
+
       {log.length === 0 ? (
         <p className="text-ink-soft py-6 text-center text-[13px]">
           Sobald gewürfelt, gehandelt und angelandet wird, steht es hier.
+        </p>
+      ) : rounds.length === 0 ? (
+        <p className="text-ink-soft py-6 text-center text-[13px]">
+          Von {named} ist noch nichts zu berichten.
         </p>
       ) : (
         <div className="space-y-2">
@@ -1284,6 +1335,47 @@ function NewsSheet({
         </div>
       )}
     </Sheet>
+  )
+}
+
+/**
+ * One column of the Börsenblatt: everything, or one house.
+ *
+ * Carries the house's own colour, which is the same seal it wears on the
+ * plan, in the HUD and on its course — so picking a column out of the row
+ * needs no reading.
+ */
+function FilterChip({
+  label,
+  ink,
+  active,
+  onPick,
+}: {
+  label: string
+  ink?: string
+  active: boolean
+  onPick: () => void
+}) {
+  return (
+    <button
+      onClick={onPick}
+      aria-pressed={active}
+      className={`btn-sm flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition ${
+        active
+          ? 'border-transparent text-white'
+          : 'border-black/20 text-ink-soft hover:bg-black/5'
+      }`}
+      style={active ? { background: ink ?? 'var(--color-ink)' } : undefined}
+    >
+      {ink && (
+        <span
+          className="h-2 w-2 shrink-0 rounded-full border border-black/25"
+          style={{ background: active ? '#ffffff' : ink }}
+          aria-hidden
+        />
+      )}
+      <span className="max-w-[7rem] truncate">{label}</span>
+    </button>
   )
 }
 
