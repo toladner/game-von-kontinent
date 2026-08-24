@@ -16,6 +16,7 @@ import {
   voyageEndsAt,
 } from './selectors'
 import { isPort } from './mapbuild'
+import { exportsAt, sellPriceAt } from './market'
 import { flagship, netWorth } from './state'
 import type { GameAction } from './actions'
 import type { GameState } from './state'
@@ -1036,5 +1037,179 @@ describe('weather over one part of the world', () => {
     )
     // Well short of the whole season, which is what makes it weather.
     expect(weather.untilTime! - blown.now).toBeLessThan(blown.endsAt - blown.startedAt)
+  })
+})
+
+/**
+ * The Warenbericht.
+ *
+ * Every other card in the deck asks where a merchant is. This one asks what is
+ * in the hold, and pays no attention to geography at all — which is the first
+ * reason in the game to have read the Warenverzeichnis.
+ */
+describe('a report on one ware', () => {
+  const T0 = 1_800_000_000_000
+  const MIN = 60_000
+  const deck = CLASSIC_PACK.konjunkturErweitert!
+
+  const afloat = () =>
+    replay(
+      ctx,
+      createGame(ctx, {
+        seed: 'bericht',
+        travel: 'echtzeit',
+        minutesPerPip: 1,
+        durationHours: 8,
+        konjunktur: 'erweitert',
+      }),
+      [
+        { type: 'tick', at: T0 },
+        { type: 'join', playerId: 'a', name: 'Ada' },
+        { type: 'start' },
+      ],
+    )
+
+  const turn = (s: GameState, card: KonjunkturCard) =>
+    applyAction(
+      ctx,
+      {
+        ...s,
+        deck: [card.id, ...s.deck.filter((d) => d !== card.id)],
+        marketSince: s.now - s.config.realtime.marketIntervalMinutes * MIN,
+      },
+      { type: 'tick', at: s.now + 1000 },
+    )
+
+  /** The first card that moves the named ware, and by how much. */
+  const reportOn = (good: number) =>
+    deck.find((c) =>
+      c.effects.some((e) => e.kind === 'goodPriceDelta' && e.scope.good === good && e.percent > 0),
+    )!
+
+  /** Somewhere that does not export the ware, so it prices at the market. */
+  const marketFor = (s: GameState, goodId: number) =>
+    [...ctx.portsById.keys()].find((p) => !exportsAt(ctx, s, p).includes(goodId))!
+
+  it('lifts that ware in every harbour on the plan', () => {
+    const s = afloat()
+    const kaffee = 29
+    const card = reportOn(kaffee)
+    const effect = card.effects.find((e) => e.kind === 'goodPriceDelta')!
+    const percent = effect.kind === 'goodPriceDelta' ? effect.percent : 0
+
+    // Three harbours on different coasts, all of which buy it at the market.
+    const harbours = [...ctx.portsById.keys()]
+      .filter((p) => !exportsAt(ctx, s, p).includes(kaffee))
+      .slice(0, 3)
+    const before = harbours.map((p) => sellPriceAt(ctx, s, p, kaffee))
+
+    const after = turn(s, card).state
+    for (const [i, port] of harbours.entries()) {
+      expect(sellPriceAt(ctx, after, port, kaffee)).toBeGreaterThan(before[i]!)
+      // And by the amount the card names, whichever coast it is.
+      expect(sellPriceAt(ctx, after, port, kaffee) / before[i]!).toBeCloseTo(1 + percent / 100, 1)
+    }
+  })
+
+  it('leaves every other ware exactly where it was', () => {
+    const s = afloat()
+    const kaffee = 29
+    const port = marketFor(s, kaffee)
+    const others = CLASSIC_PACK.goods
+      .filter((g) => g.id !== kaffee && !exportsAt(ctx, s, port).includes(g.id))
+      .slice(0, 8)
+    const before = others.map((g) => sellPriceAt(ctx, s, port, g.id))
+
+    const after = turn(s, reportOn(kaffee)).state
+    for (const [i, g] of others.entries()) {
+      // Kaffee is a Genußmittel, so its neighbours in the register must not
+      // move either — a single-ware report is not a report on the column.
+      expect(sellPriceAt(ctx, after, port, g.id)).toBe(before[i]!)
+    }
+  })
+
+  it('moves a whole column of the register when the card says so', () => {
+    const s = afloat()
+    const card = deck.find((c) =>
+      c.effects.some(
+        (e) => e.kind === 'goodPriceDelta' && e.scope.gruppe === 'genuss' && e.percent > 0,
+      ),
+    )!
+    const port = [...ctx.portsById.keys()].find((p) => {
+      const here = exportsAt(ctx, s, p)
+      return CLASSIC_PACK.goods.filter((g) => g.category === 'genuss' && !here.includes(g.id))
+        .length >= 2
+    })!
+    const column = CLASSIC_PACK.goods
+      .filter((g) => g.category === 'genuss' && !exportsAt(ctx, s, port).includes(g.id))
+      .slice(0, 3)
+    const before = column.map((g) => sellPriceAt(ctx, s, port, g.id))
+
+    const after = turn(s, card).state
+    for (const [i, g] of column.entries()) {
+      expect(sellPriceAt(ctx, after, port, g.id)).toBeGreaterThan(before[i]!)
+    }
+  })
+
+  it('adds to the weather over an ocean rather than replacing it', () => {
+    // Two separate pieces of news, and a coffee sale in Hamburg feels both.
+    const s = afloat()
+    const kaffee = 29
+    const region = deck.find((c) =>
+      c.effects.some(
+        (e) => e.kind === 'regionalPriceDelta' && e.continent === 'europa' && e.percent > 0,
+      ),
+    )!
+    const port = [...ctx.portsById.keys()].find(
+      (p) => continentOf(ctx, p) === 'europa' && !exportsAt(ctx, s, p).includes(kaffee),
+    )!
+
+    const one = turn(s, region).state
+    const both = turn(one, reportOn(kaffee)).state
+
+    expect(both.weather).toHaveLength(2)
+    expect(sellPriceAt(ctx, both, port, kaffee)).toBeGreaterThan(
+      sellPriceAt(ctx, one, port, kaffee),
+    )
+  })
+
+  it('changes its mind rather than shouting twice', () => {
+    // A second report on the same ware supersedes the first; stacking them
+    // would let one lucky shuffle put coffee up eighty per cent.
+    const s = afloat()
+    const kaffee = 29
+    const card = reportOn(kaffee)
+    const once = turn(s, card).state
+    const twice = turn(once, card).state
+
+    expect(twice.weather.filter((w) => w.goodId === kaffee)).toHaveLength(1)
+    const port = marketFor(s, kaffee)
+    expect(sellPriceAt(ctx, twice, port, kaffee)).toBe(sellPriceAt(ctx, once, port, kaffee))
+  })
+
+  it('lapses on the clock like any other notice', () => {
+    const s = afloat()
+    const card = reportOn(29)
+    const set = turn(s, card).state
+    expect(set.weather).toHaveLength(1)
+
+    // Long enough that the market turns a few more cards on the way, so ask
+    // whether *this* notice lifted rather than whether the sky is empty.
+    const notice = set.weather[0]!
+    const later = applyAction(ctx, set, { type: 'tick', at: notice.untilTime! + 1000 })
+    expect(later.state.weather.some((w) => w.id === notice.id)).toBe(false)
+  })
+
+  it('names wares the plan actually carries', () => {
+    // A report on a ware no harbour on this map deals in is a dud card.
+    const named = deck.flatMap((c) =>
+      c.effects.flatMap((e) =>
+        e.kind === 'goodPriceDelta' && e.scope.good !== undefined ? [e.scope.good] : [],
+      ),
+    )
+    expect(named.length).toBeGreaterThan(0)
+    for (const goodId of named) {
+      expect(CLASSIC_PACK.goods.some((g) => g.id === goodId)).toBe(true)
+    }
   })
 })

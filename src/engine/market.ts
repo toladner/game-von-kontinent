@@ -168,7 +168,7 @@ export function sellPriceAt(
     if (hops !== undefined) price = card * Math.min(CEILING, FLOOR + PER_PIP * hops)
   }
 
-  const wind = weatherOver(ctx, state, portId)
+  const wind = weatherOver(ctx, state, portId, goodId)
   if (wind !== 0) price = price * (1 + wind / 100)
 
   return round1000(price)
@@ -181,13 +181,27 @@ export function sellPriceAt(
  * something over this continent. Expiry is handled where time passes; this
  * only reads.
  */
-export function weatherOver(ctx: EngineContext, state: GameState, portId: PortId): number {
+export function weatherOver(
+  ctx: EngineContext,
+  state: GameState,
+  portId: PortId,
+  goodId?: GoodId,
+): number {
   if (state.weather.length === 0) return 0
   const port = ctx.portsById.get(portId)
   if (!port) return 0
-  const continent = ctx.pack.map.countries.find((c) => c.id === port.country)?.continent
-  if (!continent) return 0
+  const continent = ctx.pack.map.countries.find((c) => c.id === port.country)?.continent ?? null
+  const good = goodId === undefined ? null : ctx.goodsById.get(goodId)
+
+  // A notice applies if it names this ocean, this ware, or this ware's column
+  // of the register. They add: a Hausse in Europa and a firm coffee market
+  // are two separate pieces of news and a coffee sale in Hamburg feels both.
   return state.weather
-    .filter((w) => w.continent === continent)
+    .filter(
+      (w) =>
+        (w.continent !== null && w.continent === continent) ||
+        (w.goodId !== null && w.goodId === goodId) ||
+        (w.category !== null && good !== undefined && w.category === good?.category),
+    )
     .reduce((sum, w) => sum + w.percent, 0)
 }

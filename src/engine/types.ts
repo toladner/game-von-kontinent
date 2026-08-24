@@ -222,6 +222,26 @@ export type KonjunkturEffect =
       readonly minutes: number
       readonly title: string
     }
+  /**
+   * A price movement that follows a ware rather than a place.
+   *
+   * The printed deck moves every price on the board at once and the regional
+   * cards move every price in one ocean; both ask where a merchant is. This
+   * asks what is in the hold. A failed coffee harvest lifts coffee in every
+   * harbour there is, and the house carrying coffee is the one it finds —
+   * which is the first reason in this game to have read the Warenverzeichnis.
+   */
+  | {
+      readonly kind: 'goodPriceDelta'
+      /** One ware by its Warenkarte, or a whole column of the register. */
+      readonly scope:
+        | { readonly good: GoodId; readonly gruppe?: undefined }
+        | { readonly gruppe: GoodCategory; readonly good?: undefined }
+      readonly percent: number
+      /** Turns of the market it stays in force, as for regionalPriceDelta. */
+      readonly rounds: number
+      readonly title: string
+    }
   /** Pirates, ice, a fire in the hold: the drawing player alone loses cargo. */
   | { readonly kind: 'cargoLostByDrawer'; readonly lose: number; readonly title: string }
   /** A windfall or demand for every ship lying in one continent's harbours. */

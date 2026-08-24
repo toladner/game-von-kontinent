@@ -3,6 +3,7 @@ import type {
   CargoItem,
   GameState,
   Letter,
+  MarketWeather,
   Pigeon,
   PlayerState,
   Sighting,
@@ -349,6 +350,45 @@ function forEachShipIn(
   }
 }
 
+/**
+ * Hang a price notice over the market until it lapses.
+ *
+ * Shared by the two that settle rather than strike: weather over an ocean and
+ * a report on one ware. Both need the same expiry sum, and the round game and
+ * the real-time game count "vier Runden" differently — rounds on the track,
+ * turns of the market on the clock. Doing that twice invited them to drift.
+ *
+ * A new notice replaces the one it overlaps: two coffee reports in a row are
+ * the market changing its mind, not the market twice as excited.
+ */
+function settleWeather(
+  draft: Draft,
+  entry: Omit<MarketWeather, 'untilRound' | 'untilTime'>,
+  rounds: number,
+  events: GameEvent[],
+): void {
+  const realtime = draft.config.travel === 'echtzeit'
+  const same = (w: MarketWeather) =>
+    w.continent === entry.continent && w.goodId === entry.goodId && w.category === entry.category
+
+  draft.weather = [
+    ...draft.weather.filter((w) => !same(w)),
+    {
+      ...entry,
+      untilRound: realtime ? null : draft.round + rounds,
+      untilTime: realtime
+        ? draft.now + rounds * draft.config.realtime.marketIntervalMinutes * 60_000
+        : null,
+    },
+  ]
+  events.push({
+    type: 'weatherSet',
+    continent: entry.continent ?? '',
+    percent: entry.percent,
+    title: entry.title,
+  })
+}
+
 function applyEffect(
   ctx: EngineContext,
   draft: Draft,
@@ -365,32 +405,42 @@ function applyEffect(
       payPlayer(draft, drawerIndex, effect.amount, 'telegramm', events)
       return
 
-    case 'regionalPriceDelta': {
+    case 'regionalPriceDelta':
       // Weather, not a single transaction: it hangs over the continent until
       // it lapses, and every sale made there meanwhile feels it.
-      const realtime = draft.config.travel === 'echtzeit'
-      draft.weather = [
-        ...draft.weather.filter((w) => w.continent !== effect.continent),
+      settleWeather(
+        draft,
         {
           id: `w${draft.seq}:${effect.continent}`,
           title: effect.title,
           continent: effect.continent,
+          goodId: null,
+          category: null,
           percent: effect.percent,
-          untilRound: realtime ? null : draft.round + effect.rounds,
-          // A card's "vier Runden" is four turns of the market, whichever way
-          // the game counts them. It used to be four *hours* in real time,
-          // which on a season of three is weather that never blows out.
-          untilTime: realtime
-            ? draft.now + effect.rounds * draft.config.realtime.marketIntervalMinutes * 60_000
-            : null,
         },
-      ]
-      events.push({
-        type: 'weatherSet',
-        continent: effect.continent,
-        percent: effect.percent,
-        title: effect.title,
-      })
+        effect.rounds,
+        events,
+      )
+      return
+
+    case 'goodPriceDelta': {
+      // The same machinery, asking what is in the hold instead of where the
+      // ship is. One notice per ware or per column, so a second harvest
+      // report supersedes the first rather than stacking on top of it.
+      const scope = effect.scope
+      settleWeather(
+        draft,
+        {
+          id: `w${draft.seq}:${scope.good ?? scope.gruppe}`,
+          title: effect.title,
+          continent: null,
+          goodId: scope.good ?? null,
+          category: scope.gruppe ?? null,
+          percent: effect.percent,
+        },
+        effect.rounds,
+        events,
+      )
       return
     }
 

@@ -1,5 +1,6 @@
 import type {
   Continent,
+  GoodCategory,
   GoodId,
   Money,
   NodeId,
@@ -233,11 +234,25 @@ export interface PendingCard {
  * which is what gives a large plan a reason to care where you are: a Baisse
  * in Ostasien is somebody else's problem if you are in the Baltic.
  */
-export interface RegionalWeather {
+/**
+ * A price movement standing over part of the market for a while.
+ *
+ * Two things can define "part of the market", and they are worth having both
+ * of. A continent asks where the sale is being made, which is what gives a
+ * map with five oceans a reason to exist. A ware asks what is being sold, and
+ * pays no attention to geography at all: a failed coffee harvest lifts coffee
+ * in every harbour on the plan, and the merchant who happens to be carrying
+ * it is the one it finds. One of the three is always null.
+ */
+export interface MarketWeather {
   readonly id: string
   /** Shown in the news and on the harbour sheet. */
   readonly title: string
-  readonly continent: Continent
+  readonly continent: Continent | null
+  /** A single ware, named on the Warenkarte. */
+  readonly goodId: GoodId | null
+  /** A whole column of the Warenverzeichnis — Kolonialwaren, Bergbau, ... */
+  readonly category: GoodCategory | null
   readonly percent: number
   /** Round play: the last round it applies to. Null in real-time play. */
   readonly untilRound: number | null
@@ -278,7 +293,7 @@ export interface GameState {
    * Regional price weather in force, under the erweiterte Konjunktur. Pruned
    * as rounds pass and as the real-time clock advances, so it never grows.
    */
-  readonly weather: readonly RegionalWeather[]
+  readonly weather: readonly MarketWeather[]
   readonly bankStock: Readonly<Record<number, number>>
   /** Konjunktur deck as card ids, drawn from the top, returned to the bottom. */
   readonly deck: readonly string[]

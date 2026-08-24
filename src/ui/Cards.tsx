@@ -108,6 +108,8 @@ function standingNote(card: KonjunkturCard): string | null {
         return 'Die Ladung bleibt an Bord, bringt aber nur die Hälfte. Wo Sie den Posten losschlagen, bleibt Ihre Sache.'
       case 'delayInRegion':
         return 'Trifft jedes Schiff, das dort gerade unterwegs ist. Wer im Hafen liegt, liegt sicher.'
+      case 'goodPriceDelta':
+        return 'Gilt in jedem Hafen — es kommt darauf an, was Sie geladen haben, nicht wo Sie liegen.'
       default:
         continue
     }

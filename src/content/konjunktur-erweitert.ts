@@ -1,4 +1,4 @@
-import type { Continent, KonjunkturCard } from '../engine/types'
+import type { Continent, GoodCategory, KonjunkturCard } from '../engine/types'
 import { KONJUNKTUR_DECK } from './konjunktur'
 
 /**
@@ -61,6 +61,51 @@ const wind = (
  * one thing a real-time season is actually made of.
  */
 
+/**
+ * A report on one ware, or on a whole column of the register.
+ *
+ * The other cards all ask where a merchant is. This one asks what is in the
+ * hold, which is a different question and the first reason in the game to
+ * have read the Warenverzeichnis: a firm coffee market is worth nothing to a
+ * house carrying tin, and everything to the one that filled up in Santos.
+ */
+const ware = (goodId: number, name: string, story: string, percent: number, rounds: number) =>
+  card(
+    percent > 0 ? 'Warenbericht' : 'Warenbericht',
+    [story, `${name} ${percent > 0 ? '+' : '−'} ${Math.abs(percent)} %`, `für ${rounds} Runden`],
+    [
+      {
+        kind: 'goodPriceDelta',
+        scope: { good: goodId },
+        percent,
+        rounds,
+        title: `${name} ${percent > 0 ? 'fester' : 'schwächer'}`,
+      },
+    ],
+  )
+
+/** The same, for a whole column of the Warenverzeichnis. */
+const gruppe = (
+  category: GoodCategory,
+  name: string,
+  story: string,
+  percent: number,
+  rounds: number,
+) =>
+  card(
+    'Warenbericht',
+    [story, `${name} ${percent > 0 ? '+' : '−'} ${Math.abs(percent)} %`, `für ${rounds} Runden`],
+    [
+      {
+        kind: 'goodPriceDelta',
+        scope: { gruppe: category },
+        percent,
+        rounds,
+        title: `${name} ${percent > 0 ? 'fester' : 'schwächer'}`,
+      },
+    ],
+  )
+
 /** Heavy weather: everyone caught in that part of the world loses cargo. */
 const storm = (continent: Continent, region: string, what: string, lose = 1): KonjunkturCard =>
   card(
@@ -120,6 +165,24 @@ export const KONJUNKTUR_ERWEITERT: readonly KonjunkturCard[] = [
   storm('ozeanien', 'Große Australische Bucht', 'Schwere See'),
   storm('nordamerika', 'Karibik', 'Hurrikan'),
   storm('suedamerika', 'Vor der Küste Patagoniens', 'Weststurm'),
+
+  // --- Der Warenbericht: was im Laderaum liegt, nicht wo es liegt ----------
+  ware(29, 'Kaffee', 'Ernteausfall in Brasilien', 40, 4),
+  ware(29, 'Kaffee', 'Rekordernte in Brasilien', -25, 3),
+  ware(31, 'Kautschuk', 'Plantagenstreik in Malaya', 35, 4),
+  ware(61, 'Tee', 'Zollabkommen mit Ceylon', 30, 3),
+  ware(71, 'Wolle', 'Schafschur in Australien beendet', -20, 3),
+  ware(72, 'Zucker', 'Rübenernte unter den Erwartungen', 30, 3),
+  ware(34, 'Kohle', 'Grubenunglück im Ruhrgebiet', 35, 4),
+  ware(60, 'Tabak', 'Mißernte in Virginia', 30, 3),
+  ware(55, 'Salpeter', 'Chile drosselt die Ausfuhr', 35, 3),
+  ware(53, 'Reis', 'Überschwemmung im Delta', 30, 3),
+  gruppe('genuss', 'Kolonialwaren', 'Lebhafte Nachfrage in Übersee', 25, 4),
+  gruppe('genuss', 'Kolonialwaren', 'Die Lager sind voll', -20, 3),
+  gruppe('bergbau', 'Bergbauerzeugnisse', 'Die Hütten fahren hoch', 25, 4),
+  gruppe('textil', 'Textilien', 'Die Webereien stehen still', -20, 3),
+  gruppe('edel', 'Edelwaren', 'Unruhe an den Börsen', 35, 3),
+  gruppe('energie', 'Brennstoffe', 'Ein strenger Winter kündigt sich an', 30, 4),
 
   // --- Havarien: die Ladung überlebt, der Erlös nicht ----------------------
   damage('europa', 'In der Biskaya', 'Überkommende See'),

@@ -289,8 +289,10 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
     // stehen, wenn das Blatt auf ein einzelnes gefiltert wird — sonst
     // verlöre der Verlauf die Rundenüberschriften, die ihn gliedern.
     case 'weatherSet':
+      // "dort" only makes sense of a notice that names a place. A Warenbericht
+      // names a ware and holds in every harbour there is.
       return line(
-        `${event.title}: Verkaufspreise dort ${event.percent > 0 ? '+' : '−'} ${Math.abs(event.percent)} %.`,
+        `${event.title}: Verkaufspreise ${event.continent ? 'dort' : 'dafür'} ${event.percent > 0 ? '+' : '−'} ${Math.abs(event.percent)} %.`,
         'wichtig',
         [],
       )
