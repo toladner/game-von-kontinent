@@ -209,10 +209,14 @@ export function GameScreen() {
           : {})}
       />
 
-      {/* Kopfzeile. Die Merkzettel rechts brechen um, wenn der Platz nicht
-          reicht — gequetschte Pillen wären die Alternative. */}
+      {/* Kopfzeile: das Handelshaus links, die Leiste rechts.
+          Sie *soll* umbrechen, wenn der Platz nicht reicht — bisher stand das
+          nur als Absicht hier, ohne flex-wrap, und die Leiste (shrink-0) hat
+          das Handelshaus stattdessen zusammengedrückt, bis vom Namen zwei
+          Buchstaben übrig waren. Jetzt rutscht die Leiste auf eine eigene
+          Zeile, sobald es eng wird, und ml-auto hält sie dabei rechts. */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 px-3"
+        className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start gap-2 px-3"
         style={{ paddingTop: 'calc(var(--safe-t) + 0.6rem)' }}
       >
         {!seated ? (
@@ -239,7 +243,7 @@ export function GameScreen() {
 
         {/* Eine Leiste statt vier Merkzettel: ein Papier, ein Schatten,
             Haarlinien dazwischen. */}
-        <div className="paper anim-rise pointer-events-auto flex shrink-0 items-stretch divide-x divide-black/15 overflow-hidden rounded-lg shadow-lg">
+        <div className="paper anim-rise pointer-events-auto ml-auto flex shrink-0 items-stretch divide-x divide-black/15 overflow-hidden rounded-lg shadow-lg">
           <Cell label={`Nachrichten${unread > 0 ? `, ${unread} ungelesen` : ''}`} onOpen={() => open('nachrichten')}>
             <span className="text-base leading-none" aria-hidden>
               📰

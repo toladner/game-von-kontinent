@@ -94,12 +94,16 @@ export function PlayerHUD({
         >
           {cash.toLocaleString('de-DE')}
         </span>
-        <span className="text-ink-soft block text-[10px] leading-tight">
+        {/* Beide Zeilen schneiden ab statt zu wachsen. Sonst diktieren sie
+            die Mindestbreite der Karte — die Ladeluken allein sind über
+            hundert Pixel, die nicht kleiner werden können — und die Kopfzeile
+            bricht auf jedem Telefon um, obwohl der Platz gereicht hätte. */}
+        <span className="text-ink-soft block truncate text-[10px] leading-tight">
           {cargoCount === 0 ? 'Laderaum leer' : `${cargoCount} Posten an Bord`}
           {purchasesLeft !== null && ` · ${purchasesLeft} Kauf frei`}
         </span>
         {cargoCount > 0 && (
-          <span className="mt-1 block">
+          <span className="mt-1 block overflow-hidden">
             <CargoHold ctx={ctx} cargo={flagship(player).cargo} vehicle={flagship(player).kind} size={22} max={5} />
           </span>
         )}
