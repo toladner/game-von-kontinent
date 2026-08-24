@@ -437,6 +437,10 @@ export function Board({
 
   const targetSet = useMemo(() => new Set(legalTargets), [legalTargets])
   const hintSet = useMemo(() => new Set(highlightPorts), [highlightPorts])
+  const shutSet = useMemo(
+    () => new Set(state.closures.map((c) => c.portId)),
+    [state.closures],
+  )
   const occupiedPorts = useMemo(
     () => new Set(state.players.map((p) => flagship(p).nodeId)),
     [state.players],
@@ -720,10 +724,19 @@ export function Board({
                   cx={p.x}
                   cy={p.y}
                   r={2.6}
-                  fill="var(--color-rot)"
+                  fill={shutSet.has(port.id) ? '#6b6b6b' : 'var(--color-rot)'}
                   stroke="#5a2018"
                   strokeWidth={0.5}
                 />
+                {/* Gesperrt: durchgestrichen wie im Kursbuch. Die Sperre steht
+                    nur auf einer Handvoll Häfen und muß auf dem Plan sichtbar
+                    sein, sonst erfährt man sie erst beim Anlegen. */}
+                {shutSet.has(port.id) && (
+                  <g stroke="#3b2a22" strokeWidth={1.1} strokeLinecap="round" opacity={0.9}>
+                    <line x1={p.x - 4} y1={p.y - 4} x2={p.x + 4} y2={p.y + 4} />
+                    <line x1={p.x - 4} y1={p.y + 4} x2={p.x + 4} y2={p.y - 4} />
+                  </g>
+                )}
                 {labelled && (
                   <text className="port-label" x={p.x + 4} y={p.y + 2.6}>
                     {port.name}

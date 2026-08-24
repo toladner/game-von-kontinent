@@ -127,6 +127,21 @@ const damage = (continent: Continent, region: string, what: string, count = 1): 
     [{ kind: 'cargoDamagedInRegion', continent, count, title: `${what} — ${region}` }],
   )
 
+/**
+ * One harbour shut.
+ *
+ * The only card that changes the shape of the plan rather than the numbers on
+ * it — a route that was obvious is suddenly not, and a ship already bound
+ * there has a decision to make. Which harbour is drawn when the card turns,
+ * so one card serves every map and the news has a name to print.
+ */
+const sperre = (continent: Continent, region: string, what: string, rounds: number) =>
+  card(
+    'Hafensperre',
+    [what, `in einem Hafen ${region}`, 'Kein Handel', `für ${rounds} Runden`],
+    [{ kind: 'portClosed', continent, rounds, title: what }],
+  )
+
 /** Weather that costs time and nothing else. */
 const delay = (
   continent: Continent,
@@ -230,6 +245,14 @@ export const KONJUNKTUR_ERWEITERT: readonly KonjunkturCard[] = [
       },
     ],
   ),
+
+  // --- Hafensperren: der Plan selbst ändert sich ---------------------------
+  sperre('suedamerika', 'Südamerikas', 'Gelbfieber', 3),
+  sperre('europa', 'Europas', 'Hafenarbeiterstreik', 2),
+  sperre('asien', 'Ostasiens', 'Quarantäne', 3),
+  sperre('afrika', 'Afrikas', 'Die Fahrrinne ist versandet', 2),
+  sperre('nordamerika', 'Nordamerikas', 'Eisgang', 2),
+  sperre('ozeanien', 'Australiens', 'Ausfuhrsperre', 3),
 
   // --- Unglück an Bord ------------------------------------------------------
   card(

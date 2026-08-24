@@ -6,6 +6,7 @@ import type {
   MarketWeather,
   Pigeon,
   PlayerState,
+  PortClosure,
   Sighting,
   VehicleInstance,
 } from './state'
@@ -21,6 +22,7 @@ import {
   fleetLimitNote,
   legalSteps,
   castOffMs,
+  closureAt,
   continentOf,
   legMsFor,
   portAt,
@@ -351,6 +353,25 @@ function forEachShipIn(
 }
 
 /**
+ * Lift the quarantines that have run their course, and say so.
+ *
+ * Announced rather than silently dropped: a harbour that shut with a headline
+ * has to open with one, or a merchant who took the gamble and sailed there
+ * anyway has no way of knowing whether it came off.
+ */
+function reopenPorts(
+  draft: Draft,
+  lapsed: (c: PortClosure) => boolean,
+  events: GameEvent[],
+): void {
+  if (draft.closures.length === 0) return
+  const open = draft.closures.filter(lapsed)
+  if (open.length === 0) return
+  draft.closures = draft.closures.filter((c) => !lapsed(c))
+  for (const c of open) events.push({ type: 'portReopened', portId: c.portId })
+}
+
+/**
  * Hang a price notice over the market until it lapses.
  *
  * Shared by the two that settle rather than strike: weather over an ocean and
@@ -422,6 +443,43 @@ function applyEffect(
         events,
       )
       return
+
+    case 'portClosed': {
+      // Which harbour is drawn rather than printed, so one card works on every
+      // plan. Harbours already shut are passed over: closing Rio twice would
+      // waste the card and read, in the news, as a second outbreak in a town
+      // that is already sealed.
+      const open = ctx.pack.map.nodes
+        .filter(isPort)
+        .map((n) => n.id)
+        .filter(
+          (id) =>
+            continentOf(ctx, id) === effect.continent &&
+            !draft.closures.some((c) => c.portId === id),
+        )
+      if (open.length === 0) return
+
+      const [choice, rng] = nextInt(draft.rng, open.length)
+      draft.rng = rng
+      const portId = open[choice]!
+      const name = ctx.portsById.get(portId)?.name ?? portId
+      const realtime = draft.config.travel === 'echtzeit'
+
+      draft.closures = [
+        ...draft.closures,
+        {
+          id: `q${draft.seq}:${portId}`,
+          title: `${effect.title} in ${name}`,
+          portId,
+          untilRound: realtime ? null : draft.round + effect.rounds,
+          untilTime: realtime
+            ? draft.now + effect.rounds * draft.config.realtime.marketIntervalMinutes * 60_000
+            : null,
+        },
+      ]
+      events.push({ type: 'portClosed', portId, title: `${effect.title} in ${name}` })
+      return
+    }
 
     case 'goodPriceDelta': {
       // The same machinery, asking what is in the hold instead of where the
@@ -742,6 +800,7 @@ function advanceTurn(ctx: EngineContext, draft: Draft, events: GameEvent[]): voi
       draft.weather = draft.weather.filter(
         (w) => w.untilRound === null || w.untilRound >= draft.round,
       )
+      reopenPorts(draft, (c) => c.untilRound !== null && c.untilRound < draft.round, events)
       if (draft.round > draft.config.totalRounds) {
         resolveFinalRun(ctx, draft, events)
         return
@@ -886,6 +945,8 @@ export function applyAction(
       }
       const portId = portAt(ctx, buyer.nodeId)
       if (!portId) return reject(state, 'Ihr Schiff liegt nicht im Hafen.')
+      const barred = closureAt(draft as GameState, portId)
+      if (barred) return reject(state, `${barred.title} — der Hafen ist gesperrt.`)
       if (!exportsAt(ctx, draft as GameState, portId).includes(action.goodId)) {
         return reject(state, 'Diese Ware führt der Hafen nicht aus.')
       }
@@ -933,6 +994,8 @@ export function applyAction(
       }
       const portId = portAt(ctx, seller.nodeId)
       if (!portId) return reject(state, 'Ihr Schiff liegt nicht im Hafen.')
+      const shut = closureAt(draft as GameState, portId)
+      if (shut) return reject(state, `${shut.title} — der Hafen ist gesperrt.`)
       const item = seller.cargo.find((c) => c.uid === action.uid)
       if (!item) return reject(state, 'Diese Ware ist nicht an Bord.')
 
@@ -1214,8 +1277,10 @@ function applyTick(ctx: EngineContext, state: GameState, at: number): ActionResu
     return { state: draft as GameState, events }
   }
 
-  // Weather blows itself out on the clock in real-time play.
+  // Weather blows itself out on the clock in real-time play, and a quarantine
+  // is lifted the same way.
   draft.weather = draft.weather.filter((w) => w.untilTime === null || w.untilTime > draft.now)
+  reopenPorts(draft, (c) => c.untilTime !== null && c.untilTime <= draft.now, events)
 
   advanceVoyages(ctx, draft, events)
   if (draft.config.sicht === 'realistisch') {

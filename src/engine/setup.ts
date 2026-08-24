@@ -108,6 +108,7 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
     players: [],
     exports,
     weather: [],
+    closures: [],
     bankStock,
     deck,
     pendingCard: null,

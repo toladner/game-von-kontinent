@@ -288,6 +288,14 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
     // Weltnachrichten: sie gehören keinem Haus und bleiben deshalb auch
     // stehen, wenn das Blatt auf ein einzelnes gefiltert wird — sonst
     // verlöre der Verlauf die Rundenüberschriften, die ihn gliedern.
+    case 'portClosed':
+      return line(
+        `${event.title}. ${portOf(event.portId)} ist bis auf weiteres für den Handel gesperrt.`,
+        'wichtig',
+        [],
+      )
+    case 'portReopened':
+      return line(`${portOf(event.portId)} ist wieder offen.`, 'gut', [])
     case 'weatherSet':
       // "dort" only makes sense of a notice that names a place. A Warenbericht
       // names a ware and holds in every harbour there is.

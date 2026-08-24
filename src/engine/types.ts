@@ -242,6 +242,21 @@ export type KonjunkturEffect =
       readonly rounds: number
       readonly title: string
     }
+  /**
+   * Quarantine, a dock strike, a harbour silted up: one port shuts its Kontor.
+   *
+   * The only card that changes the shape of the map instead of the numbers on
+   * it. Which harbour is drawn when the card is turned rather than printed on
+   * it, so the same card works on every plan — and so the news has something
+   * to name.
+   */
+  | {
+      readonly kind: 'portClosed'
+      readonly continent: Continent
+      /** Turns of the market it stays shut, as for the price notices. */
+      readonly rounds: number
+      readonly title: string
+    }
   /** Pirates, ice, a fire in the hold: the drawing player alone loses cargo. */
   | { readonly kind: 'cargoLostByDrawer'; readonly lose: number; readonly title: string }
   /** A windfall or demand for every ship lying in one continent's harbours. */

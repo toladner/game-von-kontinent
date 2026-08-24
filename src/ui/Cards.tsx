@@ -110,6 +110,8 @@ function standingNote(card: KonjunkturCard): string | null {
         return 'Trifft jedes Schiff, das dort gerade unterwegs ist. Wer im Hafen liegt, liegt sicher.'
       case 'goodPriceDelta':
         return 'Gilt in jedem Hafen — es kommt darauf an, was Sie geladen haben, nicht wo Sie liegen.'
+      case 'portClosed':
+        return 'Welcher Hafen es trifft, steht in den Nachrichten. Hinfahren dürfen Sie weiter — vielleicht ist die Sperre aufgehoben, wenn Sie ankommen.'
       default:
         continue
     }

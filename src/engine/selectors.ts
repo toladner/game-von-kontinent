@@ -1,4 +1,4 @@
-import type { CargoItem, GameState, PlayerState } from './state'
+import type { CargoItem, GameState, PlayerState, PortClosure } from './state'
 import { activePlayer, flagship, netWorth, type VehicleInstance } from './state'
 import { goodOf, type EngineContext } from './context'
 import { edgeKey, isPort } from './mapbuild'
@@ -96,6 +96,7 @@ export function saleQuotes(
 
 export type BuyBlock =
   | 'ok'
+  | 'gesperrt'
   | 'nicht-im-angebot'
   | 'ausverkauft'
   | 'kein-geld'
@@ -118,12 +119,14 @@ export function buyOffers(
   portId: PortId,
 ): readonly BuyOffer[] {
   const max = state.config.maxPurchasesPerPort
+  const shut = closureAt(state, portId) !== null
   return exportsAt(ctx, state, portId).map((goodId) => {
     const g = goodOf(ctx, goodId)
     const stock = state.bankStock[goodId] ?? 0
     let status: BuyBlock = 'ok'
     const capacity = flagship(player).kind.capacity
-    if (flagship(player).purchasesThisVisit.includes(goodId)) status = 'schon-geladen'
+    if (shut) status = 'gesperrt'
+    else if (flagship(player).purchasesThisVisit.includes(goodId)) status = 'schon-geladen'
     else if (capacity !== null && flagship(player).cargo.length >= capacity) status = 'laderaum-voll'
     else if (flagship(player).purchasesThisVisit.length >= max) status = 'ladeschluss'
     else if (stock <= 0) status = 'ausverkauft'
@@ -137,6 +140,18 @@ export function buyOffers(
  * itself export before leaving. If the hold holds nothing sellable here, the
  * obligation lapses.
  */
+/**
+ * Whether this harbour is shut, and by what.
+ *
+ * Null on every map and in every game not playing the erweiterte Konjunktur,
+ * which is nearly all of them — so the empty list is checked first and the
+ * rest of the engine can call this freely.
+ */
+export function closureAt(state: GameState, portId: PortId): PortClosure | null {
+  if (state.closures.length === 0) return null
+  return state.closures.find((c) => c.portId === portId) ?? null
+}
+
 export function verkaufszwangOpen(
   ctx: EngineContext,
   state: GameState,
@@ -144,6 +159,9 @@ export function verkaufszwangOpen(
   portId: PortId,
 ): boolean {
   if (!state.mustSellForeign) return false
+  // A shut Kontor cannot be sold to, so the obligation lapses rather than
+  // stranding a merchant on a red field in a quarantined harbour.
+  if (closureAt(state, portId)) return false
   return flagship(player).cargo.some(
     (item) => !exportsAt(ctx, state, portId).includes(item.goodId),
   )

@@ -15,6 +15,7 @@ import {
   saleQuotes,
   sellDestinations,
   verkaufszwangOpen,
+  closureAt,
 } from '@engine/selectors'
 import { exportsAt } from '@engine/market'
 import { durationText } from './useNow'
@@ -43,7 +44,31 @@ type Tab = HarbourStep
  * per harbour, not per hold — the same good is yours again two ports on, so
  * the wording must not suggest the hold is the obstacle.
  */
+/**
+ * A harbour shut, said once and plainly at the head of the sheet.
+ *
+ * Without it the only sign is every ware in the Angebot carrying the same
+ * refusal, which reads as a bug rather than as news. Shown on the preview
+ * sheet as well, because that is where the decision to sail there is made —
+ * and it deliberately does not stop anyone: the quarantine may be lifted
+ * before the ship arrives, and betting on that is the interesting part.
+ */
+function SperrBand({ closure }: { closure: { title: string } | null }) {
+  if (!closure) return null
+  return (
+    <div className="border-rot/40 bg-rot/10 mb-3 rounded-sm border px-2.5 py-2">
+      <p className="smallcaps text-rot text-[11px] tracking-[0.18em]">Hafensperre</p>
+      <p className="mt-0.5 text-[13px] leading-snug font-semibold">{closure.title}</p>
+      <p className="text-ink-soft mt-0.5 text-[12px] leading-snug">
+        Das Kontor ist geschlossen — hier wird weder gekauft noch verkauft, bis die Sperre
+        aufgehoben ist.
+      </p>
+    </div>
+  )
+}
+
 const BLOCK_TEXT: Record<string, string> = {
+  gesperrt: 'Der Hafen ist gesperrt',
   'nicht-im-angebot': 'wird hier nicht geführt',
   ausverkauft: 'Exportbank ausverkauft — beide Karten im Umlauf',
   'kein-geld': 'Barmittel reichen nicht',
@@ -245,6 +270,8 @@ export function PortSheet({
         )
       }
     >
+      <SperrBand closure={closureAt(state, portId)} />
+
       {/* Was zählt, in einer Zeile */}
       <div className="teletype mb-3 flex items-center justify-between gap-2 rounded-sm border border-black/15 bg-black/5 px-2.5 py-2 text-[13px]">
         <span>
@@ -666,6 +693,8 @@ export function PortPreviewSheet({
         )
       }
     >
+      <SperrBand closure={closureAt(state, portId)} />
+
       {!here && (
         <div className="teletype mb-3 flex items-center justify-between gap-2 rounded-sm border border-black/15 bg-black/5 px-2.5 py-2 text-[13px]">
           <span>

@@ -170,6 +170,13 @@ export type GameEvent =
       readonly minutes: number
       readonly reason: string
     }
+  /** Erweiterte Konjunktur: a harbour shut its Kontor, or opened it again. */
+  | {
+      readonly type: 'portClosed'
+      readonly portId: PortId
+      readonly title: string
+    }
+  | { readonly type: 'portReopened'; readonly portId: PortId }
   /** Erweiterte Konjunktur: price weather settled over a continent. */
   | {
       readonly type: 'weatherSet'

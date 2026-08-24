@@ -260,6 +260,24 @@ export interface MarketWeather {
   readonly untilTime: number | null
 }
 
+/**
+ * A harbour shut to trade for a while.
+ *
+ * The one card in the deck that changes the shape of the map rather than the
+ * numbers on it. A ship may still sail there — nothing stops her, and the
+ * quarantine may well be lifted by the time she arrives, which is the whole
+ * interest of it — but while it stands the Kontor is shut and neither buying
+ * nor selling is possible.
+ */
+export interface PortClosure {
+  readonly id: string
+  /** Shown on the harbour sheet and in the news, e.g. "Gelbfieber in Rio". */
+  readonly title: string
+  readonly portId: PortId
+  readonly untilRound: number | null
+  readonly untilTime: number | null
+}
+
 export interface GameState {
   readonly packId: string
   readonly config: RuleConfig
@@ -294,6 +312,8 @@ export interface GameState {
    * as rounds pass and as the real-time clock advances, so it never grows.
    */
   readonly weather: readonly MarketWeather[]
+  /** Harbours closed to trade, under the erweiterte Konjunktur. */
+  readonly closures: readonly PortClosure[]
   readonly bankStock: Readonly<Record<number, number>>
   /** Konjunktur deck as card ids, drawn from the top, returned to the bottom. */
   readonly deck: readonly string[]

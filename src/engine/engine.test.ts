@@ -6,6 +6,7 @@ import { applyAction, replay } from './reducer'
 import {
   buyOffers,
   castOffMs,
+  closureAt,
   continentOf,
   legalSteps,
   legMsFor,
@@ -13,6 +14,7 @@ import {
   quoteSale,
   routeTo,
   standings,
+  verkaufszwangOpen,
   voyageEndsAt,
 } from './selectors'
 import { isPort } from './mapbuild'
@@ -1211,5 +1213,255 @@ describe('a report on one ware', () => {
     for (const goodId of named) {
       expect(CLASSIC_PACK.goods.some((g) => g.id === goodId)).toBe(true)
     }
+  })
+})
+
+/**
+ * The Hafensperre.
+ *
+ * The one card that changes the shape of the plan rather than the numbers on
+ * it. A route that was obvious stops being obvious, and a ship already bound
+ * there has a decision to make — because sailing on is still allowed, and the
+ * quarantine may well be lifted before she arrives.
+ */
+describe('a harbour shut to trade', () => {
+  const T0 = 1_800_000_000_000
+  const MIN = 60_000
+  const deck = CLASSIC_PACK.konjunkturErweitert!
+  const shutCards = deck.filter((c) => c.effects.some((e) => e.kind === 'portClosed'))
+
+  const afloat = (seed = 'sperre') =>
+    replay(
+      ctx,
+      createGame(ctx, {
+        seed,
+        travel: 'echtzeit',
+        minutesPerPip: 1,
+        durationHours: 8,
+        konjunktur: 'erweitert',
+      }),
+      [
+        { type: 'tick', at: T0 },
+        { type: 'join', playerId: 'a', name: 'Ada' },
+        { type: 'start' },
+      ],
+    )
+
+  const turn = (s: GameState, card: KonjunkturCard) =>
+    applyAction(
+      ctx,
+      {
+        ...s,
+        deck: [card.id, ...s.deck.filter((d) => d !== card.id)],
+        marketSince: s.now - s.config.realtime.marketIntervalMinutes * MIN,
+      },
+      { type: 'tick', at: s.now + 1000 },
+    )
+
+  /** Shut the harbour Ada is actually lying in, whichever card reaches it. */
+  const shutHerIn = (s: GameState) => {
+    const here = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    const continent = continentOf(ctx, here)!
+    const card = shutCards.find((c) =>
+      c.effects.some((e) => e.kind === 'portClosed' && e.continent === continent),
+    )!
+    // Which harbour is drawn, so keep turning it until it lands on this one.
+    // Every draw shuts a different harbour, so this terminates.
+    let out = s
+    for (let guard = 0; guard < 60; guard++) {
+      out = turn(out, card).state
+      if (out.closures.some((c) => c.portId === here)) return { state: out, portId: here }
+    }
+    throw new Error('never shut the harbour under test')
+  }
+
+  it('shuts one harbour, names it, and leaves the rest open', () => {
+    const s = afloat()
+    const card = shutCards[0]!
+    const effect = card.effects.find((e) => e.kind === 'portClosed')!
+    const continent = effect.kind === 'portClosed' ? effect.continent : 'europa'
+
+    const shut = turn(s, card)
+    expect(shut.state.closures).toHaveLength(1)
+    const closure = shut.state.closures[0]!
+    expect(continentOf(ctx, closure.portId)).toBe(continent)
+    // The news has to say which, or nobody can act on it.
+    expect(shut.events.some((e) => e.type === 'portClosed' && e.portId === closure.portId)).toBe(
+      true,
+    )
+    expect(closure.title).toContain(ctx.portsById.get(closure.portId)!.name)
+  })
+
+  it('refuses both sides of the counter while it stands', () => {
+    const { state, portId } = shutHerIn(afloat())
+    expect(closureAt(state, portId)).not.toBeNull()
+
+    const goodId = ctx.exportsOf(portId)[0]!
+    const bought = applyAction(ctx, state, { type: 'buy', goodId, by: 'a' })
+    expect(bought.events.some((e) => e.type === 'rejected')).toBe(true)
+    expect(flagship(bought.state.players[0]!).cargo).toHaveLength(0)
+
+    // And selling, for a hold loaded before the harbour shut.
+    const laden = {
+      ...state,
+      players: state.players.map((p, i) =>
+        i === 0
+          ? {
+              ...p,
+              fleet: p.fleet.map((v, j) =>
+                j === 0
+                  ? {
+                      ...v,
+                      cargo: [
+                        {
+                          uid: 'x1',
+                          goodId: CLASSIC_PACK.goods[0]!.id,
+                          pricePaid: 100_000,
+                          boughtAt: portId,
+                          boughtRound: 1,
+                        },
+                      ],
+                    }
+                  : v,
+              ),
+            }
+          : p,
+      ),
+    }
+    const sold = applyAction(ctx, laden, { type: 'sell', uid: 'x1', by: 'a' })
+    expect(sold.events.some((e) => e.type === 'rejected')).toBe(true)
+  })
+
+  it('says so on every offer, so the sheet reads as news not as a fault', () => {
+    const { state, portId } = shutHerIn(afloat())
+    const offers = buyOffers(ctx, state, state.players[0]!, portId)
+    expect(offers.length).toBeGreaterThan(0)
+    for (const o of offers) expect(o.status).toBe('gesperrt')
+  })
+
+  it('lets the Verkaufszwang lapse rather than stranding a merchant', () => {
+    // A red field puts a ship under an obligation to sell before it may
+    // leave. Land on one in a quarantined harbour and that obligation can
+    // never be met — the round game would simply stop.
+    const { state, portId } = shutHerIn(afloat())
+    const laden = {
+      ...state,
+      mustSellForeign: true,
+      players: state.players.map((p, i) =>
+        i === 0
+          ? {
+              ...p,
+              fleet: p.fleet.map((v, j) =>
+                j === 0
+                  ? {
+                      ...v,
+                      cargo: [
+                        {
+                          uid: 'x1',
+                          // Something this harbour does not itself export, so
+                          // the obligation would otherwise be live.
+                          goodId: CLASSIC_PACK.goods.find(
+                            (g) => !ctx.exportsOf(portId).includes(g.id),
+                          )!.id,
+                          pricePaid: 100_000,
+                          boughtAt: portId,
+                          boughtRound: 1,
+                        },
+                      ],
+                    }
+                  : v,
+              ),
+            }
+          : p,
+      ),
+    }
+    expect(verkaufszwangOpen(ctx, laden, laden.players[0]!, portId)).toBe(false)
+  })
+
+  it('still lets a ship sail there, because the sperre may be lifted', () => {
+    let shut = afloat()
+    const card = shutCards[0]!
+    const from = flagship(shut.players[0]!).nodeId
+
+    // Keep drawing until the shut harbour is one this ship could actually be
+    // sent to, so the test cannot pass by having nothing to try.
+    let target: string | null = null
+    for (let guard = 0; guard < 60 && target === null; guard++) {
+      shut = turn(shut, card).state
+      const candidate = shut.closures[shut.closures.length - 1]!.portId
+      if (portAt(ctx, from) !== candidate && routeTo(ctx, from, null, candidate).length > 0) {
+        target = candidate
+      }
+    }
+    expect(target).not.toBeNull()
+
+    const ordered = applyAction(ctx, shut, { type: 'setCourse', to: target!, by: 'a' })
+    expect(ordered.events.some((e) => e.type === 'rejected')).toBe(false)
+    expect(flagship(ordered.state.players[0]!).voyage!.destination).toBe(target!)
+  })
+
+  it('opens again on time, and says that too', () => {
+    const s = afloat()
+    const shut = turn(s, shutCards[0]!).state
+    const closure = shut.closures[0]!
+
+    const later = applyAction(ctx, shut, { type: 'tick', at: closure.untilTime! + 1000 })
+    expect(later.state.closures.some((c) => c.id === closure.id)).toBe(false)
+    expect(
+      later.events.some((e) => e.type === 'portReopened' && e.portId === closure.portId),
+    ).toBe(true)
+  })
+
+  it('does not shut a harbour that is already shut', () => {
+    // Two outbreaks in a sealed town waste the card and read as nonsense.
+    let s = afloat()
+    const card = shutCards[0]!
+    const effect = card.effects.find((e) => e.kind === 'portClosed')!
+    const continent = effect.kind === 'portClosed' ? effect.continent : 'europa'
+    const there = ctx.pack.map.nodes.filter(
+      (n) => ctx.portsById.has(n.id) && continentOf(ctx, n.id) === continent,
+    ).length
+
+    for (let i = 0; i < there + 3; i++) s = turn(s, card).state
+    expect(new Set(s.closures.map((c) => c.portId)).size).toBe(s.closures.length)
+    expect(s.closures.length).toBeLessThanOrEqual(there)
+  })
+
+  it('settles a shut harbour at the end of the season all the same', () => {
+    // The bank clears every hold when the season closes. A quarantine that
+    // survived that would leave cargo permanently unsellable and a merchant
+    // scored as though they had thrown it away.
+    const { state, portId } = shutHerIn(afloat())
+    const laden = {
+      ...state,
+      players: state.players.map((p, i) =>
+        i === 0
+          ? {
+              ...p,
+              fleet: p.fleet.map((v, j) =>
+                j === 0
+                  ? {
+                      ...v,
+                      cargo: [
+                        {
+                          uid: 'x1',
+                          goodId: CLASSIC_PACK.goods.find(
+                            (g) => !ctx.exportsOf(portId).includes(g.id),
+                          )!.id,
+                          pricePaid: 100_000,
+                          boughtAt: portId,
+                          boughtRound: 1,
+                        },
+                      ],
+                    }
+                  : v,
+              ),
+            }
+          : p,
+      ),
+    }
+    const over = applyAction(ctx, laden, { type: 'tick', at: laden.endsAt + 1000 })
+    expect(over.state.phase).toBe('over')
+    expect(flagship(over.state.players[0]!).cargo).toHaveLength(0)
   })
 })
