@@ -66,10 +66,12 @@ export function PlayerHUD({
     }
   }, [player.cash])
 
+  // Darf schrumpfen: die Leiste rechts hat Vorrang, weil sie sonst umbricht.
+  // Name und Ladung werden dann abgeschnitten, die Kasse steht.
   return (
     <button
       onClick={onOpen}
-      className="paper anim-rise pointer-events-auto flex max-w-[min(78vw,22rem)] items-center gap-2.5 rounded-lg border-l-4 py-2 pr-3 pl-2.5 text-left shadow-lg"
+      className="paper anim-rise pointer-events-auto flex min-w-0 max-w-[min(78vw,22rem)] shrink items-center gap-2.5 rounded-lg border-l-4 py-2 pr-3 pl-2.5 text-left shadow-lg"
       style={{ borderLeftColor: color.ink }}
       aria-label={`${rank !== null ? `Platz ${rank}, ` : ''}${player.name}, ${player.cash.toLocaleString('de-DE')} Einheiten. Kontor öffnen.`}
     >
@@ -102,34 +104,6 @@ export function PlayerHUD({
           </span>
         )}
       </span>
-    </button>
-  )
-}
-
-/** The Kegelfigur, shrunk to a pill. Tap for the whole track. */
-export function RoundPill({
-  round,
-  total,
-  red,
-  onOpen,
-}: {
-  round: number
-  total: number
-  red: boolean
-  onOpen: () => void
-}) {
-  return (
-    <button
-      onClick={onOpen}
-      className={`paper anim-rise pointer-events-auto flex items-center gap-1.5 rounded-lg px-3 py-1.5 shadow-lg ${
-        red ? 'text-rot' : ''
-      }`}
-      aria-label={`Runde ${round} von ${total}${red ? ', rotes Feld' : ''}`}
-    >
-      {red && <span className="bg-rot h-2.5 w-2.5 shrink-0 rounded-full" aria-hidden />}
-      <span className="smallcaps text-[10px]">Runde</span>
-      <span className="tnum text-base leading-none font-bold">{round}</span>
-      <span className="text-ink-faint text-[10px]">/{total}</span>
     </button>
   )
 }

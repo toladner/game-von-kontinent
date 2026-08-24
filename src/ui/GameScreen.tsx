@@ -3,7 +3,7 @@ import { Board } from './Board'
 import { PortSheet, MarketReport, PortPreviewSheet } from './PortPanel'
 import { KonjunkturSlip } from './Cards'
 import { Portrait } from './Portrait'
-import { PlayerHUD, RoundPill, useCountUp } from './PlayerHUD'
+import { PlayerHUD, useCountUp } from './PlayerHUD'
 import { Die } from './Dice'
 import { CargoHold } from './Cargo'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
@@ -232,51 +232,98 @@ export function GameScreen() {
           onOpen={() => open('kontor')}
         />
         )}
-        <div className="flex min-w-0 flex-wrap justify-end gap-2">
-          <NewsPill unread={unread} onOpen={() => open('nachrichten')} />
-          <FleetPill
-            count={player.fleet.length}
-            waiting={waitingMail}
-            onOpen={() => open('flotte')}
-          />
+
+        {/* Eine Leiste statt vier Merkzettel: ein Papier, ein Schatten,
+            Haarlinien dazwischen. */}
+        <div className="paper anim-rise pointer-events-auto flex shrink-0 items-stretch divide-x divide-black/15 overflow-hidden rounded-lg shadow-lg">
+          <Cell label={`Nachrichten${unread > 0 ? `, ${unread} ungelesen` : ''}`} onOpen={() => open('nachrichten')}>
+            <span className="text-base leading-none" aria-hidden>
+              📰
+            </span>
+            {unread > 0 && (
+              <span className="bg-rot tnum rounded-full px-1 text-[9px] leading-[1.4] font-bold text-white">
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
+          </Cell>
+
+          {/* Nur wenn es etwas zu verwalten gibt: bei einem Schiff, keiner
+              Post und geschlossener Werft ist das Register ein Knopf ohne
+              Inhalt. Unter Sicht realistisch immer — dort hängen Notizbuch
+              und Brieftauben daran, und die sind das halbe Spiel. */}
+          {(player.fleet.length > 1 ||
+            waitingMail > 0 ||
+            state.config.maxFleetSize > 1 ||
+            state.config.sicht === 'realistisch') && (
+            <Cell
+              label={`Flotte: ${player.fleet.length} Schiffe${waitingMail > 0 ? `, ${waitingMail} Briefe` : ''}`}
+              onOpen={() => open('flotte')}
+            >
+              <span className="text-base leading-none" aria-hidden>
+                ⚓
+              </span>
+              <span className="tnum text-base leading-none font-bold">{player.fleet.length}</span>
+              {waitingMail > 0 && (
+                <span className="bg-rot tnum rounded-full px-1 text-[9px] leading-[1.4] font-bold text-white">
+                  {waitingMail}
+                </span>
+              )}
+            </Cell>
+          )}
+
           {realtime ? (
-            <ClockPill state={state} now={now} onOpen={() => open('runde')} />
+            <ClockCell state={state} now={now} onOpen={() => open('runde')} />
           ) : (
-            <RoundPill
+            <RoundCell
               round={state.round}
               total={state.config.totalRounds}
               red={state.config.redFields.includes(state.round)}
               onOpen={() => open('runde')}
             />
           )}
-          <SettingsPill onOpen={() => open('einstellungen')} />
+
+          <Cell label="Einstellungen" onOpen={() => open('einstellungen')}>
+            <span className="text-base leading-none" aria-hidden>
+              ⚙
+            </span>
+          </Cell>
         </div>
       </div>
 
-      {!seated ? null : realtime ? (
-        <RealtimeBar
-          ctx={ctx}
-          state={state}
-          player={player}
-          now={now}
-          hidden={kind !== null}
-          onOpenPort={() => open('port')}
-        />
-      ) : (
-        <ActionBar
-          state={state}
-          hidden={kind !== null}
-          onRoll={() => dispatch({ type: 'roll' })}
-          onEnd={() => dispatch({ type: 'endTurn' })}
-          onOpenPort={() => open('port')}
-          onDraw={() => dispatch({ type: 'drawKonjunktur' })}
-        />
+      {/* Fußzeile. Ruder und Handlungsleiste standen vorher als zwei
+          absolute Ebenen übereinander, jede mit einem von Hand gewählten
+          Abstand vom unteren Rand; hier ist es eine Spalte, die sich selbst
+          staffelt und mitwandert, wenn eine der beiden fehlt. */}
+      {seated && kind === null && (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2 px-4 lg:right-[400px]"
+          style={{ paddingBottom: 'calc(var(--safe-b) + 1rem)' }}
+        >
+          {realtime && !net && state.players.length > 1 && (
+            <HelmSwitcher players={state.players} current={player.id} onPick={setActing} />
+          )}
+          {realtime ? (
+            <RealtimeBar
+              ctx={ctx}
+              state={state}
+              player={player}
+              now={now}
+              onOpenPort={() => open('port')}
+            />
+          ) : (
+            <ActionBar
+              state={state}
+              onRoll={() => dispatch({ type: 'roll' })}
+              onEnd={() => dispatch({ type: 'endTurn' })}
+              onOpenPort={() => open('port')}
+              onDraw={() => dispatch({ type: 'drawKonjunktur' })}
+            />
+          )}
+        </div>
       )}
 
-      {realtime && !net && kind === null && state.players.length > 1 && (
-        <HelmSwitcher players={state.players} current={player.id} onPick={setActing} />
-      )}
-
+      {/* Über allem, auch über einem offenen Blatt — eine Absage, die hinter
+          dem Blatt verschwindet, ist keine. */}
       {notice && (
         <div className="pointer-events-none absolute inset-x-0 bottom-32 z-40 flex justify-center px-4">
           <p className="paper-card text-rot anim-rise max-w-md rounded-sm px-3 py-2 text-center text-sm shadow-lg">
@@ -458,77 +505,35 @@ export function GameScreen() {
 
 // ---------------------------------------------------------------------------
 
-/** The house's own affairs, and any letters lying at this quay. */
-function FleetPill({
-  count,
-  waiting,
+/**
+ * One division of the instrument strip.
+ *
+ * These were four separate floating cards — news, fleet, the clock, the
+ * settings gear — each with its own paper, its own shadow and its own gap,
+ * and on a telephone they had begun to wrap onto a second line. As cells of a
+ * single strip they cost one shadow between them, sit at one height, and read
+ * as an instrument panel rather than as things dropped on the chart.
+ *
+ * Counts ride inline rather than as corner badges: the strip clips its
+ * children so that it can round its own ends, and a badge hung off the corner
+ * would be cut in half by it.
+ */
+function Cell({
+  label,
   onOpen,
+  children,
 }: {
-  count: number
-  waiting: number
+  label: string
   onOpen: () => void
+  children: React.ReactNode
 }) {
   return (
     <button
       onClick={onOpen}
-      className="paper anim-rise pointer-events-auto relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 shadow-lg"
-      aria-label={`Flotte: ${count} Schiffe${waiting > 0 ? `, ${waiting} Briefe` : ''}`}
+      aria-label={label}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 transition-colors hover:bg-black/5"
     >
-      <span className="text-base leading-none" aria-hidden>
-        ⚓
-      </span>
-      <span className="tnum text-base leading-none font-bold">{count}</span>
-      {waiting > 0 && (
-        <span className="bg-rot absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold text-white">
-          {waiting}
-        </span>
-      )}
-    </button>
-  )
-}
-
-/**
- * Everything that is about the app rather than the game: meldungen, the table,
- * and the way out. There was no way out before that did not also give the
- * game up, which mattered little while a reload took you to the title page
- * anyway — and matters a great deal now that it does not.
- */
-function SettingsPill({ onOpen }: { onOpen: () => void }) {
-  return (
-    <button
-      onClick={onOpen}
-      className="paper anim-rise pointer-events-auto flex items-center rounded-lg px-3 py-1.5 shadow-lg"
-      aria-label="Einstellungen"
-    >
-      <span className="text-base leading-none" aria-hidden>
-        ⚙
-      </span>
-    </button>
-  )
-}
-
-/**
- * The Börsenblatt, folded into a pill. Tap for everything that has happened.
- *
- * The journal used to sit behind the Kontor's third tab, where nobody found
- * it, so a Konjunkturkarte could take 15.000 off a player without them ever
- * learning why. Out here it counts what you have not read yet.
- */
-function NewsPill({ unread, onOpen }: { unread: number; onOpen: () => void }) {
-  return (
-    <button
-      onClick={onOpen}
-      className="paper anim-rise pointer-events-auto relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 shadow-lg"
-      aria-label={`Nachrichten${unread > 0 ? `, ${unread} ungelesen` : ''}`}
-    >
-      <span className="text-base leading-none" aria-hidden>
-        📰
-      </span>
-      {unread > 0 && (
-        <span className="bg-rot absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold text-white">
-          {unread > 99 ? '99+' : unread}
-        </span>
-      )}
+      {children}
     </button>
   )
 }
@@ -546,30 +551,28 @@ function useFocusNonce(key: string): number {
   return nonce
 }
 
+/**
+ * The one thing to do next, at the foot of the chart.
+ *
+ * It no longer places itself: the footer column does that, so that the helm
+ * switcher above it and this can never disagree about how far off the bottom
+ * edge they sit.
+ */
 function ActionBar({
   state,
-  hidden,
   onRoll,
   onEnd,
   onOpenPort,
   onDraw,
 }: {
   state: GameState
-  hidden: boolean
   onRoll: () => void
   onEnd: () => void
   onOpenPort: () => void
   onDraw: () => void
 }) {
-  if (hidden) return null
-
   const wrap = (children: React.ReactNode) => (
-    <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 lg:right-[400px]"
-      style={{ paddingBottom: 'calc(var(--safe-b) + 1rem)' }}
-    >
-      <div className="pointer-events-auto anim-rise">{children}</div>
-    </div>
+    <div className="pointer-events-auto anim-rise">{children}</div>
   )
 
   switch (state.phase) {
@@ -619,8 +622,14 @@ function ActionBar({
   }
 }
 
-/** Time left in the season, and what the world market is doing. */
-function ClockPill({
+/**
+ * Time left in the season, and what the world market is doing.
+ *
+ * The word "Saison" stands down on a narrow screen. It is the widest thing in
+ * the strip and the least informative — a running clock beside a chart of the
+ * oceans is not going to be mistaken for anything else.
+ */
+function ClockCell({
   state,
   now,
   onOpen,
@@ -634,12 +643,12 @@ function ClockPill({
   return (
     <button
       onClick={onOpen}
-      className={`paper anim-rise pointer-events-auto flex items-center gap-2 rounded-lg px-3 py-1.5 shadow-lg ${
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors hover:bg-black/5 ${
         closing ? 'text-rot' : ''
       }`}
       aria-label={`Noch ${durationText(left)} Saison`}
     >
-      <span className="smallcaps text-[10px]">Saison</span>
+      <span className="smallcaps hidden text-[10px] sm:inline">Saison</span>
       <span className="tnum text-base leading-none font-bold">{durationText(left)}</span>
       {state.saleModifierPercent !== 0 && (
         <span
@@ -655,32 +664,53 @@ function ClockPill({
   )
 }
 
+/** The Kegelfigur, as a division of the strip. Tap for the whole track. */
+function RoundCell({
+  round,
+  total,
+  red,
+  onOpen,
+}: {
+  round: number
+  total: number
+  red: boolean
+  onOpen: () => void
+}) {
+  return (
+    <button
+      onClick={onOpen}
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors hover:bg-black/5 ${
+        red ? 'text-rot' : ''
+      }`}
+      aria-label={`Runde ${round} von ${total}${red ? ', rotes Feld' : ''}`}
+    >
+      {red && <span className="bg-rot h-2.5 w-2.5 shrink-0 rounded-full" aria-hidden />}
+      <span className="smallcaps hidden text-[10px] sm:inline">Runde</span>
+      <span className="tnum text-base leading-none font-bold">{round}</span>
+      <span className="text-ink-faint text-[10px]">/{total}</span>
+    </button>
+  )
+}
+
 /** What the commanded ship is doing right now, and the one thing to do next. */
 function RealtimeBar({
   ctx,
   state,
   player,
   now,
-  hidden,
   onOpenPort,
 }: {
   ctx: EngineContext
   state: GameState
   player: PlayerState
   now: number
-  hidden: boolean
   onOpenPort: () => void
 }) {
-  if (hidden || state.phase === 'over') return null
+  if (state.phase === 'over') return null
 
   const voyage = flagship(player).voyage ?? null
   const wrap = (children: React.ReactNode) => (
-    <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 lg:right-[400px]"
-      style={{ paddingBottom: 'calc(var(--safe-b) + 1rem)' }}
-    >
-      <div className="pointer-events-auto anim-rise">{children}</div>
-    </div>
+    <div className="pointer-events-auto anim-rise">{children}</div>
   )
 
   if (voyage) {
@@ -731,11 +761,8 @@ function HelmSwitcher({
   onPick: (id: string) => void
 }) {
   return (
-    <div
-      className="pointer-events-none absolute inset-x-0 z-20 flex justify-center px-4"
-      style={{ bottom: 'calc(var(--safe-b) + 5.5rem)' }}
-    >
-      <div className="paper pointer-events-auto flex gap-1 rounded-full px-1.5 py-1 shadow-lg">
+    <div className="pointer-events-auto anim-rise">
+      <div className="paper flex gap-1 rounded-full px-1.5 py-1 shadow-lg">
         {players.map((p) => {
           const color = COLORS[p.colorIndex % COLORS.length]!
           const active = p.id === current
