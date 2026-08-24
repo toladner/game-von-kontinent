@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Von Kontinent zu Kontinent">
+  <rect width="32" height="32" fill="#efe4c8"/>
+  <rect x="1.5" y="1.5" width="29" height="29" fill="none" stroke="#2a2118" stroke-width="0.7" opacity="0.3"/>
+  <path d="M4 21h24l-3 5H7z" fill="#2a2118"/>
+  <path d="M9 20V9h9l5 5v6z" fill="none" stroke="#2a2118" stroke-width="1.6"/>
+  <path d="M16 9V5" stroke="#2a2118" stroke-width="1.6"/>
+</svg>

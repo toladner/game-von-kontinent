@@ -56,8 +56,11 @@ export async function notify(title: string, body: string, tag: string): Promise<
   const options: NotificationOptions = {
     body,
     tag,
-    icon: './favicon.svg',
-    badge: './favicon.svg',
+    icon: './icon-192.png',
+    // Android draws the badge as a white silhouette from the alpha channel,
+    // so it wants a transparent one-colour mark rather than the parchment
+    // tile — the tile arrives as a filled square.
+    badge: './badge-96.png',
   }
   try {
     const registration = await navigator.serviceWorker?.getRegistration()
