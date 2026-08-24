@@ -20,6 +20,7 @@ import {
   fleetLimitNote,
   legalSteps,
   castOffMs,
+  continentOf,
   legMsFor,
   portAt,
   sailingTimeMs,
@@ -168,26 +169,6 @@ function atSea(state: GameState, vehicle: VehicleInstance): boolean {
   return state.now >= voyage.departsAt
 }
 
-/**
- * Which continent a node lies off.
- *
- * A harbour knows its country and the country its continent. A sea node has
- * neither, so it is taken to belong to the harbour its lane starts from —
- * generated ids are `sea:<a>~<b>:<i>`, which makes that a lookup rather than
- * a search, and puts a ship squarely in one region or the other for as long
- * as it is on that lane.
- */
-function continentAt(ctx: EngineContext, nodeId: NodeId): Continent | null {
-  const direct = ctx.portsById.get(nodeId)
-  const portId = direct
-    ? nodeId
-    : nodeId.startsWith('sea:')
-      ? nodeId.slice(4).split('~')[0]
-      : undefined
-  const port = portId ? ctx.portsById.get(portId) : undefined
-  if (!port) return null
-  return ctx.pack.map.countries.find((c) => c.id === port.country)?.continent ?? null
-}
 
 /**
  * Throw cargo overboard, dearest first.
@@ -195,21 +176,27 @@ function continentAt(ctx: EngineContext, nodeId: NodeId): Continent | null {
  * Dearest first because losing the cheapest posten would make a storm an
  * inconvenience; this way it is news. Silent when the hold is empty — there
  * is nothing to report and nothing to lose.
+ *
+ * Named by ship rather than by house: a storm is weather, and weather finds
+ * the vessel that sailed into it. This used to reach for the flagship, which
+ * meant a merchant could keep a second ship in the same gale and watch it
+ * come through untouched.
  */
 function jettison(
   draft: Draft,
   index: number,
+  vehicleId: string,
   count: number,
   reason: string,
   events: GameEvent[],
 ): void {
   const player = draft.players[index]!
-  const ship = flagship(player)
-  if (ship.cargo.length === 0) return
+  const ship = player.fleet.find((v) => v.id === vehicleId)
+  if (!ship || ship.cargo.length === 0) return
 
   const doomed = [...ship.cargo].sort((a, b) => b.pricePaid - a.pricePaid).slice(0, count)
   const lost = new Set(doomed.map((c) => c.uid))
-  patchShip(draft, index, { cargo: ship.cargo.filter((c) => !lost.has(c.uid)) })
+  patchVehicle(draft, index, ship.id, { cargo: ship.cargo.filter((c) => !lost.has(c.uid)) })
 
   for (const item of doomed) {
     draft.bankStock[item.goodId] = (draft.bankStock[item.goodId] ?? 0) + 1
@@ -221,6 +208,71 @@ function jettison(
       reason,
     })
   }
+}
+
+/**
+ * Spoil cargo without taking it, dearest first.
+ *
+ * The gentler half of heavy weather, and the more interesting one. A sunk
+ * posten is a number going down and nothing further to decide; a soaked one
+ * is still in the hold, still yours to place, and worth half — so it becomes
+ * a question of which harbour will take it and whether it is worth the
+ * freight. Already-spoiled cargo is passed over: a bale can only be ruined
+ * once, and hitting it twice would quietly make the second storm a no-op.
+ */
+function spoil(
+  draft: Draft,
+  index: number,
+  vehicleId: string,
+  count: number,
+  reason: string,
+  events: GameEvent[],
+): void {
+  const player = draft.players[index]!
+  const ship = player.fleet.find((v) => v.id === vehicleId)
+  if (!ship) return
+
+  const sound = ship.cargo.filter((c) => !c.damaged)
+  if (sound.length === 0) return
+
+  const hit = new Set(
+    [...sound].sort((a, b) => b.pricePaid - a.pricePaid).slice(0, count).map((c) => c.uid),
+  )
+  patchVehicle(draft, index, ship.id, {
+    cargo: ship.cargo.map((c) => (hit.has(c.uid) ? { ...c, damaged: true } : c)),
+  })
+
+  for (const item of ship.cargo) {
+    if (!hit.has(item.uid)) continue
+    events.push({ type: 'cargoDamaged', playerId: player.id, goodId: item.goodId, reason })
+  }
+}
+
+/**
+ * Hold a ship up at sea.
+ *
+ * Every leg is timed from the one before it, so pushing the leg she is on
+ * pushes the whole rest of the voyage with it — which is what being blown off
+ * a headland actually does. A ship still alongside is not affected: she is in
+ * shelter, and the weather is a reason to stay there.
+ */
+function holdUp(
+  draft: Draft,
+  index: number,
+  vehicleId: string,
+  minutes: number,
+  reason: string,
+  events: GameEvent[],
+): void {
+  const player = draft.players[index]!
+  const ship = player.fleet.find((v) => v.id === vehicleId)
+  if (!ship?.voyage) return
+  if (!atSea(draft as GameState, ship)) return
+
+  patchVehicle(draft, index, ship.id, {
+    voyage: { ...ship.voyage, legArrivesAt: ship.voyage.legArrivesAt + minutes * 60_000 },
+  })
+  events.push({ type: 'heldUp', playerId: player.id, minutes, reason })
 }
 
 /**
@@ -276,6 +328,27 @@ function settleStandingCard(
   }
 }
 
+/**
+ * Every ship lying in, or sailing through, one part of the world.
+ *
+ * Weather is the one thing in this game that asks where you are rather than
+ * whose turn it is, and it has to ask it of hulls and not of houses: a
+ * merchant with two ships has one in the gale and one in Hamburg.
+ */
+function forEachShipIn(
+  ctx: EngineContext,
+  draft: Draft,
+  continent: Continent,
+  hit: (index: number, ship: VehicleInstance) => void,
+): void {
+  for (let i = 0; i < draft.players.length; i++) {
+    for (const ship of [...draft.players[i]!.fleet]) {
+      if (continentOf(ctx, ship.nodeId) !== continent) continue
+      hit(i, ship)
+    }
+  }
+}
+
 function applyEffect(
   ctx: EngineContext,
   draft: Draft,
@@ -304,7 +377,12 @@ function applyEffect(
           continent: effect.continent,
           percent: effect.percent,
           untilRound: realtime ? null : draft.round + effect.rounds,
-          untilTime: realtime ? draft.now + effect.rounds * 3_600_000 : null,
+          // A card's "vier Runden" is four turns of the market, whichever way
+          // the game counts them. It used to be four *hours* in real time,
+          // which on a season of three is weather that never blows out.
+          untilTime: realtime
+            ? draft.now + effect.rounds * draft.config.realtime.marketIntervalMinutes * 60_000
+            : null,
         },
       ]
       events.push({
@@ -317,21 +395,73 @@ function applyEffect(
     }
 
     case 'stormInRegion': {
-      for (let i = 0; i < draft.players.length; i++) {
-        if (continentAt(ctx, flagship(draft.players[i]!).nodeId) !== effect.continent) continue
-        jettison(draft, i, effect.lose, effect.title, events)
-      }
+      forEachShipIn(ctx, draft, effect.continent, (i, ship) =>
+        jettison(draft, i, ship.id, effect.lose, effect.title, events),
+      )
       return
     }
 
-    case 'cargoLostByDrawer':
-      jettison(draft, drawerIndex, effect.lose, effect.title, events)
+    case 'cargoDamagedInRegion': {
+      forEachShipIn(ctx, draft, effect.continent, (i, ship) =>
+        spoil(draft, i, ship.id, effect.count, effect.title, events),
+      )
       return
+    }
+
+    case 'delayInRegion': {
+      forEachShipIn(ctx, draft, effect.continent, (i, ship) => {
+        if (draft.config.travel === 'echtzeit') {
+          holdUp(draft, i, ship.id, effect.minutes, effect.title, events)
+          return
+        }
+        // Round play has no clock to push, so the same weather costs a turn
+        // hove to — the machinery a collision already uses. Only the ship the
+        // merchant is sailing has turns to lose.
+        if (ship.id !== flagship(draft.players[i]!).id) return
+        patchVehicle(draft, i, ship.id, { skipTurns: ship.skipTurns + 1 })
+        events.push({
+          type: 'heldUp',
+          playerId: draft.players[i]!.id,
+          minutes: effect.minutes,
+          reason: effect.title,
+        })
+      })
+      return
+    }
+
+    case 'cargoLostByDrawer': {
+      // In round play the card was turned by somebody, and it is theirs. A
+      // world card in real time has no drawer, and answering that with
+      // `drawerIndex` — nought, always — meant a fire in the hold broke out
+      // aboard the first house to have sat down, every single time. So the
+      // deck picks a laden ship instead, out of the game's own dice.
+      if (draft.config.travel !== 'echtzeit') {
+        jettison(draft, drawerIndex, flagship(draft.players[drawerIndex]!).id, effect.lose, effect.title, events)
+        return
+      }
+      const laden: Array<[number, string]> = []
+      for (let i = 0; i < draft.players.length; i++) {
+        for (const ship of draft.players[i]!.fleet) {
+          if (ship.cargo.length > 0) laden.push([i, ship.id])
+        }
+      }
+      if (laden.length === 0) return
+      const [choice, rng] = nextInt(draft.rng, laden.length)
+      draft.rng = rng
+      const [index, vehicleId] = laden[choice]!
+      jettison(draft, index, vehicleId, effect.lose, effect.title, events)
+      return
+    }
 
     case 'regionalLevy': {
       for (let i = 0; i < draft.players.length; i++) {
-        const portId = portAt(ctx, flagship(draft.players[i]!).nodeId)
-        if (!portId || continentAt(ctx, portId) !== effect.continent) continue
+        // One payment per house, however many of its ships are lying there:
+        // this is a harbour's bill to a merchant, not to a hull.
+        const there = draft.players[i]!.fleet.some((ship) => {
+          const portId = portAt(ctx, ship.nodeId)
+          return portId !== null && continentOf(ctx, portId) === effect.continent
+        })
+        if (!there) continue
         if (effect.sign > 0) payPlayer(draft, i, effect.amount, 'telegramm', events)
         else chargePlayer(draft, i, effect.amount, 'hafengebuehr', events)
       }

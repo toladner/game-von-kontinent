@@ -195,6 +195,33 @@ export type KonjunkturEffect =
       readonly lose: number
       readonly title: string
     }
+  /**
+   * Heavy weather that spoils rather than sinks: the cargo stays in the hold
+   * and is worth a fraction of it. The cheaper half of a storm, and the more
+   * interesting one — a sunk posten is a number going down, a spoiled one is
+   * still yours to place, and a soaked bale of silk in the wrong harbour is a
+   * decision rather than a loss.
+   */
+  | {
+      readonly kind: 'cargoDamagedInRegion'
+      readonly continent: Continent
+      /** Pieces spoiled per ship, dearest first. */
+      readonly count: number
+      readonly title: string
+    }
+  /**
+   * Weather that costs time instead of goods. In real-time play, where the
+   * clock is the whole currency, being held four hours off a headland is the
+   * sharpest thing that can happen to you short of losing the cargo; in round
+   * play it is a turn spent hove to.
+   */
+  | {
+      readonly kind: 'delayInRegion'
+      readonly continent: Continent
+      /** Minutes added to a voyage already at sea in that part of the world. */
+      readonly minutes: number
+      readonly title: string
+    }
   /** Pirates, ice, a fire in the hold: the drawing player alone loses cargo. */
   | { readonly kind: 'cargoLostByDrawer'; readonly lose: number; readonly title: string }
   /** A windfall or demand for every ship lying in one continent's harbours. */
@@ -318,6 +345,8 @@ export interface RuleConfig {
   readonly cardCopiesPerGood: number
   /** Selling a good the port itself exports: fraction of the price paid. */
   readonly localGlutSaleRate: number
+  /** What a spoiled posten still fetches, as a fraction of the clean price. */
+  readonly damagedSaleRate: number
   /** Forced sale to raise cash: fraction of the price paid. */
   readonly distressSaleRate: number
   /** Final-round sale rate for goods the destination port also exports. */

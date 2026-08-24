@@ -6,9 +6,11 @@ import { applyAction, replay } from './reducer'
 import {
   buyOffers,
   castOffMs,
+  continentOf,
   legalSteps,
   legMsFor,
   portAt,
+  quoteSale,
   routeTo,
   standings,
   voyageEndsAt,
@@ -17,6 +19,7 @@ import { isPort } from './mapbuild'
 import { flagship, netWorth } from './state'
 import type { GameAction } from './actions'
 import type { GameState } from './state'
+import type { Continent, KonjunkturCard } from './types'
 
 const ctx = createContext(CLASSIC_PACK)
 
@@ -784,5 +787,254 @@ describe('what a hold may carry', () => {
     expect(flagship(after.state.players[0]!).cargo.filter((c) => c.goodId === goodId)).toHaveLength(
       2,
     )
+  })
+})
+
+/**
+ * Weather that asks where you are.
+ *
+ * The printed 27 move every price on the board at once, which on a plan with
+ * five oceans makes it never matter where a ship actually is. The erweiterte
+ * Konjunktur picks out a part of the world instead, and heavy weather there
+ * comes in three severities: it can take cargo, spoil cargo, or cost nothing
+ * but time — which in a real-time season is the dearest of the three.
+ *
+ * Cards are taken from the real deck rather than made up for the test: the
+ * market only deals ids it can find in the pack, so an invented card turns
+ * into no card at all and every assertion below would pass by doing nothing.
+ */
+describe('weather over one part of the world', () => {
+  const T0 = 1_800_000_000_000
+  const MIN = 60_000
+  const deck = CLASSIC_PACK.konjunkturErweitert!
+
+  const seatedRealtime = (seed = 'wetter') =>
+    replay(
+      ctx,
+      createGame(ctx, {
+        seed,
+        travel: 'echtzeit',
+        minutesPerPip: 1,
+        durationHours: 8,
+        konjunktur: 'erweitert',
+      }),
+      [
+        { type: 'tick', at: T0 },
+        { type: 'join', playerId: 'a', name: 'Ada' },
+        { type: 'join', playerId: 'b', name: 'Bo' },
+        { type: 'start' },
+      ],
+    )
+
+  /** A real card of the given kind, aimed at the given part of the world. */
+  const cardFor = (kind: string, continent: Continent): KonjunkturCard =>
+    deck.find(
+      (c) =>
+        c.effects.length === 1 &&
+        c.effects.some((e) => e.kind === kind && 'continent' in e && e.continent === continent),
+    )!
+
+  /** Load a ship up, so weather has something to ruin. */
+  const laden = (s: GameState, by: string): GameState => {
+    const index = s.players.findIndex((p) => p.id === by)
+    let out = s
+    const here = portAt(ctx, flagship(out.players[index]!).nodeId)!
+    for (const offer of buyOffers(ctx, out, out.players[index]!, here).filter(
+      (o) => o.status === 'ok',
+    )) {
+      out = applyAction(ctx, out, { type: 'buy', goodId: offer.goodId, by }).state
+    }
+    return out
+  }
+
+  /** Which part of the world a house's ship is in. */
+  const whereabouts = (s: GameState, by: string): Continent =>
+    continentOf(ctx, flagship(s.players.find((p) => p.id === by)!).nodeId)!
+
+  /** Turn a chosen card for the whole world, without moving the clock on. */
+  const turn = (s: GameState, card: KonjunkturCard) =>
+    applyAction(
+      ctx,
+      {
+        ...s,
+        deck: [card.id, ...s.deck.filter((d) => d !== card.id)],
+        marketSince: s.now - s.config.realtime.marketIntervalMinutes * MIN,
+      },
+      { type: 'tick', at: s.now + 1000 },
+    )
+
+  const damagedOf = (s: GameState, i: number) =>
+    flagship(s.players[i]!).cargo.filter((c) => c.damaged)
+
+  it('has a Havarie and an Aufenthalt for every ocean on the plan', () => {
+    // Otherwise the weather would only ever find some of the map, and a
+    // merchant could sit out the whole season in a corner nothing reaches.
+    const seen = new Set(CLASSIC_PACK.map.countries.map((c) => c.continent))
+    for (const continent of seen) {
+      expect(cardFor('cargoDamagedInRegion', continent)).toBeTruthy()
+      expect(cardFor('delayInRegion', continent)).toBeTruthy()
+    }
+  })
+
+  it('spoils cargo instead of sinking it, and it stays in the hold', () => {
+    const s = laden(seatedRealtime(), 'a')
+    const before = flagship(s.players[0]!).cargo
+    expect(before.length).toBeGreaterThan(0)
+
+    const hit = turn(s, cardFor('cargoDamagedInRegion', whereabouts(s, 'a')))
+    const after = flagship(hit.state.players[0]!).cargo
+
+    // Still aboard — that is the whole point of the card.
+    expect(after).toHaveLength(before.length)
+    expect(after.filter((c) => c.damaged).length).toBeGreaterThan(0)
+    expect(hit.events.some((e) => e.type === 'cargoDamaged')).toBe(true)
+    expect(hit.events.some((e) => e.type === 'cargoLost')).toBe(false)
+  })
+
+  it('halves what a spoiled posten fetches', () => {
+    const s = laden(seatedRealtime(), 'a')
+    const here = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    const clean = new Map(
+      flagship(s.players[0]!).cargo.map((c) => [c.uid, quoteSale(ctx, s, c, here).price]),
+    )
+
+    const hit = turn(s, cardFor('cargoDamagedInRegion', whereabouts(s, 'a'))).state
+    const spoiled = damagedOf(hit, 0)
+    expect(spoiled.length).toBeGreaterThan(0)
+
+    for (const item of spoiled) {
+      expect(quoteSale(ctx, hit, item, here).price).toBe(
+        Math.round(clean.get(item.uid)! * ctx.pack.config.damagedSaleRate),
+      )
+    }
+  })
+
+  it('does not ruin the same bale twice', () => {
+    // Hitting an already-spoiled posten would quietly make the second storm
+    // a no-op, and worse: it would always be the dearest cargo that shrugged
+    // the weather off, because that is the one a storm reaches for first.
+    const s = laden(seatedRealtime(), 'a')
+    const card = cardFor('cargoDamagedInRegion', whereabouts(s, 'a'))
+
+    const first = turn(s, card)
+    const alreadyHit = new Set(damagedOf(first.state, 0).map((c) => c.goodId))
+    expect(alreadyHit.size).toBeGreaterThan(0)
+
+    const second = turn(first.state, card)
+    for (const e of second.events) {
+      if (e.type === 'cargoDamaged') expect(alreadyHit.has(e.goodId)).toBe(false)
+    }
+  })
+
+  it('leaves ships in other oceans alone', () => {
+    const s = laden(seatedRealtime(), 'a')
+    const here = whereabouts(s, 'a')
+    const elsewhere = [...new Set(CLASSIC_PACK.map.countries.map((c) => c.continent))].find(
+      (c) => c !== here && cardFor('cargoDamagedInRegion', c),
+    )!
+
+    const hit = turn(s, cardFor('cargoDamagedInRegion', elsewhere))
+    expect(damagedOf(hit.state, 0)).toHaveLength(0)
+  })
+
+  it('holds up a ship at sea, and lets one in harbour ride it out', () => {
+    let s = seatedRealtime()
+    const from = flagship(s.players[0]!).nodeId
+    const target = [...ctx.portsById.keys()].find(
+      (id) => id !== portAt(ctx, from) && routeTo(ctx, from, null, id).length >= 6,
+    )!
+    s = applyAction(ctx, s, { type: 'setCourse', to: target, by: 'a' }).state
+    const departs = flagship(s.players[0]!).voyage!.departsAt
+    s = applyAction(ctx, s, { type: 'tick', at: departs + 1000 }).state
+
+    const eta = voyageEndsAt(ctx, s, flagship(s.players[0]!))!
+    const card = cardFor('delayInRegion', continentOf(ctx, flagship(s.players[0]!).nodeId)!)
+    const effect = card.effects[0]!
+    const minutes = effect.kind === 'delayInRegion' ? effect.minutes : 0
+    expect(minutes).toBeGreaterThan(0)
+
+    const held = turn(s, card)
+    expect(voyageEndsAt(ctx, held.state, flagship(held.state.players[0]!))).toBe(
+      eta + minutes * MIN,
+    )
+    expect(held.events.some((e) => e.type === 'heldUp')).toBe(true)
+    // Bo never left the quay, so there was nothing to hold up.
+    expect(flagship(held.state.players[1]!).voyage ?? null).toBeNull()
+  })
+
+  it('sets a fire in somebody’s hold, not always the first house’s', () => {
+    // With no drawer to be, this reached for `drawerIndex` — nought, always —
+    // so Seeräuberei, Feuer im Laderaum and Wassereinbruch each broke out
+    // aboard whoever happened to have sat down first, every single time.
+    const fire = deck.find((c) => c.effects.some((e) => e.kind === 'cargoLostByDrawer'))!
+    const victims = new Set<string>()
+
+    for (const seed of ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8']) {
+      const s = laden(laden(seatedRealtime(seed), 'a'), 'b')
+      for (const e of turn(s, fire).events) {
+        if (e.type === 'cargoLost') victims.add(e.playerId)
+      }
+    }
+    expect(victims.size).toBe(2)
+  })
+
+  it('finds the second ship of a fleet, not only the one the merchant is on', () => {
+    // Weather is weather: it reaches whatever is floating in it. Reaching for
+    // the flagship meant a house with two hulls in the same gale watched one
+    // of them come through it untouched.
+    let s = replay(
+      ctx,
+      createGame(ctx, {
+        seed: 'flotte',
+        travel: 'echtzeit',
+        minutesPerPip: 1,
+        durationHours: 8,
+        konjunktur: 'erweitert',
+        maxFleetSize: 2,
+      }),
+      [
+        { type: 'tick', at: T0 },
+        { type: 'join', playerId: 'a', name: 'Ada' },
+        { type: 'join', playerId: 'b', name: 'Bo' },
+        { type: 'start' },
+      ],
+    )
+    s = applyAction(ctx, s, { type: 'buyVehicle', kindId: 'kuestenschoner', by: 'a' }).state
+    const fleet = s.players[0]!.fleet
+    expect(fleet).toHaveLength(2)
+    // Both lie in the same harbour, so the same weather covers both.
+    expect(fleet[1]!.nodeId).toBe(fleet[0]!.nodeId)
+
+    // Load the second ship, which is not the one Ada is sailing aboard.
+    const here = portAt(ctx, fleet[1]!.nodeId)!
+    s = applyAction(ctx, s, { type: 'boardVehicle', vehicleId: fleet[1]!.id, by: 'a' }).state
+    for (const offer of buyOffers(ctx, s, s.players[0]!, here).filter((o) => o.status === 'ok')) {
+      s = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId, by: 'a' }).state
+    }
+    s = applyAction(ctx, s, { type: 'boardVehicle', vehicleId: fleet[0]!.id, by: 'a' }).state
+
+    const second = () => s.players[0]!.fleet.find((v) => v.id === fleet[1]!.id)!
+    expect(second().cargo.length).toBeGreaterThan(0)
+
+    const hit = turn(s, cardFor('cargoDamagedInRegion', whereabouts(s, 'a')))
+    const after = hit.state.players[0]!.fleet.find((v) => v.id === fleet[1]!.id)!
+    expect(after.cargo.filter((c) => c.damaged).length).toBeGreaterThan(0)
+  })
+
+  it('blows itself out in a season, not in a working day', () => {
+    // "für 4 Runden" was read as four hours in real-time play, which on a
+    // season of three is weather that never lifts.
+    const s = seatedRealtime()
+    const card = cardFor('regionalPriceDelta', 'europa')
+    const effect = card.effects[0]!
+    const rounds = effect.kind === 'regionalPriceDelta' ? effect.rounds : 0
+
+    const blown = turn(s, card).state
+    const weather = blown.weather[0]!
+    expect(weather.untilTime).toBe(
+      blown.now + rounds * blown.config.realtime.marketIntervalMinutes * MIN,
+    )
+    // Well short of the whole season, which is what makes it weather.
+    expect(weather.untilTime! - blown.now).toBeLessThan(blown.endsAt - blown.startedAt)
   })
 })

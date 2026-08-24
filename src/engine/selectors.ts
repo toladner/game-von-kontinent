@@ -3,7 +3,7 @@ import { activePlayer, flagship, netWorth, type VehicleInstance } from './state'
 import { goodOf, type EngineContext } from './context'
 import { edgeKey, isPort } from './mapbuild'
 import { exportsAt, sellPriceAt } from './market'
-import type { GoodId, Money, NodeId, PortId } from './types'
+import type { Continent, GoodId, Money, NodeId, PortId } from './types'
 
 /** The port the given ship lies in, or null if it is on open water. */
 export function portAt(ctx: EngineContext, nodeId: NodeId): PortId | null {
@@ -40,19 +40,48 @@ export interface SaleQuote {
  * angeboten werden." Selling a good the port exports itself is possible, but
  * only at a loss price of 25 % below what was paid.
  */
+/**
+ * Which continent a node lies off.
+ *
+ * A harbour knows its country and the country its continent. A sea node has
+ * neither, so it is taken to belong to the harbour its lane starts from —
+ * generated ids are `sea:<a>~<b>:<i>`, which makes that a lookup rather than
+ * a search, and puts a ship squarely in one region or the other for as long
+ * as it is on that lane. Every card in the erweiterte Konjunktur that asks
+ * where a ship is asks it through here.
+ */
+export function continentOf(ctx: EngineContext, nodeId: NodeId): Continent | null {
+  const direct = ctx.portsById.get(nodeId)
+  const portId = direct
+    ? nodeId
+    : nodeId.startsWith('sea:')
+      ? nodeId.slice(4).split('~')[0]
+      : undefined
+  const port = portId ? ctx.portsById.get(portId) : undefined
+  if (!port) return null
+  return ctx.pack.map.countries.find((c) => c.id === port.country)?.continent ?? null
+}
+
 export function quoteSale(
   ctx: EngineContext,
   state: GameState,
   item: CargoItem,
   portId: PortId,
 ): SaleQuote {
+  // Weather damage is a discount on whatever the sale would otherwise have
+  // been, not a kind of sale in itself: a spoiled posten the port exports
+  // anyway is still an Überfluß sale, and a spoiled foreign one still
+  // discharges the Verkaufszwang.
+  const spoiled = (price: number) =>
+    item.damaged ? Math.round(price * state.config.damagedSaleRate) : price
+
   const local = exportsAt(ctx, state, portId).includes(item.goodId)
   if (local) {
-    const price = Math.round(item.pricePaid * state.config.localGlutSaleRate)
+    const price = spoiled(Math.round(item.pricePaid * state.config.localGlutSaleRate))
     return { item, price, kind: 'ueberfluss', profit: price - item.pricePaid }
   }
   const base = sellPriceAt(ctx, state, portId, item.goodId)
-  const price = Math.round(base * (1 + state.saleModifierPercent / 100))
+  const price = spoiled(Math.round(base * (1 + state.saleModifierPercent / 100)))
   return { item, price, kind: 'markt', profit: price - item.pricePaid }
 }
 

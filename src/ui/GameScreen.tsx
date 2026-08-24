@@ -922,7 +922,10 @@ function KontorSheet({
             <ul className="mt-2 space-y-0.5 text-[12px]">
               {flagship(player).cargo.map((c) => (
                 <li key={c.uid} className="flex justify-between gap-2">
-                  <span>{ctx.goodsById.get(c.goodId)?.name}</span>
+                  <span className="min-w-0 truncate">
+                    {ctx.goodsById.get(c.goodId)?.name}
+                    {c.damaged && <span className="text-rot ml-1 text-[11px]">havariert</span>}
+                  </span>
                   <span className="tnum text-ink-soft">
                     {c.pricePaid.toLocaleString('de-DE')}
                   </span>

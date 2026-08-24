@@ -156,6 +156,20 @@ export type GameEvent =
       /** Headline of the card that did it, so the news can name the cause. */
       readonly reason: string
     }
+  /** Erweiterte Konjunktur: cargo spoiled by weather but still in the hold. */
+  | {
+      readonly type: 'cargoDamaged'
+      readonly playerId: string
+      readonly goodId: GoodId
+      readonly reason: string
+    }
+  /** Erweiterte Konjunktur: weather that cost time rather than goods. */
+  | {
+      readonly type: 'heldUp'
+      readonly playerId: string
+      readonly minutes: number
+      readonly reason: string
+    }
   /** Erweiterte Konjunktur: price weather settled over a continent. */
   | {
       readonly type: 'weatherSet'

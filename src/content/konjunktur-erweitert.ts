@@ -51,12 +51,48 @@ const wind = (
     ],
   )
 
+/**
+ * Heavy weather comes in three severities, and they are worth having all
+ * three of. A gale that takes cargo is the loudest and the least interesting:
+ * a number goes down and there is nothing left to decide. A gale that spoils
+ * cargo leaves the posten in the hold at half its worth, so it becomes a
+ * question of which harbour will still take it and whether it is worth the
+ * freight. A gale that merely holds a ship up costs nothing at all except the
+ * one thing a real-time season is actually made of.
+ */
+
 /** Heavy weather: everyone caught in that part of the world loses cargo. */
 const storm = (continent: Continent, region: string, what: string, lose = 1): KonjunkturCard =>
   card(
     'Sturmwarnung',
     [what, `${region}`, lose === 1 ? 'Ein Posten geht über Bord' : `${lose} Posten über Bord`],
     [{ kind: 'stormInRegion', continent, lose, title: `${what} — ${region}` }],
+  )
+
+/** The same weather, gentler: the cargo stays aboard and is worth half. */
+const damage = (continent: Continent, region: string, what: string, count = 1): KonjunkturCard =>
+  card(
+    'Havarie',
+    [
+      what,
+      `${region}`,
+      count === 1 ? 'Ein Posten hat gelitten' : `${count} Posten haben gelitten`,
+      'Erlös nur zur Hälfte',
+    ],
+    [{ kind: 'cargoDamagedInRegion', continent, count, title: `${what} — ${region}` }],
+  )
+
+/** Weather that costs time and nothing else. */
+const delay = (
+  continent: Continent,
+  region: string,
+  what: string,
+  minutes: number,
+): KonjunkturCard =>
+  card(
+    'Aufenthalt',
+    [what, `${region}`, 'Alle Schiffe dort', 'werden aufgehalten'],
+    [{ kind: 'delayInRegion', continent, minutes, title: `${what} — ${region}` }],
   )
 
 export const KONJUNKTUR_ERWEITERT: readonly KonjunkturCard[] = [
@@ -84,6 +120,53 @@ export const KONJUNKTUR_ERWEITERT: readonly KonjunkturCard[] = [
   storm('ozeanien', 'Große Australische Bucht', 'Schwere See'),
   storm('nordamerika', 'Karibik', 'Hurrikan'),
   storm('suedamerika', 'Vor der Küste Patagoniens', 'Weststurm'),
+
+  // --- Havarien: die Ladung überlebt, der Erlös nicht ----------------------
+  damage('europa', 'In der Biskaya', 'Überkommende See'),
+  damage('nordamerika', 'Auf der Neufundlandbank', 'Schwere Sturzsee', 2),
+  damage('asien', 'Im Monsun vor Malabar', 'Wochenlanger Regen'),
+  damage('afrika', 'In der Kalmenzone', 'Hitze und Feuchte', 2),
+  damage('suedamerika', 'Vor der Mündung des La Plata', 'Pampero'),
+  damage('ozeanien', 'In der Bass-Straße', 'Überkommende See'),
+
+  // --- Aufenthalt: es kostet nur Zeit, und Zeit ist alles -------------------
+  delay('nordamerika', 'Auf der Neufundlandbank', 'Anhaltender Nebel', 30),
+  delay('suedamerika', 'In der Magellanstraße', 'Weststurm mit Schnee', 45),
+  delay('afrika', 'Vor dem Kap der Guten Hoffnung', 'Steife Gegenbrise', 30),
+  delay('asien', 'Im Südchinesischen Meer', 'Taifun vor dem Bug', 45),
+  delay('europa', 'In der Deutschen Bucht', 'Zähe Nebelbank', 20),
+  delay('ozeanien', 'In der Torresstraße', 'Lotsenmangel', 20),
+  card(
+    'Kanalsperre',
+    ['Der Kanal ist auf Tage', 'nicht zu passieren', 'Umweg um das Kap'],
+    [
+      {
+        kind: 'delayInRegion',
+        continent: 'afrika',
+        minutes: 45,
+        title: 'Kanalsperre — Umweg um das Kap',
+      },
+      {
+        kind: 'delayInRegion',
+        continent: 'asien',
+        minutes: 45,
+        title: 'Kanalsperre — Umweg um das Kap',
+      },
+    ],
+  ),
+  card(
+    'Taifunwarnung',
+    ['Südchinesisches Meer', 'Ein Posten geht über Bord', 'und die Fahrt verzögert sich'],
+    [
+      { kind: 'stormInRegion', continent: 'asien', lose: 1, title: 'Taifun — Südchinesisches Meer' },
+      {
+        kind: 'delayInRegion',
+        continent: 'asien',
+        minutes: 30,
+        title: 'Taifun — Südchinesisches Meer',
+      },
+    ],
+  ),
 
   // --- Unglück an Bord ------------------------------------------------------
   card(

@@ -312,9 +312,14 @@ export function PortSheet({
                         tone={q.profit >= 0 ? 'gut' : 'schlecht'}
                         action="verkaufen"
                         sublabel={
-                          q.kind === 'ueberfluss'
-                            ? 'Hier selbst geführt — nur Verlustpreis'
-                            : `${q.profit >= 0 ? '+' : '−'}${Math.abs(q.profit).toLocaleString('de-DE')} gegenüber Einkauf`
+                          // Havarie first: it halves whatever the sale would
+                          // otherwise have been, so it is the fact that
+                          // decides whether to place the posten here at all.
+                          q.item.damaged
+                            ? `Havariert — Erlös zur Hälfte${q.kind === 'ueberfluss' ? ', und hier selbst geführt' : ''}`
+                            : q.kind === 'ueberfluss'
+                              ? 'Hier selbst geführt — nur Verlustpreis'
+                              : `${q.profit >= 0 ? '+' : '−'}${Math.abs(q.profit).toLocaleString('de-DE')} gegenüber Einkauf`
                         }
                         onClick={() => onSell(q.item.uid)}
                       />

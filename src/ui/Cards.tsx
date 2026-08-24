@@ -102,6 +102,12 @@ function standingNote(card: KonjunkturCard): string | null {
         return 'Zahlt, wessen Schiff im Hafen liegt oder anlegt, solange die Karte steht.'
       case 'leviedOnAllShips':
         return 'Zahlbar von allen Schiffen, auch auf See — ein Zehntel der Ladung, die an Bord ist. Ein leerer Laderaum kostet nichts.'
+      case 'stormInRegion':
+        return 'Trifft jedes Schiff, das sich in dieser Ecke der Welt befindet — im Hafen wie auf See.'
+      case 'cargoDamagedInRegion':
+        return 'Die Ladung bleibt an Bord, bringt aber nur die Hälfte. Wo Sie den Posten losschlagen, bleibt Ihre Sache.'
+      case 'delayInRegion':
+        return 'Trifft jedes Schiff, das dort gerade unterwegs ist. Wer im Hafen liegt, liegt sicher.'
       default:
         continue
     }

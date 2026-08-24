@@ -17,6 +17,12 @@ export interface CargoItem {
   readonly pricePaid: Money
   readonly boughtAt: PortId
   readonly boughtRound: number
+  /**
+   * Spoiled by weather. Absent on everything bought before the erweiterte
+   * Konjunktur had a card for it, and on every posten that never met a storm,
+   * which is why it is optional rather than false.
+   */
+  readonly damaged?: boolean
 }
 
 /**

@@ -271,6 +271,20 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
         `${nameOf(event.playerId)} verliert ${goodOf(event.goodId)} (${money(event.value)}) — ${event.reason}.`,
         'schlecht',
       )
+    case 'cargoDamaged':
+      return line(
+        `${goodOf(event.goodId)} von ${nameOf(event.playerId)} hat gelitten — ${event.reason}. Der Posten bleibt an Bord und bringt nur die Hälfte.`,
+        'schlecht',
+      )
+    case 'heldUp':
+      return line(
+        `${nameOf(event.playerId)} wird aufgehalten — ${event.reason}. ${
+          state.config.travel === 'echtzeit'
+            ? `Verlust: ${event.minutes} Minuten.`
+            : 'Eine Runde wird ausgesetzt.'
+        }`,
+        'schlecht',
+      )
     // Weltnachrichten: sie gehören keinem Haus und bleiben deshalb auch
     // stehen, wenn das Blatt auf ein einzelnes gefiltert wird — sonst
     // verlöre der Verlauf die Rundenüberschriften, die ihn gliedern.

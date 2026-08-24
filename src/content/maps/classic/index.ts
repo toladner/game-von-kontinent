@@ -45,6 +45,7 @@ export const CLASSIC_CONFIG: RuleConfig = {
   maxPurchasesPerPort: 2,
   cardCopiesPerGood: 2,
   localGlutSaleRate: 0.75,
+  damagedSaleRate: 0.5,
   distressSaleRate: 0.75,
   finalRoundGlutSaleRate: 0.75,
   collisionDamageRate: 0.25,
