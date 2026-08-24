@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createContext } from '../../engine/context'
 import { createGame, openingActions } from '../../engine/setup'
-import { replay } from '../../engine/reducer'
+import { MAX_PLAYERS, replay } from '../../engine/reducer'
 import { buyOffers, portAt, routeTo } from '../../engine/selectors'
 import { flagship } from '../../engine/state'
 import { isPort } from '../../engine/mapbuild'
@@ -25,7 +25,10 @@ describe.each(PACKS.map((p) => [p.id, p] as const))('the %s plan', (_id, pack) =
   it('has harbours, goods and somewhere to start', () => {
     expect(ports.length).toBeGreaterThan(8)
     expect(pack.goods.length).toBeGreaterThan(8)
-    expect(pack.map.startPorts.length).toBeGreaterThanOrEqual(6)
+    // A berth apiece for a full table. A plan that seats fewer than the
+    // rules allow would deal two houses the same harbour.
+    expect(pack.map.startPorts.length).toBeGreaterThanOrEqual(MAX_PLAYERS)
+    expect(new Set(pack.map.startPorts).size).toBe(pack.map.startPorts.length)
   })
 
   it('connects every harbour to every other by sea', () => {

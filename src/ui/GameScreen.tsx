@@ -775,8 +775,9 @@ function HelmSwitcher({
   onPick: (id: string) => void
 }) {
   return (
-    <div className="pointer-events-auto anim-rise">
-      <div className="paper flex gap-1 rounded-full px-1.5 py-1 shadow-lg">
+    <div className="pointer-events-auto anim-rise max-w-full">
+      {/* Zehn Häuser passen nicht nebeneinander auf ein Telefon. */}
+      <div className="paper flex max-w-full gap-1 overflow-x-auto rounded-full px-1.5 py-1 shadow-lg">
         {players.map((p) => {
           const color = COLORS[p.colorIndex % COLORS.length]!
           const active = p.id === current

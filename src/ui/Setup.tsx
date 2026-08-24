@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { forgetSeat, hasSeatAt } from '@app/net'
 import { makePersona, type Gender } from '@engine/persona'
+import { MAX_PLAYERS } from '@engine/reducer'
 import type { Seat } from '@engine/setup'
 import { NotifyCheck } from './NotifyCheck'
 import { Portrait } from './Portrait'
@@ -927,7 +928,7 @@ function StepNamen({
         ))}
       </div>
 
-      {!online && names.length < 6 && (
+      {!online && names.length < MAX_PLAYERS && (
         <button className="btn mt-3 w-full" onClick={() => setNames((p) => [...p, { name: '' }])}>
           Noch jemanden eintragen
         </button>

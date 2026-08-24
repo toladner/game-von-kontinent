@@ -781,6 +781,23 @@ export function hasSavedGame(): boolean {
   }
 }
 
+/**
+ * The seals a house may wear, one per seat.
+ *
+ * The first six are the printed game's own pieces and stay where they are:
+ * `colorIndex` is handed out in join order and saved in the log, so moving
+ * one would repaint every game already in progress.
+ *
+ * The next four are for tables the box never anticipated. They are picked for
+ * the widest hue gaps left over — teal between blue and green, carmine
+ * between violet and red, olive between ochre and green, slate against black
+ * — and every one of them is dark enough for white lettering, because the
+ * chips and the helm switcher print names on top of them.
+ *
+ * Ten inks on one sepia chart is more than any palette reads cleanly at a
+ * glance, which is why the colour is never the only cue: a name or a portrait
+ * stands beside it everywhere it appears.
+ */
 export const PLAYER_COLORS = [
   { ink: '#1f4f8f', name: 'Blau' },
   { ink: '#b03027', name: 'Rot' },
@@ -788,6 +805,10 @@ export const PLAYER_COLORS = [
   { ink: '#8a6a1f', name: 'Ocker' },
   { ink: '#5a3570', name: 'Violett' },
   { ink: '#1b1b1b', name: 'Schwarz' },
+  { ink: '#0e6d72', name: 'Türkis' },
+  { ink: '#a52a5f', name: 'Karmin' },
+  { ink: '#5f6a1e', name: 'Oliv' },
+  { ink: '#55606a', name: 'Schiefer' },
 ] as const
 
 /**

@@ -517,7 +517,16 @@ function advanceTurn(ctx: EngineContext, draft: Draft, events: GameEvent[]): voi
 // The reducer
 // ---------------------------------------------------------------------------
 
-const MAX_PLAYERS = 6
+/**
+ * How many houses may sit at one table.
+ *
+ * The box holds six sets of pieces and the printed game stops there; this is
+ * not the printed game. Exported because three other places used to carry
+ * their own copy of the number — the names screen, the seal colours, and the
+ * start berths a cut-down map has to guarantee — and a table that can seat
+ * ten but only deal six harbours is worse than one that seats six.
+ */
+export const MAX_PLAYERS = 10
 
 export function applyAction(
   ctx: EngineContext,

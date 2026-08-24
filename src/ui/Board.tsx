@@ -467,7 +467,11 @@ export function Board({
         pos,
         from,
         sailing: Boolean(voyage),
-        nudge: vehicleIndex * 5 + playerIndex * 4 - 2,
+        // Ships lying in the same harbour are fanned out so none is hidden
+        // under another, and the fan is centred on the node — offsetting from
+        // the first house outwards left a table of ten with its last ship
+        // sitting a long way off the harbour it is actually in.
+        nudge: (playerIndex - (state.players.length - 1) / 2) * 4 + vehicleIndex * 5,
       }
     })
 

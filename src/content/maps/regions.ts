@@ -1,5 +1,6 @@
 import type { Continent, ContentPack, Country, GoodId, Port } from '../../engine/types'
 import { buildMap } from '../../engine/mapbuild'
+import { MAX_PLAYERS } from '../../engine/reducer'
 import { GOODS } from '../goods'
 import { GOODS_WELT } from '../goods-welt'
 import { KONJUNKTUR_DECK } from '../konjunktur'
@@ -111,10 +112,15 @@ function carve(continents: readonly Continent[]): {
  * Where a house may be based in this region.
  *
  * The world plan's own list is used first, but a cut leaves most of it behind
- * — Europe alone keeps three of them — and a table of six needs six berths.
+ * — Europe alone keeps three of them — and a full table needs a berth apiece.
  * The shortfall is made up from the region's own harbours, one country at a
  * time, so a full table is dealt across the map instead of into one bay.
+ *
+ * A couple more than the table can hold, so the same seed does not deal the
+ * same harbours to the first two houses in every game.
  */
+const WANTED_BERTHS = MAX_PLAYERS + 2
+
 function startBerths(ports: readonly Port[], kept: ReadonlySet<string>): string[] {
   const chosen = ALL_START.filter((id) => kept.has(id))
   const taken = new Set(chosen)
@@ -133,10 +139,10 @@ function startBerths(ports: readonly Port[], kept: ReadonlySet<string>): string[
     .map((c) => byCountry.get(c)!.sort((a, b) => a.id.localeCompare(b.id)))
 
   // One from each country, then a second from each, and so on.
-  for (let round = 0; chosen.length < 8 && round < 6; round++) {
+  for (let round = 0; chosen.length < WANTED_BERTHS && round < 8; round++) {
     for (const queue of queues) {
       const port = queue[round]
-      if (!port || chosen.length >= 8) continue
+      if (!port || chosen.length >= WANTED_BERTHS) continue
       chosen.push(port.id)
     }
   }

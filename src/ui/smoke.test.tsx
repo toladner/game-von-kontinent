@@ -2,7 +2,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from '@app/App'
-import { useGame } from '@app/store'
+import { PLAYER_COLORS, useGame } from '@app/store'
 import { buyOffers, legalSteps, portAt, routeTo } from '@engine/selectors'
 import { flagship } from '@engine/state'
 import { createGame } from '@engine/setup'
@@ -264,6 +264,50 @@ describe('the board', () => {
     expect(useGame.getState().state!.phase).toBe('over')
     expect(screen.getByText(/Wer hat den Handel gemacht/)).toBeTruthy()
     expect(screen.getByText('Schlußabrechnung')).toBeTruthy()
+  })
+})
+
+describe('a full table', () => {
+  it('seats ten houses, each with its own harbour and its own seal', () => {
+    const ctx = useGame.getState().ctx
+    const names = ['Ada', 'Bo', 'Cem', 'Dea', 'Eli', 'Fay', 'Gus', 'Hal', 'Ida', 'Jon']
+    act(() => useGame.getState().begin(names, { totalRounds: 20, seed: 'volles-haus' }))
+
+    const state = useGame.getState().state!
+    expect(state.players).toHaveLength(10)
+    // No two houses in the same berth, and no two wearing the same seal.
+    expect(new Set(state.players.map((p) => p.homePort)).size).toBe(10)
+    expect(new Set(state.players.map((p) => p.colorIndex)).size).toBe(10)
+    // Every seat has an ink of its own; none falls back by wrapping round.
+    expect(new Set(state.players.map((p) => PLAYER_COLORS[p.colorIndex]!.ink)).size).toBe(10)
+    void ctx
+  })
+
+  it('turns the eleventh away', () => {
+    const ctx = useGame.getState().ctx
+    let s = createGame(ctx, { seed: 'elfter', joinPolicy: 'jederzeit' })
+    for (let i = 0; i < 10; i++) {
+      s = applyAction(ctx, s, { type: 'join', playerId: `p${i}`, name: `Haus ${i}` }).state
+    }
+    expect(s.players).toHaveLength(10)
+    const refused = applyAction(ctx, s, { type: 'join', playerId: 'p10', name: 'Zu spät' })
+    expect(refused.events[0]).toMatchObject({ type: 'rejected' })
+    expect(refused.state.players).toHaveLength(10)
+  })
+
+  it('lets the names screen fill all ten seats and then stops', () => {
+    render(<App />)
+    fireEvent.click(screen.getByText('Klassisch'))
+
+    const add = () => screen.queryByText('Noch jemanden eintragen')
+    // Two slots are offered to begin with.
+    expect(screen.getByLabelText('Name der 2. Person')).toBeTruthy()
+    for (let seat = 3; seat <= 10; seat++) {
+      fireEvent.click(add()!)
+      expect(screen.getByLabelText(`Name der ${seat}. Person`), `seat ${seat}`).toBeTruthy()
+    }
+    // Ten is the table; there is no eleventh chair to pull up.
+    expect(add()).toBeNull()
   })
 })
 
