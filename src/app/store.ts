@@ -72,6 +72,15 @@ export interface LogLine {
    * A collision names two: it happened to both of them.
    */
   readonly who: readonly string[]
+  /**
+   * When it happened, by the game's own clock rather than the reader's.
+   *
+   * Taken from `state.now`, so a journal rebuilt by folding the action log
+   * carries the times the events actually happened at, not the time somebody
+   * reopened the app. Meaningless in round play, where the clock never runs
+   * and the round track does the dividing instead.
+   */
+  readonly at: number
 }
 
 /** Who is at this device, and how it is connected. */
@@ -196,7 +205,7 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
     text: string,
     tone: LogLine['tone'] = 'neutral',
     who: readonly string[] = 'playerId' in event ? [event.playerId] : [],
-  ): LogLine => ({ id: ++logId, text, tone, who })
+  ): LogLine => ({ id: ++logId, text, tone, who, at: state.now })
 
   switch (event.type) {
     case 'rolled':
@@ -308,11 +317,12 @@ function foldWithLog(
   actions: readonly GameAction[],
 ): { state: GameState; log: LogLine[] } {
   let state = initial
-  // First, so that it takes the lowest id: the journal is read newest-first
-  // and `markNewsRead` uses the head's id as the high-water mark, so an entry
-  // sitting at the bottom of the list with the highest number would count as
-  // unread for ever.
-  const lines: LogLine[] = [openingLine(initial.config.startingCapital)]
+  // Claimed before anything else, so the opening entry takes the lowest id:
+  // the journal is read newest-first and `markNewsRead` uses the head's id as
+  // the high-water mark, so an entry sitting at the bottom of the list with
+  // the highest number would count as unread for ever.
+  const openingId = ++logId
+  const lines: LogLine[] = []
   for (const action of actions) {
     const result = applyAction(ctx, state, action)
     state = result.state
@@ -322,16 +332,25 @@ function foldWithLog(
     }
   }
   // The store keeps the journal newest first; a fold produces it oldest first.
-  return { state, log: lines.reverse().slice(0, MAX_LOG) }
+  const log = lines.reverse().slice(0, MAX_LOG)
+  // The clock has not been set at `initial` — in a real-time game the first
+  // action in the log is the tick that starts it — so the opening entry
+  // borrows the time of the first thing that happened after it.
+  log.push({
+    ...openingLine(state.config.startingCapital, log.at(-1)?.at ?? state.now),
+    id: openingId,
+  })
+  return { state, log }
 }
 
 /** The line every game opens with, written where the oldest entries go. */
-function openingLine(startingCapital: number): LogLine {
+function openingLine(startingCapital: number, at: number): LogLine {
   return {
     id: ++logId,
     text: `Die Exportbank kreditiert jedem Mitspieler ${startingCapital.toLocaleString('de-DE')} Einheiten Betriebskapital.`,
     tone: 'wichtig',
     who: [],
+    at,
   }
 }
 
@@ -435,7 +454,7 @@ export const useGame = create<Store>((set, get) => ({
       truth: state,
       net: null,
       localActing: firstActing,
-      log: [openingLine(startingCapital)],
+      log: [openingLine(startingCapital, state.now)],
       newsSeen: 0,
       lastEvents: [],
       notice: null,

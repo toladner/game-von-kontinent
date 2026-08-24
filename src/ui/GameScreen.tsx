@@ -434,6 +434,8 @@ export function GameScreen() {
         <NewsSheet
           log={log}
           players={state.players}
+          realtime={realtime}
+          now={now || Date.now()}
           sinceId={newsMark}
           snap={snap}
           onSnap={close}
@@ -1194,12 +1196,17 @@ function FinalSheet({
 function NewsSheet({
   log,
   players,
+  /** Real-time play divides the paper by the day and stamps every entry. */
+  realtime,
+  now,
   sinceId,
   snap,
   onSnap,
 }: {
   log: LogLine[]
   readonly players: readonly PlayerState[]
+  realtime: boolean
+  now: number
   /** Entries above this id are new since the sheet was last opened. */
   sinceId: number
   snap: SheetSnap
@@ -1219,7 +1226,13 @@ function NewsSheet({
     [log, only],
   )
   const fresh = shown.filter((l) => l.id > sinceId).length
-  const rounds = useMemo(() => groupByRound(shown), [shown])
+  // The clock is redrawn every second; the headings only ever change at
+  // midnight, so they are grouped against the day rather than the instant.
+  const today = new Date(now).setHours(0, 0, 0, 0)
+  const rounds = useMemo(
+    () => (realtime ? groupByDay(shown, today) : groupByRound(shown)),
+    [shown, realtime, today],
+  )
   const named = only ? (players.find((p) => p.id === only)?.name ?? null) : null
 
   // The current round is the one you came to read; older ones fold away so a
@@ -1306,14 +1319,20 @@ function NewsSheet({
                     {group.lines.map((line) => (
                       <li
                         key={line.id}
-                        className={
+                        className={`flex gap-2 ${
                           line.id > sinceId
                             ? 'border-gold border-l-2 pl-2'
                             : 'border-l-2 border-transparent pl-2'
-                        }
+                        }`}
                       >
+                        {/* Die Uhrzeit nur dort, wo eine Uhr läuft. */}
+                        {realtime && (
+                          <span className="tnum text-ink-faint shrink-0 py-0.5 text-[11px] leading-snug">
+                            {clockText(line.at)}
+                          </span>
+                        )}
                         <p
-                          className={`py-0.5 text-[13px] leading-snug ${
+                          className={`min-w-0 flex-1 py-0.5 text-[13px] leading-snug ${
                             line.tone === 'gut'
                               ? 'text-press'
                               : line.tone === 'schlecht'
@@ -1379,6 +1398,57 @@ function FilterChip({
   )
 }
 
+interface NewsGroup {
+  key: string
+  title: string
+  lines: LogLine[]
+}
+
+/**
+ * Fold the flat log into one section per day.
+ *
+ * What the round track does for a game of throws, the calendar does for one
+ * that runs on real hours: a real-time season has no rounds at all, so the
+ * journal used to arrive as a single undivided heap headed "Laufende Runde".
+ *
+ * The log already runs newest first, so the days do too.
+ */
+function groupByDay(log: LogLine[], now: number): NewsGroup[] {
+  const groups: NewsGroup[] = []
+  for (const line of log) {
+    const key = dayKey(line.at)
+    let group = groups.at(-1)
+    if (!group || group.key !== key) {
+      group = { key, title: dayTitle(line.at, now), lines: [] }
+      groups.push(group)
+    }
+    group.lines.push(line)
+  }
+  return groups
+}
+
+const dayKey = (at: number) => {
+  const d = new Date(at)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+
+/**
+ * "Heute", "Gestern", or the day written out.
+ *
+ * A season is a day or two long, so nearly every heading is one of the first
+ * two — and a date is a poor thing to have to work out when the answer is
+ * "an hour ago".
+ */
+function dayTitle(at: number, now: number): string {
+  if (dayKey(at) === dayKey(now)) return 'Heute'
+  if (dayKey(at) === dayKey(now - 86_400_000)) return 'Gestern'
+  return new Date(at).toLocaleDateString('de-DE', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+}
+
 /**
  * Fold the flat log into one section per round.
  *
@@ -1386,7 +1456,7 @@ function FilterChip({
  * opens — so in this order a round's heading arrives *after* the entries that
  * belong to it. Anything above the first heading is the round in progress.
  */
-function groupByRound(log: LogLine[]): { key: string; title: string; lines: LogLine[] }[] {
+function groupByRound(log: LogLine[]): NewsGroup[] {
   const groups: { key: string; title: string; lines: LogLine[] }[] = []
   let pending: LogLine[] = []
 

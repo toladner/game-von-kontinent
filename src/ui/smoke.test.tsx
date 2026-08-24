@@ -1305,6 +1305,60 @@ describe('reading one house’s column', () => {
     expect(headings.filter((h) => /Runde \d/.test(h)).length).toBeGreaterThan(0)
   })
 
+  it('divides a real-time season by the day and stamps the hour', () => {
+    // A season on the clock has no rounds at all, so the journal used to
+    // arrive as one undivided heap headed "Laufende Runde".
+    render(<App />)
+    act(() =>
+      useGame.getState().begin(['Ada', 'Bo'], {
+        travel: 'echtzeit',
+        minutesPerPip: 1,
+        durationHours: 48,
+        seed: 'tagebuch',
+      }),
+    )
+    const ctx = useGame.getState().ctx
+    const p = useGame.getState().state!.players[0]!
+    const from = flagship(p).nodeId
+    const to = [...ctx.portsById.keys()].find(
+      (id) => id !== from && routeTo(ctx, from, null, id).length >= 2,
+    )!
+    act(() => useGame.getState().dispatch({ type: 'setCourse', to }))
+    // Push the clock over midnight so there are two days to divide.
+    act(() =>
+      useGame
+        .getState()
+        .dispatch({ type: 'tick', at: useGame.getState().state!.now + 26 * 3_600_000 }),
+    )
+
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+
+    const headings = [...document.querySelectorAll('aside.sheet section button')].map(
+      (b) => b.textContent ?? '',
+    )
+    expect(headings.some((h) => h.includes('Heute'))).toBe(true)
+    expect(headings.every((h) => !h.includes('Runde'))).toBe(true)
+    expect(headings.length).toBeGreaterThan(1)
+
+    // Every entry says when, in hours and minutes.
+    const stamps = [...document.querySelectorAll('aside.sheet ol li span')].map(
+      (s) => s.textContent ?? '',
+    )
+    expect(stamps.length).toBeGreaterThan(0)
+    expect(stamps.every((s) => /^\d{2}:\d{2}$/.test(s))).toBe(true)
+  })
+
+  it('leaves a game of throws divided by its rounds, with no clock', () => {
+    openNews('keine-uhr')
+    const headings = [...document.querySelectorAll('aside.sheet section button')].map(
+      (b) => b.textContent ?? '',
+    )
+    expect(headings.some((h) => /Runde \d/.test(h))).toBe(true)
+    expect(document.querySelectorAll('aside.sheet ol li span')).toHaveLength(0)
+  })
+
   it('offers no filter at a table for one', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada'], { totalRounds: 20, seed: 'allein' }))
