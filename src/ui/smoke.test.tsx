@@ -7,6 +7,8 @@ import { buyOffers, legalSteps, portAt, routeTo } from '@engine/selectors'
 import { flagship } from '@engine/state'
 import { createGame } from '@engine/setup'
 import { applyAction, replay } from '@engine/reducer'
+import { CLASSIC_PACK } from '@content/maps/classic'
+import { KonjunkturSlip } from './Cards'
 
 /**
  * A stand-in for looking at the thing: boots the real app, walks the real
@@ -1692,5 +1694,29 @@ describe('a second device with no seat', () => {
       useGame.getState().dispatch({ type: 'buy', goodId: 1 })
     })
     expect(useGame.getState().notice).toBeTruthy()
+  })
+})
+
+/**
+ * The colour of the paper a world card is printed on.
+ *
+ * jsdom does no painting, so what is checked here is the wiring: the slip
+ * asks the engine for the card's temper and carries it as a class. What the
+ * three classes look like is the stylesheet's business.
+ */
+describe('the stock a Konjunkturkarte is printed on', () => {
+  const titled = (title: string) => CLASSIC_PACK.konjunktur.find((c) => c.title === title)!
+
+  it('prints good news on green and bad news on red', () => {
+    const { container, rerender } = render(<KonjunkturSlip card={titled('Hausse')} />)
+    expect(container.querySelector('.paper-slip')!.className).toContain('slip-gut')
+
+    rerender(<KonjunkturSlip card={titled('Baisse')} />)
+    expect(container.querySelector('.paper-slip')!.className).toContain('slip-schlecht')
+  })
+
+  it('leaves the card that cuts both ways on straw', () => {
+    const { container } = render(<KonjunkturSlip card={titled('Hafengebühr')} />)
+    expect(container.querySelector('.paper-slip')!.className).toContain('slip-gemischt')
   })
 })

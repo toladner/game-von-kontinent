@@ -3,7 +3,7 @@ import { activePlayer, flagship, netWorth, type VehicleInstance } from './state'
 import { goodOf, type EngineContext } from './context'
 import { edgeKey, isPort } from './mapbuild'
 import { exportsAt, sellPriceAt } from './market'
-import type { Continent, GoodId, Money, NodeId, PortId } from './types'
+import type { Continent, GoodId, KonjunkturCard, Money, NodeId, PortId } from './types'
 
 /** The port the given ship lies in, or null if it is on open water. */
 export function portAt(ctx: EngineContext, nodeId: NodeId): PortId | null {
@@ -714,4 +714,49 @@ export function fleetLimitNote(maxFleetSize: number): string {
   return maxFleetSize <= 1
     ? 'Ein Haus, ein Schiff — so will es die Anleitung.'
     : `Mehr als ${maxFleetSize} Schiffe verwaltet kein Haus.`
+}
+
+/** Whether a world card is worth having drawn. */
+export type Tenor = 'gut' | 'gemischt' | 'schlecht'
+
+/**
+ * Read the temper of a Konjunkturkarte off its effects.
+ *
+ * The deck carries no such field and the printed cards never needed one: a
+ * merchant reading "Verkaufspreise + 25 %" knows at a glance what he is
+ * holding. On a screen the glance is worth having back, so it is counted —
+ * every effect once, for the house or against it.
+ *
+ * A card that does both at once lands in the middle, which is honestly where
+ * it belongs: Hafengebühr charges 5.000 and lifts every price by a fifth, and
+ * whether that was a good morning depends on what is in your hold.
+ */
+export function konjunkturTenor(card: KonjunkturCard): Tenor {
+  let sum = 0
+  for (const effect of card.effects) {
+    switch (effect.kind) {
+      case 'salePriceDelta':
+      case 'regionalPriceDelta':
+      case 'goodPriceDelta':
+        sum += Math.sign(effect.percent)
+        break
+      case 'payoutToDrawer':
+        sum += 1
+        break
+      case 'regionalLevy':
+        sum += effect.sign
+        break
+      case 'leviedOnAllShips':
+      case 'portFeeAllInPort':
+      case 'feeForDrawer':
+      case 'stormInRegion':
+      case 'cargoDamagedInRegion':
+      case 'cargoLostByDrawer':
+      case 'delayInRegion':
+      case 'portClosed':
+        sum -= 1
+        break
+    }
+  }
+  return sum > 0 ? 'gut' : sum < 0 ? 'schlecht' : 'gemischt'
 }

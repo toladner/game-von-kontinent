@@ -334,8 +334,11 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
     // so filtering the paper down to one house must not lose it.
     case 'telegramm':
       return line(`${nameOf(event.playerId)} telegrafiert: „${event.text}“`, 'wichtig', [])
+    // A market that says nothing is not news. The strip already reads ±0 %
+    // and the Saison sheet says it in full; a line in the paper for every
+    // quiet turn buried the turns where something actually happened.
     case 'marketCalm':
-      return line('Die Börse meldet nichts. Die letzte Notierung ist damit verfallen.', 'neutral', [])
+      return null
     case 'roundStarted':
       return line(
         `Runde ${event.round}${event.red ? ' — rotes Feld, die Konjunktur spricht mit.' : '.'}`,

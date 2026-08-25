@@ -1,3 +1,4 @@
+import { konjunkturTenor } from '@engine/selectors'
 import type { Good, KonjunkturCard } from '@engine/types'
 import { GoodIcon } from './GoodIcon'
 
@@ -138,8 +139,11 @@ export function KonjunkturSlip({
   standing?: boolean
 }) {
   const note = standing ? standingNote(card) : null
+  // Good news on green paper, bad on red, and the cards that cut both ways on
+  // the straw-coloured stock — the temper of the card before a word is read.
+  const tenor = konjunkturTenor(card)
   return (
-    <div className="paper-slip coupon-edge w-full rotate-[-1.2deg] px-4 py-5">
+    <div className={`paper-slip slip-${tenor} coupon-edge w-full rotate-[-1.2deg] px-4 py-5`}>
       <p className="smallcaps text-center text-[10px] tracking-[0.3em] text-black/55">
         Konjunkturkarte
       </p>

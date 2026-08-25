@@ -8,6 +8,7 @@ import {
   castOffMs,
   closureAt,
   continentOf,
+  konjunkturTenor,
   legalSteps,
   legMsFor,
   portAt,
@@ -1676,5 +1677,76 @@ describe('a harbour shut to trade', () => {
     const over = applyAction(ctx, laden, { type: 'tick', at: laden.endsAt + 1000 })
     expect(over.state.phase).toBe('over')
     expect(flagship(over.state.players[0]!).cargo).toHaveLength(0)
+  })
+})
+
+/**
+ * The temper of a world card.
+ *
+ * The screen dyes the slip by it, so what matters is that the reading matches
+ * what a merchant would say about the card without being told.
+ */
+describe('reading the temper of a Konjunkturkarte', () => {
+  const printed = CLASSIC_PACK.konjunktur
+  const erweitert = CLASSIC_PACK.konjunkturErweitert ?? []
+  const titled = (title: string): KonjunkturCard =>
+    [...printed, ...erweitert].find((c) => c.title === title)!
+
+  it('calls a Hausse good and a Baisse bad', () => {
+    expect(konjunkturTenor(titled('Hausse'))).toBe('gut')
+    expect(konjunkturTenor(titled('Baisse'))).toBe('schlecht')
+  })
+
+  it('reads a levy as bad however politely it is worded', () => {
+    expect(konjunkturTenor(titled('Steuer'))).toBe('schlecht')
+    expect(konjunkturTenor(titled('Versicherung'))).toBe('schlecht')
+    expect(konjunkturTenor(titled('Liegegebühr'))).toBe('schlecht')
+  })
+
+  it('reads a premium as good, because it is paid to the house', () => {
+    expect(konjunkturTenor(titled('Hafenprämie'))).toBe('gut')
+    expect(konjunkturTenor(titled('Ausfuhrprämie'))).toBe('gut')
+  })
+
+  it('puts a card that charges and lifts at once in the middle', () => {
+    // Hafengebühr takes 5.000 from every ship in port and adds a fifth to
+    // every price on the board. Whether that was a good morning depends on
+    // what is in the hold, which is the definition of the middle.
+    const gebuehr = titled('Hafengebühr')
+    expect(gebuehr.effects).toHaveLength(2)
+    expect(konjunkturTenor(gebuehr)).toBe('gemischt')
+  })
+
+  it('lets a fee and a fall compound into a plain bad card', () => {
+    expect(konjunkturTenor(titled('Entladegeld'))).toBe('schlecht')
+  })
+
+  it('weighs a money order against what it does to prices', () => {
+    const orders = printed.filter((c) => c.title === 'Telegramm')
+    // 10.000 and prices up; 15.000 and prices level; 20.000 and prices down.
+    expect(orders.map(konjunkturTenor)).toEqual(['gut', 'gut', 'gemischt'])
+  })
+
+  it('reads weather and a shut harbour as bad', () => {
+    const bad = erweitert.filter((c) =>
+      c.effects.some(
+        (e) =>
+          e.kind === 'stormInRegion' ||
+          e.kind === 'cargoDamagedInRegion' ||
+          e.kind === 'delayInRegion' ||
+          e.kind === 'portClosed' ||
+          e.kind === 'cargoLostByDrawer',
+      ),
+    )
+    expect(bad.length).toBeGreaterThan(5)
+    expect(bad.every((c) => konjunkturTenor(c) === 'schlecht')).toBe(true)
+  })
+
+  it('has a reading for every card in both decks', () => {
+    const all = [...printed, ...erweitert]
+    expect(all.every((c) => ['gut', 'gemischt', 'schlecht'].includes(konjunkturTenor(c)))).toBe(true)
+    // And all three tempers are actually used, or the colour says nothing.
+    const tempers = new Set(all.map(konjunkturTenor))
+    expect([...tempers].sort()).toEqual(['gemischt', 'gut', 'schlecht'])
   })
 })

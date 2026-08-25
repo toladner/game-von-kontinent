@@ -305,9 +305,35 @@ body {
 }
 
 .paper-slip {
-  background-color: var(--color-slip);
-  background-image: linear-gradient(170deg, rgb(255 255 240 / 0.55), rgb(80 100 40 / 0.14));
-  border: 1px solid rgb(70 90 40 / 0.4);
+  --slip-paper: var(--color-slip);
+  --slip-shade: 80 100 40;
+  --slip-edge: 70 90 40;
+  background-color: var(--slip-paper);
+  background-image: linear-gradient(170deg, rgb(255 255 240 / 0.55), rgb(var(--slip-shade) / 0.14));
+  border: 1px solid rgb(var(--slip-edge) / 0.4);
+}
+
+/*
+ * Konjunkturkarten came off the same press in one colour, but a screen can do
+ * what the press could not: say how the morning went before the card is read.
+ * Green is the house's, red is against it, straw is the card that does both.
+ * The paper stays paper — same gradient, same cut edge, only the stock is
+ * dyed, so a bad card still looks like it came out of the same box.
+ *
+ * .slip-gut carries no rule of its own: green is the stock the slips were
+ * printed on, and it stays the paper every other slip in the game uses.
+ */
+
+.slip-gemischt {
+  --slip-paper: #e6d9a2;
+  --slip-shade: 120 96 30;
+  --slip-edge: 112 90 34;
+}
+
+.slip-schlecht {
+  --slip-paper: #e8bfaf;
+  --slip-shade: 130 58 42;
+  --slip-edge: 122 54 40;
 }
 
 /*
