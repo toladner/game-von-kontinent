@@ -134,7 +134,19 @@ export function GameScreen() {
     return () => clearTimeout(t)
   }, [notice, dismiss])
 
-  const unread = useMemo(() => log.filter((l) => l.id > newsSeen).length, [log, newsSeen])
+  /**
+   * What one has not seen yet.
+   *
+   * One's own telegram does not count. The form to send it sits inside this
+   * very sheet, so the pill lit up saying "1 ungelesen" about a message the
+   * player had just typed, while looking at it.
+   */
+  const mine = net?.playerId ?? null
+  const isOwnWord = (l: LogLine) => l.kind === 'telegramm' && mine !== null && l.by === mine
+  const unread = useMemo(
+    () => log.filter((l) => l.id > newsSeen && !isOwnWord(l)).length,
+    [log, newsSeen, mine],
+  )
 
   /**
    * Where the unread mark sat when the sheet was opened. Opening marks
@@ -156,6 +168,13 @@ export function GameScreen() {
     if (s === 'closed') setKind(null)
     else setSnap(s)
   }
+
+  // Anything that lands while the sheet is open has been read by definition:
+  // it is on the screen the player is looking at. Without this the pill began
+  // counting again the moment a storm blew up under the reader's eyes.
+  useEffect(() => {
+    if (kind === 'nachrichten') markNewsRead()
+  }, [kind, log, markNewsRead])
 
   const highlights = useMemo(
     () => marketReport(ctx, state, player, 5).map((d) => d.portId),
@@ -453,6 +472,7 @@ export function GameScreen() {
           realtime={realtime}
           now={now || Date.now()}
           sinceId={newsMark}
+          mine={mine}
           snap={snap}
           onSnap={close}
           // Nur wo jemand am anderen Ende sitzt: ein Tisch über das Netz,
@@ -1247,6 +1267,7 @@ function NewsSheet({
   realtime,
   now,
   sinceId,
+  mine,
   snap,
   onSnap,
   onSend,
@@ -1257,6 +1278,8 @@ function NewsSheet({
   now: number
   /** Entries above this id are new since the sheet was last opened. */
   sinceId: number
+  /** This device's own house, whose telegrams are not news to it. */
+  mine: string | null
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
   /** Null where there is nobody to telegraph, and the form stays away. */
@@ -1285,7 +1308,11 @@ function NewsSheet({
     }
     return log.filter((l) => l.who.length === 0 || l.who.includes(only.id))
   }, [log, only])
-  const fresh = shown.filter((l) => l.id > sinceId).length
+  // A line one wrote oneself never gets the "neu" rule: it appeared because
+  // the reader pressed Aufgeben, which is the opposite of news.
+  const unseen = (l: LogLine) =>
+    l.id > sinceId && !(l.kind === 'telegramm' && mine !== null && l.by === mine)
+  const fresh = shown.filter(unseen).length
   // The clock is redrawn every second; the headings only ever change at
   // midnight, so they are grouped against the day rather than the instant.
   const today = new Date(now).setHours(0, 0, 0, 0)
@@ -1370,7 +1397,7 @@ function NewsSheet({
         <div className="space-y-2">
           {rounds.map((group, i) => {
             const open = isOpen(group.key, i === 0)
-            const neu = group.lines.filter((l) => l.id > sinceId).length
+            const neu = group.lines.filter(unseen).length
             return (
               <section key={group.key}>
                 <button
@@ -1402,7 +1429,7 @@ function NewsSheet({
                       <li
                         key={line.id}
                         className={`flex gap-2 ${
-                          line.id > sinceId
+                          unseen(line)
                             ? 'border-gold border-l-2 pl-2'
                             : 'border-l-2 border-transparent pl-2'
                         }`}

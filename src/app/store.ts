@@ -73,6 +73,15 @@ export interface LogLine {
    */
   readonly kind: GameEvent['type']
   /**
+   * The house that spoke or acted, where the event named one.
+   *
+   * Not the same question as `who`, which asks whose news an entry is. A
+   * telegram belongs to nobody's column — it went to the whole table — but it
+   * was still written by somebody, and one's own words are not news to
+   * oneself.
+   */
+  readonly by?: string
+  /**
    * The houses this entry concerns. Empty means the world at large — a round
    * opening, a storm, the close of the season — which is what lets the
    * journal be filtered to one house without losing the scaffolding that
@@ -214,7 +223,15 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
     text: string,
     tone: LogLine['tone'] = 'neutral',
     who: readonly string[] = 'playerId' in event ? [event.playerId] : [],
-  ): LogLine => ({ id: ++logId, text, tone, who, kind: event.type, at: state.now })
+  ): LogLine => ({
+    id: ++logId,
+    text,
+    tone,
+    who,
+    kind: event.type,
+    ...('playerId' in event ? { by: event.playerId } : {}),
+    at: state.now,
+  })
 
   switch (event.type) {
     case 'rolled':

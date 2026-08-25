@@ -1525,6 +1525,62 @@ describe('telegraphing the table', () => {
     expect(headings.some((h) => /Runde \d|Laufende Runde/.test(h))).toBe(true)
   })
 
+  it('does not report one’s own telegram back as unread', () => {
+    // The form sits inside this very sheet, so the pill lit up saying
+    // "1 ungelesen" about a message the player had just typed, while looking
+    // straight at it.
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'draht-gelesen' }))
+    const mine = useGame.getState().state!.players[0]!.id
+    const pill = () => screen.getByLabelText(/^Nachrichten/).getAttribute('aria-label')
+    const before = pill()
+
+    // Sent while this device is still reckoned local, so the line really
+    // lands in the journal; then the device learns whose seat it holds.
+    act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'kaufe kaffee' }))
+    act(() =>
+      useGame.setState({
+        net: { code: 'WZUH', status: 'verbunden', playerId: mine, online: [] },
+      }),
+    )
+
+    // The strip counts exactly what it counted before, and the rule down the
+    // left of the entry stays off too.
+    expect(pill()).toBe(before)
+
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    const own = [...document.querySelectorAll('aside.sheet ol li')].find((li) =>
+      (li.textContent ?? '').includes('kaufe kaffee'),
+    )!
+    expect(own.className).not.toContain('border-gold')
+  })
+
+  it('still rules off what somebody else wrote', () => {
+    // The other half of the same rule: a telegram from the far side of the
+    // world is exactly the thing the mark is for.
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'draht-fremd' }))
+    const bo = useGame.getState().state!.players[1]!.id
+    const ada = useGame.getState().state!.players[0]!.id
+    const count = () =>
+      Number(
+        /(\d+) ungelesen/.exec(
+          screen.getByLabelText(/^Nachrichten/).getAttribute('aria-label') ?? '',
+        )?.[1] ?? 0,
+      )
+    const before = count()
+
+    act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'biete zucker', by: bo }))
+    act(() =>
+      useGame.setState({
+        net: { code: 'WZUH', status: 'verbunden', playerId: ada, online: [] },
+      }),
+    )
+    expect(count()).toBe(before + 1)
+  })
+
   it('prints the message in the paper, in nobody’s column', () => {
     openPaper('draht-blatt')
     act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'kaufe kaffee jeden preis' }))
