@@ -587,40 +587,24 @@ const HEADER_HYSTERESIS = 0.05
  * Auf einem schmalen Gerät ist die volle Karte fast so breit wie die Leiste,
  * und zwei Drittel davon — Name, Ladung, Ladeluken — stehen dort dauerhaft,
  * obwohl man sie zweimal in der Partie braucht. Das Bildnis allein sagt, wer
- * am Zug ist; alles andere klappt auf einen Tipp hervor und liegt dann über
- * dem Plan, wo es Platz genug hat.
+ * am Zug ist.
+ *
+ * Der Tipp darauf öffnet das Kontor, genau wie der Tipp auf die volle Karte.
+ * Erst aufklappen und dann noch einmal tippen wären zwei Wege zu derselben
+ * Seite, und der erste hätte nichts gezeigt, was auf der zweiten nicht auch
+ * steht.
  */
-export function HouseBadge(props: ComponentProps<typeof PlayerHUD>) {
-  const [open, setOpen] = useState(false)
-  const color = PLAYER_COLORS[props.player.colorIndex % PLAYER_COLORS.length]!
+export function HouseBadge({ player, rank, onOpen }: ComponentProps<typeof PlayerHUD>) {
+  const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        aria-label={`Handelshaus ${props.player.name}: ${props.player.cash.toLocaleString('de-DE')} Einheiten. ${open ? 'Zuklappen' : 'Aufklappen'}.`}
-        className="paper anim-rise pointer-events-auto grid h-12 w-12 place-items-center rounded-full border-2 shadow-lg"
-        style={{ borderColor: color.ink }}
-      >
-        <Portrait traits={props.player.persona.portrait} size={36} />
-      </button>
-
-      {open && (
-        <div className="anim-unfold absolute top-full left-0 z-10 mt-2 w-max origin-top-left">
-          <PlayerHUD {...props} />
-          {/* Derselbe Knopf wie am Blatt: gleiches Zeichen, gleiche Schaltfläche,
-              gleiches Wort. Ein eigenes Kreuz für diese eine Karte hieße, daß
-              der Spieler zweimal lernen muß, wie man etwas zumacht. */}
-          <button
-            onClick={() => setOpen(false)}
-            aria-label="Schließen"
-            className="btn btn-sm pointer-events-auto absolute -top-2 -right-2 !px-2 !py-0.5 text-xs"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-    </div>
+    <button
+      onClick={onOpen}
+      aria-label={`${rank !== null ? `Platz ${rank}, ` : ''}${player.name}, ${player.cash.toLocaleString('de-DE')} Einheiten. Kontor öffnen.`}
+      className="paper anim-rise pointer-events-auto grid h-12 w-12 place-items-center rounded-full border-2 shadow-lg"
+      style={{ borderColor: color.ink }}
+    >
+      <Portrait traits={player.persona.portrait} size={36} />
+    </button>
   )
 }
 

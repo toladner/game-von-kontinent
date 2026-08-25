@@ -1850,56 +1850,47 @@ describe('a telegram in the sender’s colour', () => {
  * Verhalten danach: was das Bildnis zeigt, und was der Tipp darauf hervorholt.
  */
 describe('the house folded down to its portrait', () => {
+  let opened = 0
   const house = () => {
     const s = useGame.getState()
-    const player = s.state!.players[0]!
     return {
       ctx: s.ctx,
-      player,
+      player: s.state!.players[0]!,
       cargoCount: 0,
       purchasesLeft: null,
       rank: 1,
-      onOpen: () => {},
+      onOpen: () => {
+        opened += 1
+      },
     }
   }
 
   beforeEach(() => {
+    opened = 0
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'bildnis' }))
   })
 
-  it('shows the portrait and keeps the ledger to itself', () => {
+  it('shows the portrait and keeps the ledger for the Kontor', () => {
     render(<HouseBadge {...house()} />)
-    expect(screen.getByLabelText(/Aufklappen\.$/)).toBeTruthy()
     expect(screen.queryByText('Ada')).toBeNull()
+    expect(document.querySelector('svg')).toBeTruthy()
   })
 
-  it('unfolds the whole card on a tap, and folds it away on the next', () => {
+  it('opens the Kontor on a tap, like the full card does', () => {
+    // Kein Zwischenschritt: aufklappen hätte nichts gezeigt, was im Kontor
+    // nicht auch steht, und wäre ein Tipp mehr auf demselben Weg.
     render(<HouseBadge {...house()} />)
     act(() => {
-      fireEvent.click(screen.getByLabelText(/Aufklappen\.$/))
+      fireEvent.click(screen.getByRole('button'))
     })
-    expect(screen.getByText('Ada')).toBeTruthy()
-    expect(document.querySelector('.anim-unfold')).toBeTruthy()
-
-    act(() => {
-      fireEvent.click(screen.getByLabelText(/Zuklappen\.$/))
-    })
-    expect(screen.queryByText('Ada')).toBeNull()
+    expect(opened).toBe(1)
   })
 
-  it('offers the same cross as every other card, for anyone who looks for one', () => {
+  it('says whose house it is, and how it stands, for anyone who cannot see it', () => {
     render(<HouseBadge {...house()} />)
-    act(() => {
-      fireEvent.click(screen.getByLabelText(/Aufklappen\.$/))
-    })
-    // Dasselbe Zeichen und dieselbe Schaltfläche wie am Blatt.
-    const cross = screen.getByLabelText('Schließen')
-    expect(cross.textContent).toBe('✕')
-    expect(cross.className).toContain('btn-sm')
-
-    act(() => {
-      fireEvent.click(screen.getByLabelText('Schließen'))
-    })
-    expect(screen.queryByText('Ada')).toBeNull()
+    const label = screen.getByRole('button').getAttribute('aria-label')!
+    expect(label).toContain('Ada')
+    expect(label).toContain('Platz 1')
+    expect(label).toContain('Kontor öffnen')
   })
 })
