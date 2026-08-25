@@ -37,6 +37,25 @@ export function clockText(at: number): string {
   return new Date(at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
 }
 
+/**
+ * The largest unit that is not zero: "5 Tage", "3 Std", "20 Min".
+ *
+ * For the strip, where the figure has to fit beside the Handelshaus on a
+ * telephone. "129 Std 18 Min" is four words to say what "5 Tage" says in two,
+ * and nobody plans a season around the eighteen minutes. The exact figure is
+ * still there for anyone who taps it — and in the aria-label, where the length
+ * costs nothing.
+ */
+export function roughDuration(ms: number): string {
+  if (ms <= 0) return 'abgelaufen'
+  const minutes = Math.floor(ms / 60_000)
+  if (minutes < 60) return `${minutes} Min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 48) return `${hours} Std`
+  const days = Math.floor(hours / 24)
+  return `${days} Tage`
+}
+
 /** "3 Std 20 Min" — a plain duration, no preposition. */
 export function durationText(ms: number): string {
   if (ms <= 0) return 'abgelaufen'

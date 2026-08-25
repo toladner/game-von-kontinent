@@ -9,6 +9,7 @@ import { createGame } from '@engine/setup'
 import { applyAction, replay } from '@engine/reducer'
 import { CLASSIC_PACK } from '@content/maps/classic'
 import { KonjunkturSlip } from './Cards'
+import { HouseBadge } from './GameScreen'
 
 /**
  * A stand-in for looking at the thing: boots the real app, walks the real
@@ -1838,5 +1839,62 @@ describe('a telegram in the sender’s colour', () => {
     const name = entry.querySelector('p span') as HTMLElement
     expect(name.textContent).toBe('Bo')
     expect(name.style.color).toBe(ink)
+  })
+})
+
+/**
+ * Das Handelshaus, eingeklappt.
+ *
+ * Ob es eingeklappt wird, entscheidet eine Messung, die jsdom nicht anstellen
+ * kann — dort ist alles null Pixel breit. Was hier geprüft wird, ist das
+ * Verhalten danach: was das Bildnis zeigt, und was der Tipp darauf hervorholt.
+ */
+describe('the house folded down to its portrait', () => {
+  const house = () => {
+    const s = useGame.getState()
+    const player = s.state!.players[0]!
+    return {
+      ctx: s.ctx,
+      player,
+      cargoCount: 0,
+      purchasesLeft: null,
+      rank: 1,
+      onOpen: () => {},
+    }
+  }
+
+  beforeEach(() => {
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'bildnis' }))
+  })
+
+  it('shows the portrait and keeps the ledger to itself', () => {
+    render(<HouseBadge {...house()} />)
+    expect(screen.getByLabelText(/Aufklappen\.$/)).toBeTruthy()
+    expect(screen.queryByText('Ada')).toBeNull()
+  })
+
+  it('unfolds the whole card on a tap, and folds it away on the next', () => {
+    render(<HouseBadge {...house()} />)
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/Aufklappen\.$/))
+    })
+    expect(screen.getByText('Ada')).toBeTruthy()
+    expect(document.querySelector('.anim-unfold')).toBeTruthy()
+
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/Zuklappen\.$/))
+    })
+    expect(screen.queryByText('Ada')).toBeNull()
+  })
+
+  it('offers a cross of its own, for anyone who looks for one', () => {
+    render(<HouseBadge {...house()} />)
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/Aufklappen\.$/))
+    })
+    act(() => {
+      fireEvent.click(screen.getByLabelText('Handelshaus zuklappen'))
+    })
+    expect(screen.queryByText('Ada')).toBeNull()
   })
 })

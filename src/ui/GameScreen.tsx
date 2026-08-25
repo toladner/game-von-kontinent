@@ -1,5 +1,5 @@
-import { Children, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { Board } from './Board'
 import { PortSheet, MarketReport, PortPreviewSheet } from './PortPanel'
 import { KonjunkturSlip } from './Cards'
@@ -26,7 +26,7 @@ import {
   type PlayerState,
 } from '@engine/state'
 import type { EngineContext } from '@engine/context'
-import { clockText, durationText, untilText, useNow } from './useNow'
+import { clockText, durationText, roughDuration, untilText, useNow } from './useNow'
 import { useArrivalNotice } from './useArrivalNotice'
 import { PLAYER_COLORS as COLORS } from '@app/store'
 
@@ -190,6 +190,20 @@ export function GameScreen() {
   // Kontor table can never disagree.
   const table = useMemo(() => standings(state), [state])
 
+  // Das Handelshaus, einmal zusammengestellt: die Kopfzeile zeigt es je nach
+  // Platz als volle Karte oder als Bildnis, aber es ist dasselbe Haus.
+  const house = {
+    ctx,
+    player,
+    cargoCount: flagship(player).cargo.length,
+    purchasesLeft:
+      state.phase === 'port'
+        ? state.config.maxPurchasesPerPort - flagship(player).purchasesThisVisit.length
+        : null,
+    rank: table.find((r) => r.player.id === player.id)?.rank ?? null,
+    onOpen: () => open('kontor'),
+  }
+
   // Recentre the plan whenever the turn passes or another ship takes the helm,
   // so nobody has to go looking for their own vessel.
   const focusKey = realtime
@@ -235,31 +249,25 @@ export function GameScreen() {
           : {})}
       />
 
-      {/* Kopfzeile: das Handelshaus links, die Leiste rechts — und wenn der
-          Platz nicht reicht, beide eine Spur kleiner statt eines davon quer
-          über dem Plan. */}
-      <HeaderRow>
-        {!seated ? (
-          <div className="paper anim-rise pointer-events-auto max-w-[16rem] rounded-lg px-3 py-2 shadow-lg">
-            <p className="smallcaps text-[11px] tracking-[0.2em]">Zuschauer</p>
-            <p className="text-ink-soft text-[12px] leading-snug">
-              Sie haben keinen Platz an diesem Tisch und sehen nur zu.
-            </p>
-          </div>
-        ) : (
-        <PlayerHUD
-          ctx={ctx}
-          player={player}
-          cargoCount={flagship(player).cargo.length}
-          purchasesLeft={
-            state.phase === 'port'
-              ? state.config.maxPurchasesPerPort - flagship(player).purchasesThisVisit.length
-              : null
-          }
-          rank={table.find((r) => r.player.id === player.id)?.rank ?? null}
-          onOpen={() => open('kontor')}
-        />
-        )}
+      {/* Kopfzeile: das Handelshaus links, die Leiste rechts. Reicht der Platz
+          knapp nicht, werden beide eine Spur kleiner; reicht er gar nicht,
+          klappt das Handelshaus auf sein Bildnis ein. */}
+      <HeaderRow
+        left={(tight) =>
+          !seated ? (
+            <div className="paper anim-rise pointer-events-auto max-w-[16rem] rounded-lg px-3 py-2 shadow-lg">
+              <p className="smallcaps text-[11px] tracking-[0.2em]">Zuschauer</p>
+              <p className="text-ink-soft text-[12px] leading-snug">
+                Sie haben keinen Platz an diesem Tisch und sehen nur zu.
+              </p>
+            </div>
+          ) : tight ? (
+            <HouseBadge {...house} />
+          ) : (
+            <PlayerHUD {...house} />
+          )
+        }
+      >
 
         {/* Eine Leiste statt vier Merkzettel: ein Papier, ein Schatten,
             Haarlinien dazwischen.
@@ -560,8 +568,58 @@ export function GameScreen() {
 
 /** Der Abstand zwischen Handelshaus und Leiste, in Pixeln wie im Layout. */
 const HEADER_GAP = 8
-/** Weiter herunter wird nichts mehr lesbar, nur kleiner. */
-const HEADER_MIN_SCALE = 0.62
+/**
+ * So weit darf verkleinert werden, bevor eingeklappt wird.
+ *
+ * Vier Fünftel sind eine Spur kleiner, nicht kleingedruckt. Was darunter läge,
+ * wäre keine Kopfzeile mehr, sondern ein Beipackzettel — dann ist es besser,
+ * das Handelshaus auf sein Bildnis einzuklappen und die volle Karte dem
+ * Fingertipp zu überlassen.
+ */
+const HEADER_MIN_SCALE = 0.8
+/** Beim Ausklappen ein wenig mehr verlangen als beim Einklappen, sonst
+ *  flackert die Karte an der Grenze bei jedem Ticken der Uhr. */
+const HEADER_HYSTERESIS = 0.05
+
+/**
+ * Das Handelshaus, auf sein Bildnis eingeklappt.
+ *
+ * Auf einem schmalen Gerät ist die volle Karte fast so breit wie die Leiste,
+ * und zwei Drittel davon — Name, Ladung, Ladeluken — stehen dort dauerhaft,
+ * obwohl man sie zweimal in der Partie braucht. Das Bildnis allein sagt, wer
+ * am Zug ist; alles andere klappt auf einen Tipp hervor und liegt dann über
+ * dem Plan, wo es Platz genug hat.
+ */
+export function HouseBadge(props: ComponentProps<typeof PlayerHUD>) {
+  const [open, setOpen] = useState(false)
+  const color = PLAYER_COLORS[props.player.colorIndex % PLAYER_COLORS.length]!
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={`Handelshaus ${props.player.name}: ${props.player.cash.toLocaleString('de-DE')} Einheiten. ${open ? 'Zuklappen' : 'Aufklappen'}.`}
+        className="paper anim-rise pointer-events-auto grid h-12 w-12 place-items-center rounded-full border-2 shadow-lg"
+        style={{ borderColor: color.ink }}
+      >
+        <Portrait traits={props.player.persona.portrait} size={36} />
+      </button>
+
+      {open && (
+        <div className="anim-unfold absolute top-full left-0 z-10 mt-2 w-max origin-top-left">
+          <PlayerHUD {...props} />
+          <button
+            onClick={() => setOpen(false)}
+            aria-label="Handelshaus zuklappen"
+            className="paper text-ink-soft pointer-events-auto absolute -top-2 -right-2 grid h-6 w-6 place-items-center rounded-full text-[13px] leading-none shadow-md"
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 /**
  * Die Kopfzeile: das Handelshaus links, die Leiste rechts — und beide oben.
@@ -578,53 +636,76 @@ const HEADER_MIN_SCALE = 0.62
  *
  * Gemessen wird die ungeskalierte Breite: `transform` rührt das Layout nicht
  * an, deshalb liefert `offsetWidth` weiter das Maß der ungeschrumpften Karte
- * und die Messung kann sich nicht selbst hinterherlaufen. Beide hängen in
- * ihrer Ecke, damit der Maßstab sie nach innen zieht statt aus dem Bild.
+ * und die Messung kann sich nicht selbst hinterherlaufen.
+ *
+ * Damit das Layout dem Maßstab folgt statt sich von ihm abzukoppeln, wird die
+ * Zeile um genau so viel breiter gesetzt, wie sie danach kleiner gezeichnet
+ * wird: 100/k Prozent, mal k gezeichnet, macht wieder genau die Breite des
+ * Geräts. Die beiden Karten stehen also weiter an den Enden einer Zeile, die
+ * sie nicht verlassen können — übereinanderschieben ist damit unmöglich, auch
+ * wenn die Messung einmal danebenliegt.
  */
-function HeaderRow({ children }: { children: ReactNode }) {
-  const [left, right] = Children.toArray(children)
-  const row = useRef<HTMLDivElement>(null)
+function HeaderRow({
+  left,
+  children,
+}: {
+  /** Das Handelshaus, das erfährt, ob noch Platz für die volle Karte ist. */
+  left: (tight: boolean) => ReactNode
+  children: ReactNode
+}) {
+  const room = useRef<HTMLDivElement>(null)
   const leftBox = useRef<HTMLDivElement>(null)
   const rightBox = useRef<HTMLDivElement>(null)
+  /** Die Breite der vollen Karte, zuletzt gemessen, als sie dastand. */
+  const natural = useRef(0)
+  const [tight, setTight] = useState(false)
   const [scale, setScale] = useState(1)
 
   useLayoutEffect(() => {
     const measure = () => {
-      const room = row.current?.clientWidth ?? 0
-      const needed =
-        (leftBox.current?.offsetWidth ?? 0) + (rightBox.current?.offsetWidth ?? 0) + HEADER_GAP
-      if (room <= 0 || needed <= room) return setScale(1)
-      // Auf ganze Prozent gerundet, damit ein Pixel Unterschied an der Uhr
-      // nicht jede Sekunde einen neuen Maßstab ergibt.
-      setScale(Math.max(HEADER_MIN_SCALE, Math.floor((room / needed) * 100) / 100))
+      const width = room.current?.clientWidth ?? 0
+      // Gemessen wird nur, solange die volle Karte auch dasteht. Sonst liefe
+      // die Messung im Kreis: einklappen macht schmal, schmal heißt es paßt,
+      // paßt heißt ausklappen, ausklappen macht breit.
+      if (!tight && leftBox.current) natural.current = leftBox.current.offsetWidth
+      const needed = natural.current + (rightBox.current?.offsetWidth ?? 0) + HEADER_GAP
+      if (width <= 0 || natural.current <= 0) return
+      const fits = width / needed
+      if (fits >= HEADER_MIN_SCALE + (tight ? HEADER_HYSTERESIS : 0)) {
+        setTight(false)
+        // Auf ganze Prozent gerundet, damit ein Pixel Unterschied an der Uhr
+        // nicht jede Sekunde einen neuen Maßstab ergibt.
+        setScale(Math.min(1, Math.floor(fits * 100) / 100))
+      } else {
+        // Eingeklappt steht nur noch das Bildnis links; Platz ist dann reichlich.
+        setTight(true)
+        setScale(1)
+      }
     }
     measure()
     // jsdom kennt den Beobachter nicht; dort bleibt es beim einen Maß.
     if (typeof ResizeObserver === 'undefined') return
     const watch = new ResizeObserver(measure)
-    for (const box of [row.current, leftBox.current, rightBox.current]) if (box) watch.observe(box)
+    for (const box of [room.current, leftBox.current, rightBox.current]) if (box) watch.observe(box)
     return () => watch.disconnect()
-  }, [])
+  }, [tight])
 
   return (
     <div
       className="pointer-events-none absolute inset-x-0 top-0 z-20 px-3"
       style={{ paddingTop: 'calc(var(--safe-t) + 0.6rem)' }}
     >
-      <div ref={row} className="relative">
+      <div ref={room}>
         <div
-          ref={leftBox}
-          className="absolute top-0 left-0 w-max origin-top-left"
-          style={{ transform: `scale(${scale})` }}
+          className="flex origin-top-left items-start justify-between gap-2"
+          style={{ width: `${100 / scale}%`, transform: `scale(${scale})` }}
         >
-          {left}
-        </div>
-        <div
-          ref={rightBox}
-          className="absolute top-0 right-0 w-max origin-top-right"
-          style={{ transform: `scale(${scale})` }}
-        >
-          {right}
+          <div ref={leftBox} className="w-max">
+            {left(tight)}
+          </div>
+          <div ref={rightBox} className="w-max">
+            {children}
+          </div>
         </div>
       </div>
     </div>
@@ -808,7 +889,7 @@ function ClockCell({
       aria-label={`Noch ${durationText(left)} Saison`}
     >
       <span className="smallcaps text-[10px]">Saison</span>
-      <span className="tnum text-base leading-none font-bold">{durationText(left)}</span>
+      <span className="tnum text-base leading-none font-bold">{roughDuration(left)}</span>
     </button>
   )
 }
