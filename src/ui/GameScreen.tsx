@@ -608,12 +608,15 @@ export function HouseBadge(props: ComponentProps<typeof PlayerHUD>) {
       {open && (
         <div className="anim-unfold absolute top-full left-0 z-10 mt-2 w-max origin-top-left">
           <PlayerHUD {...props} />
+          {/* Derselbe Knopf wie am Blatt: gleiches Zeichen, gleiche Schaltfläche,
+              gleiches Wort. Ein eigenes Kreuz für diese eine Karte hieße, daß
+              der Spieler zweimal lernen muß, wie man etwas zumacht. */}
           <button
             onClick={() => setOpen(false)}
-            aria-label="Handelshaus zuklappen"
-            className="paper text-ink-soft pointer-events-auto absolute -top-2 -right-2 grid h-6 w-6 place-items-center rounded-full text-[13px] leading-none shadow-md"
+            aria-label="Schließen"
+            className="btn btn-sm pointer-events-auto absolute -top-2 -right-2 !px-2 !py-0.5 text-xs"
           >
-            ×
+            ✕
           </button>
         </div>
       )}

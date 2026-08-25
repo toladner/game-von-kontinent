@@ -1887,13 +1887,18 @@ describe('the house folded down to its portrait', () => {
     expect(screen.queryByText('Ada')).toBeNull()
   })
 
-  it('offers a cross of its own, for anyone who looks for one', () => {
+  it('offers the same cross as every other card, for anyone who looks for one', () => {
     render(<HouseBadge {...house()} />)
     act(() => {
       fireEvent.click(screen.getByLabelText(/Aufklappen\.$/))
     })
+    // Dasselbe Zeichen und dieselbe Schaltfläche wie am Blatt.
+    const cross = screen.getByLabelText('Schließen')
+    expect(cross.textContent).toBe('✕')
+    expect(cross.className).toContain('btn-sm')
+
     act(() => {
-      fireEvent.click(screen.getByLabelText('Handelshaus zuklappen'))
+      fireEvent.click(screen.getByLabelText('Schließen'))
     })
     expect(screen.queryByText('Ada')).toBeNull()
   })
