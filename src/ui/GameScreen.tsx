@@ -11,7 +11,14 @@ import { Sheet, Tabs, type SheetSnap } from './Sheet'
 import { SettingsSheet } from './Settings'
 import { FleetSheet } from './FleetSheet'
 import { PigeonSheet } from './PigeonSheet'
-import { formatMoney, PLAYER_COLORS, playerLabel, useGame, type LogLine } from '@app/store'
+import {
+  formatMoney,
+  isNoteworthy,
+  PLAYER_COLORS,
+  playerLabel,
+  useGame,
+  type LogLine,
+} from '@app/store'
 import { arrivalAt, legalSteps, marketReport, portAt, standings } from '@engine/selectors'
 import { konjunkturOutcome, type HarbourStep } from '@engine/advice'
 import { TELEGRAM_LIMIT } from '@engine/reducer'
@@ -59,8 +66,6 @@ export function GameScreen() {
   const acting = useGame((s) => s.acting())
   const setActing = useGame((s) => s.setActing)
   const net = useGame((s) => s.net)
-  // Am eigenen Gerät ist das eigene Haus das, für das gerade gehandelt wird.
-  const localActing = useGame((s) => s.localActing)
   const myTurn = useGame((s) => s.myTurn())
   const focus = useGame((s) => s.focus)
   const announceFocus = useGame((s) => s.announceFocus)
@@ -138,19 +143,22 @@ export function GameScreen() {
   }, [notice, dismiss])
 
   /**
-   * What one has not seen yet.
+   * What still counts as news to the person holding this device.
    *
-   * Nothing one did oneself counts. A merchant does not need the paper to
-   * tell him he bought coffee: he was there, he pressed the button, and the
-   * Kontor showed him the receipt. The pill is for the rest of the world —
-   * the other houses, the weather, the Börse — and it went off for every
-   * purchase, every course set and every telegram sent from this very sheet.
+   * Over the wire: everything except one's own orders. A merchant does not
+   * need the paper to tell him he bought coffee — he was there, he pressed
+   * the button, and the Kontor showed him the receipt.
+   *
+   * At one device: the whole table is watching the same screen, so nothing
+   * anybody *does* is news to anybody. What remains is what the world does to
+   * them — a levy, a money order, a storm, a shut harbour, the Börse.
    */
-  const mine = net?.playerId ?? localActing
-  const isMine = (l: LogLine) => mine !== null && l.cause === mine
+  const mine = net?.playerId ?? null
+  const isNews = (l: LogLine) =>
+    net ? !(mine !== null && l.cause === mine) : isNoteworthy(l.kind)
   const unread = useMemo(
-    () => log.filter((l) => l.id > newsSeen && !isMine(l)).length,
-    [log, newsSeen, mine],
+    () => log.filter((l) => l.id > newsSeen && isNews(l)).length,
+    [log, newsSeen, mine, net],
   )
 
   /**
@@ -479,7 +487,7 @@ export function GameScreen() {
           realtime={realtime}
           now={now || Date.now()}
           sinceId={newsMark}
-          mine={mine}
+          isNews={isNews}
           snap={snap}
           onSnap={close}
           // Nur wo jemand am anderen Ende sitzt: ein Tisch über das Netz,
@@ -1407,7 +1415,7 @@ function NewsSheet({
   realtime,
   now,
   sinceId,
-  mine,
+  isNews,
   snap,
   onSnap,
   onSend,
@@ -1418,8 +1426,8 @@ function NewsSheet({
   now: number
   /** Entries above this id are new since the sheet was last opened. */
   sinceId: number
-  /** This device's own house, whose own doings are not news to it. */
-  mine: string | null
+  /** Whether an entry is news to whoever is holding this device. */
+  isNews: (line: LogLine) => boolean
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
   /** Null where there is nobody to telegraph, and the form stays away. */
@@ -1448,9 +1456,9 @@ function NewsSheet({
     }
     return log.filter((l) => l.who.length === 0 || l.who.includes(only.id))
   }, [log, only])
-  // A line one's own orders wrote never gets the "neu" rule: it is on the
-  // page because the reader pressed a button, which is the opposite of news.
-  const unseen = (l: LogLine) => l.id > sinceId && !(mine !== null && l.cause === mine)
+  // Dieselbe Frage wie beim Zettel oben: die goldene Marke steht genau an
+  // dem, was der Zähler auch gezählt hätte.
+  const unseen = (l: LogLine) => l.id > sinceId && isNews(l)
   const fresh = shown.filter(unseen).length
   // The clock is redrawn every second; the headings only ever change at
   // midnight, so they are grouped against the day rather than the instant.

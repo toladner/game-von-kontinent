@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it, beforeEach, vi } from 'vitest'
+import { afterEach, describe, expect, it, beforeEach, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from '@app/App'
-import { PLAYER_COLORS, useGame } from '@app/store'
+import { isNoteworthy, PLAYER_COLORS, useGame } from '@app/store'
 import { buyOffers, legalSteps, portAt, routeTo } from '@engine/selectors'
 import { flagship } from '@engine/state'
+import { makePersona } from '@engine/persona'
 import { createGame } from '@engine/setup'
 import { applyAction, replay } from '@engine/reducer'
 import { CLASSIC_PACK } from '@content/maps/classic'
@@ -1536,7 +1537,13 @@ describe('telegraphing the table', () => {
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'draht-gelesen' }))
     const mine = useGame.getState().state!.players[0]!.id
     const pill = () => screen.getByLabelText(/^Nachrichten/).getAttribute('aria-label')
-    const before = pill()
+    // Erst alles lesen, damit nur zählt, was danach kommt.
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+    })
 
     // Sent while this device is still reckoned local, so the line really
     // lands in the journal; then the device learns whose seat it holds.
@@ -1547,9 +1554,8 @@ describe('telegraphing the table', () => {
       }),
     )
 
-    // The strip counts exactly what it counted before, and the rule down the
-    // left of the entry stays off too.
-    expect(pill()).toBe(before)
+    // Nothing to report, and the rule down the left of the entry stays off too.
+    expect(pill()).toBe('Nachrichten')
 
     act(() => {
       fireEvent.click(screen.getByLabelText(/^Nachrichten/))
@@ -1567,13 +1573,12 @@ describe('telegraphing the table', () => {
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'draht-fremd' }))
     const bo = useGame.getState().state!.players[1]!.id
     const ada = useGame.getState().state!.players[0]!.id
-    const count = () =>
-      Number(
-        /(\d+) ungelesen/.exec(
-          screen.getByLabelText(/^Nachrichten/).getAttribute('aria-label') ?? '',
-        )?.[1] ?? 0,
-      )
-    const before = count()
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+    })
 
     act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'biete zucker', by: bo }))
     act(() =>
@@ -1581,7 +1586,9 @@ describe('telegraphing the table', () => {
         net: { code: 'WZUH', status: 'verbunden', playerId: ada, online: [] },
       }),
     )
-    expect(count()).toBe(before + 1)
+    expect(screen.getByLabelText(/^Nachrichten/).getAttribute('aria-label')).toContain(
+      '1 ungelesen',
+    )
   })
 
   it('prints the message in the paper, in nobody’s column', () => {
@@ -1795,6 +1802,28 @@ describe('news that is not news to the man who made it', () => {
     expect(label()).toBe(before)
   })
 
+  it('tells doing from being done to', () => {
+    // Am selben Gerät hängt die Marke an dieser Einteilung: was ein Haus tut,
+    // haben alle gesehen; was ihm zustößt, ist auch dann eine Nachricht.
+    for (const doing of ['bought', 'sold', 'rolled', 'moved', 'arrived', 'setSail'] as const) {
+      expect(isNoteworthy(doing), doing).toBe(false)
+    }
+    for (const news of [
+      'paid',
+      'received',
+      'cargoLost',
+      'cargoDamaged',
+      'heldUp',
+      'collision',
+      'marketTurned',
+      'portClosed',
+      'weatherSet',
+      'gameOver',
+    ] as const) {
+      expect(isNoteworthy(news), news).toBe(true)
+    }
+  })
+
   it('still counts what another house did', () => {
     render(<App />)
     act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'fremdkauf' }))
@@ -1892,5 +1921,158 @@ describe('the house folded down to its portrait', () => {
     expect(label).toContain('Ada')
     expect(label).toContain('Platz 1')
     expect(label).toContain('Kontor öffnen')
+  })
+})
+
+/**
+ * Wer schon am Kai steht, während man den Code tippt.
+ *
+ * Die Anmeldung fragte den Tisch nicht, also saß jeder Beitretende dort als
+ * Spieler 1 in Blau — und wurde beim Beitreten der Vierte in Ocker.
+ */
+describe('the table one is about to join', () => {
+  const seat = (id: string, name: string, colorIndex: number) => ({
+    id,
+    name,
+    colorIndex,
+    portrait: makePersona(name, 'classic').portrait,
+  })
+
+  const answer = (body: unknown, ok = true) =>
+    vi.fn(async () => ({ ok, json: async () => body }) as unknown as Response)
+
+  const openJoin = () => {
+    render(<App />)
+    act(() => {
+      fireEvent.click(screen.getByText('Partie beitreten'))
+    })
+    act(() => {
+      fireEvent.change(screen.getByLabelText('Code der Partie'), { target: { value: 'WZUH' } })
+    })
+  }
+
+  /** Die Anmeldung wartet 300 ms, ehe sie fragt. */
+  const settle = async () => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('names the houses already seated, and their colours', async () => {
+    vi.stubGlobal(
+      'fetch',
+      answer({
+        meta: { joinPolicy: 'nur-zu-beginn' },
+        phase: 'lobby',
+        players: [seat('a', 'Sepp', 0), seat('b', 'Marie', 1)],
+      }),
+    )
+    openJoin()
+    await settle()
+
+    expect(screen.getByText('Sepp')).toBeTruthy()
+    expect(screen.getByText('Marie')).toBeTruthy()
+    expect(screen.getByText(/Schon am Kai/)).toBeTruthy()
+  })
+
+  it('gives the newcomer the colour the server will actually hand out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      answer({
+        meta: { joinPolicy: 'nur-zu-beginn' },
+        phase: 'lobby',
+        players: [seat('a', 'Sepp', 0), seat('b', 'Marie', 1)],
+      }),
+    )
+    openJoin()
+    await settle()
+
+    // Zwei sitzen schon, also ist der Beitretende der dritte Platz — das
+    // Feld heißt danach, und sobald ein Name darinsteht, sagt es die Zahl.
+    const field = screen.getByLabelText('Name der 3. Person')
+    act(() => {
+      fireEvent.change(field, { target: { value: 'Kurt' } })
+    })
+    expect(screen.getByText('Spieler 3')).toBeTruthy()
+    expect(document.querySelector(`[title="Grün"]`)).toBeTruthy()
+  })
+
+  it('says plainly when the table will not have latecomers', async () => {
+    vi.stubGlobal(
+      'fetch',
+      answer({
+        meta: { joinPolicy: 'nur-zu-beginn' },
+        phase: 'port',
+        players: [seat('a', 'Sepp', 0)],
+      }),
+    )
+    openJoin()
+    await settle()
+
+    expect(screen.getByText(/nimmt keine Nachzügler auf/)).toBeTruthy()
+    act(() => {
+      fireEvent.change(screen.getByLabelText(/^Name der/), { target: { value: 'Kurt' } })
+    })
+    expect((screen.getByRole('button', { name: 'Beitreten' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+  })
+
+  it('lets a latecomer in where the table said they might', async () => {
+    vi.stubGlobal(
+      'fetch',
+      answer({
+        meta: { joinPolicy: 'jederzeit' },
+        phase: 'port',
+        players: [seat('a', 'Sepp', 0)],
+      }),
+    )
+    openJoin()
+    await settle()
+
+    act(() => {
+      fireEvent.change(screen.getByLabelText(/^Name der/), { target: { value: 'Kurt' } })
+    })
+    expect((screen.getByRole('button', { name: 'Beitreten' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    )
+  })
+
+  it('does not pretend to know a table it could not reach', async () => {
+    // Kein Netz ist keine Auskunft über den Tisch: der Beitritt bleibt offen
+    // und meldet sich selbst, wenn er scheitert.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('offline')
+      }),
+    )
+    openJoin()
+    await settle()
+
+    expect(screen.queryByText(/Schon am Kai/)).toBeNull()
+    act(() => {
+      fireEvent.change(screen.getByLabelText(/^Name der/), { target: { value: 'Kurt' } })
+    })
+    expect((screen.getByRole('button', { name: 'Beitreten' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    )
+  })
+
+  it('says so when there is no table under that mark', async () => {
+    vi.stubGlobal('fetch', answer({ error: 'Unbekannte Partie.' }, false))
+    openJoin()
+    await settle()
+
+    expect(screen.getByText(/keine Partie zu finden/)).toBeTruthy()
   })
 })

@@ -264,6 +264,11 @@ export class GameRoom {
           this.state?.players.map((p) => ({
             id: p.id,
             name: p.name,
+            // Farbe und Bildnis stehen in der Anmeldung ohnehin jedem offen,
+            // der den Code hat; damit kann der Beitretende sehen, wer schon
+            // am Kai steht, bevor er sich selbst einträgt.
+            colorIndex: p.colorIndex,
+            portrait: p.persona.portrait,
             at: this.foggy ? null : flagship(p).nodeId,
             cash: this.foggy ? null : p.cash,
             destination: this.foggy ? null : (flagship(p).voyage?.destination ?? null),

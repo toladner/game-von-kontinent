@@ -220,6 +220,36 @@ function persist(): void {
 const money = (n: number) => `${n.toLocaleString('de-DE')},—`
 
 /**
+ * Was auch dann noch eine Nachricht ist, wenn alle zugesehen haben.
+ *
+ * An einem Gerät sitzt der ganze Tisch am selben Bildschirm: daß Sepp Kaffee
+ * gekauft hat, hat jeder gesehen, während es geschah, und es dann noch als
+ * ungelesene Nachricht zu melden, macht aus der Zeitung ein Protokoll. Was
+ * bleibt, ist alles, was einem Haus zustößt statt von ihm auszugehen — eine
+ * Rechnung, eine Anweisung, ein Sturm, ein gesperrter Hafen, die Börse.
+ */
+const NOTEWORTHY: ReadonlySet<GameEvent['type']> = new Set([
+  'paid',
+  'received',
+  'levySkipped',
+  'cargoLost',
+  'cargoDamaged',
+  'heldUp',
+  'collision',
+  'marketTurned',
+  'portClosed',
+  'portReopened',
+  'weatherSet',
+  'playerJoined',
+  'telegramm',
+  'gameOver',
+])
+
+export function isNoteworthy(kind: GameEvent['type']): boolean {
+  return NOTEWORTHY.has(kind)
+}
+
+/**
  * Whose order this was.
  *
  * Real-time actions name their actor; in round play nobody has to, because

@@ -1,4 +1,4 @@
-import type { Gender } from '@engine/persona'
+import type { Gender, PortraitTraits } from '@engine/persona'
 import type { GameAction } from '@engine/actions'
 import type { GameState, JoinPolicy } from '@engine/state'
 
@@ -154,12 +154,43 @@ export async function createOnlineGame(options: {
   return (await res.json()) as { code: string; meta: GameMeta }
 }
 
-export async function gameExists(code: string): Promise<boolean> {
+/** Ein Platz an einem fremden Tisch, so wie ihn die Anmeldung zeigen darf. */
+export interface TableSeat {
+  readonly id: string
+  readonly name: string
+  readonly colorIndex: number
+  readonly portrait: PortraitTraits
+}
+
+/** Was von einer Partie zu sehen ist, ohne ihr beizutreten. */
+export interface TableInfo {
+  readonly meta: GameMeta
+  readonly phase: string
+  readonly players: readonly TableSeat[]
+}
+
+/**
+ * Wer schon am Kai steht.
+ *
+ * Ein Blick auf den Tisch, ohne sich hinzusetzen: der Beitretende sieht die
+ * angemeldeten Häuser und bekommt die Farbe, die er wirklich erhält, statt
+ * überall als Spieler 1 in Blau zu erscheinen und beim Beitreten der Vierte
+ * in Ocker zu werden.
+ */
+export type TableLookup =
+  | { readonly ok: true; readonly info: TableInfo }
+  /** Der Server kennt den Code nicht. */
+  | { readonly ok: false; readonly reason: 'unbekannt' }
+  /** Der Server war nicht zu erreichen — das sagt über den Tisch nichts aus. */
+  | { readonly ok: false; readonly reason: 'stumm' }
+
+export async function tableInfo(code: string): Promise<TableLookup> {
   try {
     const res = await fetch(`/api/games/${encodeURIComponent(code)}`)
-    return res.ok
+    if (!res.ok) return { ok: false, reason: 'unbekannt' }
+    return { ok: true, info: (await res.json()) as TableInfo }
   } catch {
-    return false
+    return { ok: false, reason: 'stumm' }
   }
 }
 

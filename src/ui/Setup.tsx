@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { forgetSeat, hasSeatAt } from '@app/net'
+import { forgetSeat, hasSeatAt, tableInfo, type TableLookup, type TableSeat } from '@app/net'
 import { makePersona, type Gender } from '@engine/persona'
 import { MAX_PLAYERS } from '@engine/reducer'
 import type { Seat } from '@engine/setup'
@@ -989,6 +989,25 @@ function StepBeitreten({
   /** Bumped when a seat is given up, so the check below runs again. */
   const [given, setGiven] = useState(0)
   const clean = code.trim().toUpperCase()
+  const look = useTableAhead(clean)
+  const seats = look?.ok ? look.info.players : null
+
+  /**
+   * Warum dieser Tisch niemanden mehr aufnimmt — oder null, wenn er es tut.
+   *
+   * Wer schon einen Platz hat, kehrt zurück statt beizutreten; für ihn gilt
+   * weder das volle Haus noch der geschlossene Beitritt.
+   */
+  const shut =
+    look === null || !look.ok
+      ? look?.reason === 'unbekannt'
+        ? 'Unter diesem Zeichen ist keine Partie zu finden.'
+        : null
+      : look.info.players.length >= MAX_PLAYERS
+        ? `Der Tisch ist besetzt — mehr als ${MAX_PLAYERS} Schiffe fahren nicht.`
+        : look.info.phase !== 'lobby' && look.info.meta.joinPolicy !== 'jederzeit'
+          ? 'Diese Partie ist unterwegs und nimmt keine Nachzügler auf.'
+          : null
 
   /*
    * A seat already held at this table.
@@ -999,7 +1018,8 @@ function StepBeitreten({
    * ask. So it stops asking, and says whose seat it is going back to.
    */
   const known = useMemo(() => (clean.length >= 3 ? hasSeatAt(clean) : false), [clean, given])
-  const ready = clean.length >= 3 && (known || trader.name.trim().length > 0)
+  const ready =
+    clean.length >= 3 && (known || (trader.name.trim().length > 0 && shut === null))
 
   return (
     <div className="anim-fade">
@@ -1015,6 +1035,8 @@ function StepBeitreten({
         onChange={(e) => setCode(e.target.value.toUpperCase())}
         aria-label="Code der Partie"
       />
+
+      {seats && <TableAhead seats={seats} />}
 
       {known ? (
         <div className="paper-card mt-4 rounded-md px-3.5 py-3">
@@ -1038,9 +1060,16 @@ function StepBeitreten({
       ) : (
         <>
           <Legend>Ihr Name</Legend>
-          <TraderSlot index={0} trader={trader} onChange={setTrader} />
+          {/* Der Platz, den der Server wirklich vergeben wird: die Farben gehen
+              in der Reihenfolge des Beitritts hinaus, der nächste freie ist
+              also genau der hinter den schon angemeldeten. Ohne das saß jeder
+              Beitretende in der Anmeldung als Spieler 1 in Blau und wurde beim
+              Beitreten der Vierte in Ocker. */}
+          <TraderSlot index={seats?.length ?? 0} trader={trader} onChange={setTrader} />
         </>
       )}
+
+      {!known && shut && <p className="text-rot mt-3 text-center text-[12px] leading-snug">{shut}</p>}
 
       <Nav
         onBack={onBack}
@@ -1048,6 +1077,81 @@ function StepBeitreten({
         nextLabel={known ? 'Zurück an Bord' : 'Beitreten'}
         nextDisabled={!ready}
       />
+    </div>
+  )
+}
+
+/** Wie oft die Anmeldung beim Tisch nachfragt, solange sie offen steht. */
+const AHEAD_INTERVAL = 4000
+
+/**
+ * Der Tisch, an den man sich setzen will, während man den Code tippt.
+ *
+ * Gefragt wird über dieselbe Auskunft, die auch die Einladung benutzt — kein
+ * Platz wird dabei belegt und keine Anwesenheit gemeldet. Sie wird alle paar
+ * Sekunden erneuert, damit ein Haus, das sich in der Zwischenzeit einträgt,
+ * auch in der Anmeldung erscheint und die eigene Farbe entsprechend wandert.
+ */
+function useTableAhead(code: string): TableLookup | null {
+  const [look, setLook] = useState<TableLookup | null>(null)
+
+  useEffect(() => {
+    if (code.length < 3) {
+      setLook(null)
+      return
+    }
+    let alive = true
+    let timer: ReturnType<typeof setInterval> | null = null
+    const ask = async () => {
+      const next = await tableInfo(code)
+      if (alive) setLook(next)
+    }
+    // Erst nach einer kurzen Pause fragen: sonst geht für jeden Buchstaben
+    // eines vierstelligen Codes eine Anfrage hinaus.
+    const first = setTimeout(() => {
+      void ask()
+      timer = setInterval(() => void ask(), AHEAD_INTERVAL)
+    }, 300)
+    return () => {
+      alive = false
+      clearTimeout(first)
+      if (timer) clearInterval(timer)
+    }
+  }, [code])
+
+  return look
+}
+
+/** Wer schon am Kai steht, in der Reihenfolge, in der er gekommen ist. */
+function TableAhead({ seats }: { seats: readonly TableSeat[] }) {
+  if (seats.length === 0) {
+    return (
+      <p className="text-ink-faint anim-fade mt-3 text-center text-[12px] italic">
+        Der Tisch ist gedeckt, es sitzt noch niemand daran.
+      </p>
+    )
+  }
+  return (
+    <div className="anim-fade mt-4">
+      <Legend>Schon am Kai ({seats.length})</Legend>
+      <ul className="space-y-1.5">
+        {seats.map((seat) => {
+          const color = PLAYER_COLORS[seat.colorIndex % PLAYER_COLORS.length]!
+          return (
+            <li
+              key={seat.id}
+              className="paper-card flex items-center gap-2.5 rounded-md py-1.5 pr-3 pl-2"
+              style={{ borderLeft: `4px solid ${color.ink}` }}
+            >
+              <Portrait traits={seat.portrait} size={30} />
+              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{seat.name}</span>
+              <span className="smallcaps text-ink-faint shrink-0 text-[10px]">
+                Spieler {seat.colorIndex + 1}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
