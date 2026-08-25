@@ -13,6 +13,19 @@
     "not_found_handling": "single-page-application"
   },
 
+  // The public half of the VAPID pair, which every client is handed before it
+  // can ask its browser for a push subscription. Public by design — it is what
+  // a push service checks our signature against. The private half is a secret:
+  //
+  //     wrangler secret put VAPID_PRIVATE_KEY
+  //
+  // With the secret missing, push is simply off and the game plays as before.
+  // VAPID_SUBJECT may be set to a real mailto: address for push services to
+  // complain to; without one the server sends a placeholder.
+  "vars": {
+    "VAPID_PUBLIC_KEY": "BPnt9drJNcmXVhyPa9bgck02XIDTt-bizjP1CWBn8u49g_kKzfbBvBUn4VzJY-PI7sdKouPfcxuRyWdo83Vz2Rk"
+  },
+
   "durable_objects": {
     "bindings": [{ "name": "GAMES", "class_name": "GameRoom" }]
   },

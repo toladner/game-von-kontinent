@@ -15,13 +15,19 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Our own worker rather than a generated one: it has to receive a push
+      // from the Partieserver, which is the only thing that reaches a
+      // telephone whose app has been closed. `sw/sw.ts` keeps the precaching
+      // the generated one did, and calls skipWaiting itself.
+      strategies: 'injectManifest',
+      srcDir: 'sw',
+      filename: 'sw.ts',
       // The app registers the worker itself, in `@app/updates`: the injected
       // snippet only registers, and never checks for a newer build.
       injectRegister: null,
       includeAssets: ['favicon.svg'],
       manifest,
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
       },
@@ -55,6 +61,6 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'server/**/*.test.ts'],
   },
 })

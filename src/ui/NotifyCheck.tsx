@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { askToNotify, notify, notifyState, type NotifyState } from '@app/notify'
+import { armPush } from '@app/push'
+import { useGame } from '@app/store'
 
 /**
  * Whether the ship may speak up, asked as a card rather than a browser prompt.
@@ -16,6 +18,7 @@ import { askToNotify, notify, notifyState, type NotifyState } from '@app/notify'
  * can hold the permission and still be muted by the system. One tap settles it.
  */
 export function NotifyCheck() {
+  const code = useGame((s) => s.net?.code ?? null)
   const [state, setState] = useState<NotifyState>(() => notifyState())
   const [asking, setAsking] = useState(false)
   const [tried, setTried] = useState(false)
@@ -24,8 +27,13 @@ export function NotifyCheck() {
 
   const ask = async () => {
     setAsking(true)
-    setState(await askToNotify())
+    const answer = await askToNotify()
+    setState(answer)
     setAsking(false)
+    // Permission is what a push subscription waits on, so the moment it is
+    // given is the moment to leave the server an address — otherwise nothing
+    // reaches a closed app until the next reconnect.
+    if (answer === 'granted' && code) void armPush(code)
   }
 
   const test = async () => {
@@ -53,8 +61,10 @@ export function NotifyCheck() {
         <p className="text-ink-faint mt-0.5 text-[12px] leading-snug">
           {state === 'granted'
             ? tried
-              ? 'Eine Probemeldung ist hinausgegangen. Kommt sie nicht an, sperrt das Gerät selbst — nicht die Seite.'
-              : 'Sie erfahren, wenn ein Hafen erreicht ist und wenn die Saison schließt — solange die Seite geöffnet bleibt oder im Hintergrund läuft.'
+              ? 'Eine Probemeldung ist hinausgegangen. Kommt sie nicht an, sperrt das Gerät selbst — bei einer installierten App unter Einstellungen ▸ Apps ▸ Benachrichtigungen.'
+              : code
+                ? 'Sie erfahren, wenn ein Hafen erreicht ist und wenn die Saison schließt — auch wenn die App geschlossen ist.'
+                : 'Sie erfahren, wenn ein Hafen erreicht ist und wenn die Saison schließt — solange die Seite geöffnet bleibt oder im Hintergrund läuft.'
             : state === 'denied'
               ? 'Ihr Browser hat Meldungen für diese Seite gesperrt. Das läßt sich nur in den Einstellungen des Browsers wieder ändern.'
               : 'Eine Fahrt dauert echte Stunden. Mit Meldungen können Sie das Gerät weglegen und erfahren trotzdem, wenn der Hafen erreicht ist.'}

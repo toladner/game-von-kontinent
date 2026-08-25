@@ -13,17 +13,37 @@ import { packById } from '../src/content/packs'
 import { createContext } from '../src/engine/context'
 import { createGame } from '../src/engine/setup'
 import { applyAction } from '../src/engine/reducer'
-import type { GameAction } from '../src/engine/actions'
+import type { GameAction, GameEvent } from '../src/engine/actions'
 import { flagship } from '../src/engine/state'
 import type { GameState, JoinPolicy } from '../src/engine/state'
 import { nextEventAt } from '../src/engine/selectors'
 import { projectFor } from '../src/engine/fog'
 import type { AngebotMode, PreisMode, TravelMode } from '../src/engine/types'
 import type { Gender } from '../src/engine/persona'
+import { sendPush, type PushSub, type Vapid } from './push'
 
 export interface Env {
   GAMES: DurableObjectNamespace
   ASSETS?: { fetch: (req: Request) => Promise<Response> }
+  /*
+   * The VAPID pair that lets us knock on a browser's push service. The public
+   * half is a plain var — it is handed to every client anyway — and the
+   * private half is a secret (`wrangler secret put VAPID_PRIVATE_KEY`). With
+   * neither set, push is simply off: the game still plays, and a telephone
+   * with the app open still hears its own timers.
+   */
+  VAPID_PUBLIC_KEY?: string
+  VAPID_PRIVATE_KEY?: string
+  /** Where the push service complains to, per RFC 8292. */
+  VAPID_SUBJECT?: string
+}
+
+/** What a push carries. The service worker knows this shape and no other. */
+interface Notice {
+  readonly title: string
+  readonly body: string
+  readonly tag: string
+  readonly url?: string
 }
 
 export interface GameMeta {
@@ -45,6 +65,12 @@ export interface GameMeta {
   readonly preise?: PreisMode
   readonly packId: string
   readonly createdAt: number
+  /**
+   * The table's own code. The Durable Object is addressed by it but never
+   * told it, and a push has to say which harbour to come back to. Optional
+   * because tables opened before push existed have none stored.
+   */
+  readonly code?: string
 }
 
 /** Wire protocol. Small, versioned by shape rather than a number. */
@@ -141,6 +167,7 @@ export default {
         preise: body.preise === 'entfernung' ? 'entfernung' : 'fest',
         packId: typeof body.packId === 'string' ? body.packId : 'classic',
         createdAt: Date.now(),
+        code,
       }
       const stub = env.GAMES.get(env.GAMES.idFromName(code))
       const res = await stub.fetch('https://do/create', {
@@ -151,13 +178,22 @@ export default {
       return json({ code, meta })
     }
 
-    const match = url.pathname.match(/^\/api\/games\/([A-Z0-9]{3,8})(\/ws)?$/i)
+    /*
+     * The public half of the VAPID pair. A client needs it before it can ask
+     * its browser for a push subscription, and serving it beside the private
+     * half keeps the two from drifting apart the way a key baked into the
+     * bundle at build time would.
+     */
+    if (url.pathname === '/api/push/key') {
+      return json({ key: env.VAPID_PUBLIC_KEY ?? null })
+    }
+
+    const match = url.pathname.match(/^\/api\/games\/([A-Z0-9]{3,8})(\/ws|\/push)?$/i)
     if (match) {
       const code = match[1]!.toUpperCase()
       const stub = env.GAMES.get(env.GAMES.idFromName(code))
-      return stub.fetch(
-        new Request(`https://do/${match[2] ? 'ws' : 'info'}`, request),
-      )
+      const way = match[2] ? match[2].slice(1).toLowerCase() : 'info'
+      return stub.fetch(new Request(`https://do/${way}`, request))
     }
 
     if (url.pathname.startsWith('/api/')) return json({ error: 'Unbekannter Weg.' }, 404)
@@ -186,11 +222,18 @@ export class GameRoom {
   private seats = new Map<string, Seat>() // token -> seat
   private state: GameState | null = null
   private sockets = new Map<WebSocket, string | null>() // socket -> playerId
+  /**
+   * Where to knock when nobody is connected — token -> push subscription.
+   *
+   * Kept against the seat token rather than the player, because one house may
+   * be played from a telephone and a desk at once, and both want telling.
+   */
+  private pushes = new Map<string, PushSub>()
   private loaded = false
 
   constructor(
     private readonly storage: DurableObjectState,
-    _env: Env,
+    private readonly env: Env,
   ) {}
 
   private async load(): Promise<void> {
@@ -199,6 +242,9 @@ export class GameRoom {
     this.actions = (await this.storage.storage.get<GameAction[]>('actions')) ?? []
     const seats = (await this.storage.storage.get<Seat[]>('seats')) ?? []
     this.seats = new Map(seats.map((s) => [s.token, s]))
+    this.pushes = new Map(
+      (await this.storage.storage.get<[string, PushSub][]>('pushes')) ?? [],
+    )
     this.rebuild()
     this.loaded = true
   }
@@ -234,6 +280,7 @@ export class GameRoom {
       meta: this.meta,
       actions: this.actions,
       seats: [...this.seats.values()],
+      pushes: [...this.pushes.entries()],
     })
   }
 
@@ -274,6 +321,29 @@ export class GameRoom {
             destination: this.foggy ? null : (flagship(p).voyage?.destination ?? null),
           })) ?? [],
       })
+    }
+
+    /*
+     * An address to knock on when the app is closed.
+     *
+     * Against the seat token, which is the only thing that proves a house is
+     * this one's: without it anybody with the table code could have their own
+     * telephone told when a rival's ship makes port.
+     */
+    if (url.pathname === '/push') {
+      if (!this.meta) return json({ error: 'Unbekannte Partie.' }, 404)
+      const body = (await request.json().catch(() => ({}))) as {
+        token?: string
+        sub?: PushSub
+      }
+      const seat = body.token ? this.seats.get(body.token) : undefined
+      if (!seat) return json({ error: 'Unbekannter Platz.' }, 403)
+      if (!body.sub?.endpoint || !body.sub.keys?.p256dh || !body.sub.keys.auth) {
+        return json({ error: 'Unbrauchbare Anschrift.' }, 400)
+      }
+      this.pushes.set(seat.token, body.sub)
+      await this.persist()
+      return json({ ok: true })
     }
 
     if (url.pathname === '/ws') {
@@ -482,7 +552,7 @@ export class GameRoom {
   /** Apply, store, broadcast. The single place the log grows. */
   private async commit(
     action: GameAction,
-  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+  ): Promise<{ ok: true; events: readonly GameEvent[] } | { ok: false; reason: string }> {
     const result = applyAction(contextFor(this.meta?.packId), this.state!, action)
     const rejection = result.events.find((e) => e.type === 'rejected')
     if (rejection && rejection.type === 'rejected') {
@@ -496,7 +566,7 @@ export class GameRoom {
     if (this.foggy) this.broadcastViews()
     else this.broadcast({ t: 'append', actions: [action], from })
     await this.scheduleWake()
-    return { ok: true }
+    return { ok: true, events: result.events }
   }
 
   /**
@@ -508,7 +578,88 @@ export class GameRoom {
   private async catchUp(): Promise<void> {
     if (this.meta?.travel !== 'echtzeit') return
     const now = Date.now()
-    if (this.state && now > this.state.now) await this.commit({ type: 'tick', at: now })
+    if (!this.state || now <= this.state.now) return
+    const applied = await this.commit({ type: 'tick', at: now })
+    // Whatever the clock turned up, the houses it concerns may not be here to
+    // see it. This is the one place both routes to a moved clock meet: the
+    // alarm at three in the morning, and a rival's message a moment later.
+    if (applied.ok) await this.announce(applied.events)
+  }
+
+  /**
+   * Knock on the telephones of the houses this tick concerned.
+   *
+   * The page announces its own arrivals while it is alive, and that covers a
+   * browser tab left open. It cannot cover an installed app that has been
+   * closed: nothing of ours is running, so the news has to arrive from
+   * outside. Both use the same tag, so a player who is merely in another app
+   * gets one notice rather than two.
+   *
+   * Failures are silent by design — a push service having a bad afternoon
+   * must not take the season's clock down with it.
+   */
+  private async announce(events: readonly GameEvent[]): Promise<void> {
+    if (this.pushes.size === 0) return
+    const vapid = this.vapid()
+    if (!vapid) return
+
+    const ctx = contextFor(this.meta?.packId)
+    const arrivals = new Map<string, Notice>()
+    let closing: Notice | null = null
+
+    for (const event of events) {
+      if (event.type === 'arrived') {
+        const port = ctx.portsById.get(event.portId)?.name ?? 'Ihrem Ziel'
+        arrivals.set(event.playerId, {
+          title: 'Schiff eingelaufen',
+          body: `Ihr Schiff liegt in ${port}. Es wartet auf Order.`,
+          tag: `ankunft:${event.portId}`,
+        })
+      }
+      // The season closing outranks anything else in the same tick: after it
+      // there is nothing left to do but read the Schlußabrechnung.
+      if (event.type === 'gameOver') {
+        closing = {
+          title: 'Saison beendet',
+          body: 'Die Schlußabrechnung liegt vor.',
+          tag: 'saison-ende',
+        }
+      }
+    }
+    if (!closing && arrivals.size === 0) return
+
+    const code = this.code()
+    const url = code ? `./#partie=${code}` : './'
+    await Promise.all(
+      [...this.pushes].map(async ([token, sub]) => {
+        const seat = this.seats.get(token)
+        if (!seat) return
+        const notice = closing ?? arrivals.get(seat.playerId)
+        if (!notice) return
+        const result = await sendPush(sub, JSON.stringify({ ...notice, url }), vapid)
+        // 404 or 410: the app was uninstalled, or its data cleared. The
+        // address is dead and keeping it is a slow leak.
+        if (result === 'weg') this.pushes.delete(token)
+      }),
+    )
+    await this.persist()
+  }
+
+  private vapid(): Vapid | null {
+    const { VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey } = this.env
+    if (!publicKey || !privateKey) return null
+    return {
+      publicKey,
+      privateKey,
+      subject: this.env.VAPID_SUBJECT ?? 'mailto:post@von-kontinent-zu-kontinent.invalid',
+    }
+  }
+
+  /** The table's code, so a notice can send its reader back to this harbour. */
+  private code(): string {
+    // Stored in the meta since push was added. Tables opened before that were
+    // always seeded `CODE-timestamp`, which is where the older ones keep it.
+    return this.meta?.code ?? this.meta?.seed.split('-')[0] ?? ''
   }
 
   /**

@@ -5,12 +5,16 @@
  * the point of it is that you put the phone down, and a game you have to sit
  * and watch has thrown that away. So the ship makes port and says so.
  *
- * Only ever while the page is alive — a browser tab or an installed app that
- * has been closed outright hears nothing, because that needs a push
- * subscription and a server willing to sign for it. The clock is deterministic
- * and the arrival time is known the moment a course is set, so what is here
- * is a timer rather than a poll, and it survives a backgrounded tab as well
- * as the browser's throttling allows.
+ * What is here works only while the page is alive. The clock is deterministic
+ * and the arrival time is known the moment a course is set, so it is a timer
+ * rather than a poll, and it survives a backgrounded tab as well as the
+ * browser's throttling allows.
+ *
+ * An installed app that has been closed outright has no page at all, and no
+ * timer of ours survives that. At an online table the Partieserver knocks
+ * instead — see `@app/push` for the address it is given, and `sw/sw.ts` for
+ * where the knock lands. Both use the same tag, so a player who is merely in
+ * another app gets one notice rather than two.
  */
 
 export type NotifyState = 'unsupported' | 'default' | 'granted' | 'denied'

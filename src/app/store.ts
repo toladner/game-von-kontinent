@@ -19,6 +19,7 @@ import {
   type ConnectionStatus,
   type GameMeta,
 } from './net'
+import { armPush } from './push'
 
 const SAVE_KEY = 'vkzk.partie.v1'
 
@@ -673,6 +674,15 @@ export const useGame = create<Store>((set, get) => ({
           net: s.net ? { ...s.net, playerId } : s.net,
           notice: null,
         }))
+
+        /*
+         * Now that there is a seat, leave an address the Partieserver can
+         * reach when this app is not running. Every reconnect, because a
+         * browser may rotate the subscription and the server's copy has to
+         * follow. Fire and forget: it fails quietly where the browser cannot
+         * do it, or where notices were never allowed.
+         */
+        void armPush(code)
       },
 
       onView: (view) => {

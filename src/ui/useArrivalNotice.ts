@@ -16,7 +16,9 @@ import type { EngineContext } from '@engine/context'
  * Nothing is said while the player is watching — a notification for something
  * happening on screen in front of them is noise. And each piece of news
  * carries a tag, so the ship arriving is one notification however many times
- * a re-render notices it.
+ * a re-render notices it. The Partieserver sends the same tags for the same
+ * two events (`server/index.ts`, `announce`), which is what keeps a push and
+ * a timer that both fire from becoming two notices about one ship.
  */
 export function useArrivalNotice(
   ctx: EngineContext,

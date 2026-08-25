@@ -1,0 +1,24 @@
+// The service worker is its own little program.
+//
+// It runs with neither a window nor a Cloudflare Worker around it, so it gets
+// its own project: the WebWorker lib rather than DOM, and none of the app's
+// types. Sharing a program with `src` would mean loading DOM and WebWorker
+// together, which declare the same names and disagree about them.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["sw"]
+}
