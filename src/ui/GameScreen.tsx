@@ -14,6 +14,7 @@ import { formatMoney, PLAYER_COLORS, playerLabel, useGame, type LogLine } from '
 import { arrivalAt, legalSteps, marketReport, portAt, standings } from '@engine/selectors'
 import { konjunkturOutcome, type HarbourStep } from '@engine/advice'
 import { TELEGRAM_LIMIT } from '@engine/reducer'
+import { AnchorGlyph, GearGlyph, NewsGlyph } from './Glyphs'
 import { Emph } from './Emph'
 import type { GameEvent } from '@engine/actions'
 import {
@@ -267,9 +268,7 @@ export function GameScreen() {
               label={`Nachrichten${unread > 0 ? `, ${unread} ungelesen` : ''}`}
               onOpen={() => open('nachrichten')}
             >
-              <span className="text-base leading-none" aria-hidden>
-                📰
-              </span>
+              <NewsGlyph />
               {unread > 0 && (
                 <span className="bg-rot tnum rounded-full px-1 text-[9px] leading-[1.4] font-bold text-white">
                   {unread > 99 ? '99+' : unread}
@@ -289,9 +288,7 @@ export function GameScreen() {
                 label={`Flotte: ${player.fleet.length} Schiffe${waitingMail > 0 ? `, ${waitingMail} Briefe` : ''}`}
                 onOpen={() => open('flotte')}
               >
-                <span className="text-base leading-none" aria-hidden>
-                  ⚓
-                </span>
+                <AnchorGlyph />
                 <span className="tnum text-base leading-none font-bold">{player.fleet.length}</span>
                 {waitingMail > 0 && (
                   <span className="bg-rot tnum rounded-full px-1 text-[9px] leading-[1.4] font-bold text-white">
@@ -304,9 +301,7 @@ export function GameScreen() {
             <MarketCell percent={state.saleModifierPercent} onOpen={() => open('runde')} />
 
             <Cell label="Einstellungen" onOpen={() => open('einstellungen')}>
-              <span className="text-base leading-none" aria-hidden>
-                ⚙
-              </span>
+              <GearGlyph />
             </Cell>
           </div>
         </div>
@@ -1264,19 +1259,29 @@ function NewsSheet({
   /** Null where there is nobody to telegraph, and the form stays away. */
   onSend: ((text: string) => void) | null
 }) {
-  /** Null reads the whole paper; an id reads one house's column. */
-  const [only, setOnly] = useState<string | null>(null)
+  /** Null reads the whole paper; otherwise one house's column, or the wire. */
+  const [only, setOnly] = useState<Column>(null)
+
+  /** Every telegram, for the chip and the count beside it. */
+  const wire = useMemo(() => log.filter((l) => l.kind === 'telegramm'), [log])
 
   /*
-   * Filtering keeps the world news — round openings, storms, the close of
-   * the season — because those are the scaffolding the journal hangs on. A
-   * round in which the chosen house did nothing drops out by itself: its
-   * heading has no entries under it, and empty groups are not drawn.
+   * Filtering to a house keeps the world news — round openings, storms, the
+   * close of the season — because those are the scaffolding the journal hangs
+   * on. A round in which the chosen house did nothing drops out by itself:
+   * its heading has no entries under it, and empty groups are not drawn.
+   *
+   * The wire keeps only the round headings, and not the rest of the world
+   * news: reading the telegrams means reading the telegrams, and a storm in
+   * between is exactly what one is asking to be rid of.
    */
-  const shown = useMemo(
-    () => (only ? log.filter((l) => l.who.length === 0 || l.who.includes(only)) : log),
-    [log, only],
-  )
+  const shown = useMemo(() => {
+    if (!only) return log
+    if (only.kind === 'telegramm') {
+      return log.filter((l) => l.kind === 'telegramm' || l.kind === 'roundStarted')
+    }
+    return log.filter((l) => l.who.length === 0 || l.who.includes(only.id))
+  }, [log, only])
   const fresh = shown.filter((l) => l.id > sinceId).length
   // The clock is redrawn every second; the headings only ever change at
   // midnight, so they are grouped against the day rather than the instant.
@@ -1285,7 +1290,9 @@ function NewsSheet({
     () => (realtime ? groupByDay(shown, today) : groupByRound(shown)),
     [shown, realtime, today],
   )
-  const named = only ? (players.find((p) => p.id === only)?.name ?? null) : null
+  const named =
+    only?.kind === 'haus' ? (players.find((p) => p.id === only.id)?.name ?? null) : null
+  const onWire = only?.kind === 'telegramm'
 
   // The current round is the one you came to read; older ones fold away so a
   // fifty-round game does not become a scroll to nowhere.
@@ -1300,11 +1307,13 @@ function NewsSheet({
       subtitle={
         log.length === 0
           ? 'Noch ist nichts eingegangen'
-          : named
-            ? `${shown.length} zu ${named} · ${log.length} insgesamt`
-            : fresh > 0
-              ? `${fresh} neu · ${log.length} insgesamt`
-              : `${log.length} Meldungen`
+          : onWire
+            ? `${wire.length} ${wire.length === 1 ? 'Telegramm' : 'Telegramme'} · ${log.length} Meldungen insgesamt`
+            : named
+              ? `${shown.length} zu ${named} · ${log.length} insgesamt`
+              : fresh > 0
+                ? `${fresh} neu · ${log.length} insgesamt`
+                : `${log.length} Meldungen`
       }
     >
       {onSend && <TelegramForm onSend={onSend} />}
@@ -1318,13 +1327,29 @@ function NewsSheet({
           aria-label="Nachrichten filtern"
         >
           <FilterChip label="Alle" active={only === null} onPick={() => setOnly(null)} />
+          {/* Der Draht steht gleich hinter „Alle" und nicht am Ende der Reihe:
+              die Reihe scrollt, und wer die Nachrichten aufschlägt, um zu
+              lesen was die anderen geschrieben haben, soll nicht erst an vier
+              Häusern vorbeiwischen. Er erscheint nur, wenn tatsächlich
+              telegrafiert wurde — ein Filter auf nichts ist eine Sackgasse. */}
+          {wire.length > 0 && (
+            <FilterChip
+              label="Telegramme"
+              active={onWire}
+              onPick={() => setOnly(onWire ? null : { kind: 'telegramm' })}
+            />
+          )}
           {players.map((p) => (
             <FilterChip
               key={p.id}
               label={p.name}
               ink={PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!.ink}
-              active={only === p.id}
-              onPick={() => setOnly(only === p.id ? null : p.id)}
+              active={only?.kind === 'haus' && only.id === p.id}
+              onPick={() =>
+                setOnly(
+                  only?.kind === 'haus' && only.id === p.id ? null : { kind: 'haus', id: p.id },
+                )
+              }
             />
           ))}
         </div>
@@ -1336,7 +1361,7 @@ function NewsSheet({
         </p>
       ) : rounds.length === 0 ? (
         <p className="text-ink-soft py-6 text-center text-[13px]">
-          Von {named} ist noch nichts zu berichten.
+          {onWire ? 'Über den Draht ist noch nichts gekommen.' : `Von ${named} ist noch nichts zu berichten.`}
         </p>
       ) : (
         <div className="space-y-2">
@@ -1410,6 +1435,9 @@ function NewsSheet({
     </Sheet>
   )
 }
+
+/** Worauf das Blatt eingeengt ist: gar nicht, auf ein Haus, oder auf den Draht. */
+type Column = null | { readonly kind: 'haus'; readonly id: string } | { readonly kind: 'telegramm' }
 
 /**
  * Ein Telegramm aufgeben.

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AnchorGlyph } from './Glyphs'
 import type { GameState, PlayerState } from '@engine/state'
 import type { EngineContext } from '@engine/context'
 import type { Port } from '@engine/types'
@@ -803,12 +804,12 @@ export function Board({
           −
         </button>
         <button
-          className="pointer-events-auto px-2.5 py-1.5 text-base leading-none transition-colors hover:bg-black/5"
+          className="pointer-events-auto flex items-center justify-center px-2.5 py-1.5 transition-colors hover:bg-black/5"
           onClick={() => centreOn(focusNode, 3)}
           aria-label="Zum eigenen Schiff"
           title="Zum eigenen Schiff"
         >
-          ⚓
+          <AnchorGlyph size={17} />
         </button>
       </div>
     </div>

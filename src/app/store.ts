@@ -64,6 +64,15 @@ export interface LogLine {
   readonly text: string
   readonly tone: 'neutral' | 'gut' | 'schlecht' | 'wichtig'
   /**
+   * Which sort of thing happened, straight from the event that made the line.
+   *
+   * `who` answers "whose news is this", which is the wrong axis for the wire:
+   * a telegram belongs to nobody's column on purpose, so that narrowing the
+   * paper to one house does not lose it. Reading only the telegrams is a
+   * different question, and this is what answers it.
+   */
+  readonly kind: GameEvent['type']
+  /**
    * The houses this entry concerns. Empty means the world at large — a round
    * opening, a storm, the close of the season — which is what lets the
    * journal be filtered to one house without losing the scaffolding that
@@ -205,7 +214,7 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
     text: string,
     tone: LogLine['tone'] = 'neutral',
     who: readonly string[] = 'playerId' in event ? [event.playerId] : [],
-  ): LogLine => ({ id: ++logId, text, tone, who, at: state.now })
+  ): LogLine => ({ id: ++logId, text, tone, who, kind: event.type, at: state.now })
 
   switch (event.type) {
     case 'rolled':
@@ -380,6 +389,8 @@ function openingLine(startingCapital: number, at: number): LogLine {
     text: `Die Exportbank kreditiert jedem Mitspieler ${startingCapital.toLocaleString('de-DE')} Einheiten Betriebskapital.`,
     tone: 'wichtig',
     who: [],
+    // Kein Ereignis stand dahinter — die Bank hat schlicht gebucht.
+    kind: 'gameStarted',
     at,
   }
 }

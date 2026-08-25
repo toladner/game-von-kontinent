@@ -1476,6 +1476,55 @@ describe('telegraphing the table', () => {
     )
   })
 
+  it('offers no wire until something has come over it', () => {
+    // A filter that yields nothing is a dead end on a scrolling row.
+    openPaper('draht-keins')
+    expect(screen.queryByRole('button', { name: 'Telegramme' })).toBeNull()
+  })
+
+  it('narrows the paper to the wire, and lets go again', () => {
+    openPaper('draht-filter')
+    act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'kaufe kaffee' }))
+
+    const entries = () =>
+      [...document.querySelectorAll('aside.sheet ol li p')].map((p) => p.textContent ?? '')
+    const all = entries()
+    // Das Blatt trägt mindestens die Eröffnungsbuchung der Exportbank neben
+    // dem Telegramm — genug, damit der Filter etwas wegzunehmen hat.
+    expect(all.length).toBeGreaterThan(1)
+    expect(all.some((t) => !t.includes('telegrafiert'))).toBe(true)
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Telegramme' }))
+    })
+    const wire = entries()
+    expect(wire.length).toBeGreaterThan(0)
+    expect(wire.every((t) => t.includes('telegrafiert'))).toBe(true)
+    expect(wire.some((t) => t.includes('kaufe kaffee'))).toBe(true)
+
+    // Tapping it again reads the whole paper, like the house chips do.
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Telegramme' }))
+    })
+    expect(entries()).toHaveLength(all.length)
+  })
+
+  it('keeps the round headings, so the wire is still dated', () => {
+    // Everything else the world says is dropped on purpose — a storm between
+    // two messages is exactly what one asked to be rid of — but without the
+    // headings the conversation arrives as one undated heap.
+    openPaper('draht-runden')
+    act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'moin' }))
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Telegramme' }))
+    })
+    const headings = [...document.querySelectorAll('aside.sheet section button')].map(
+      (b) => b.textContent ?? '',
+    )
+    expect(headings.length).toBeGreaterThan(0)
+    expect(headings.some((h) => /Runde \d|Laufende Runde/.test(h))).toBe(true)
+  })
+
   it('prints the message in the paper, in nobody’s column', () => {
     openPaper('draht-blatt')
     act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'kaufe kaffee jeden preis' }))
