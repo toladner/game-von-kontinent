@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CLASSIC_PACK } from '@content/maps/classic'
 import { createContext } from './context'
 import { createGame, openingActions } from './setup'
-import { applyAction, replay } from './reducer'
+import { applyAction, replay, TELEGRAM_LIMIT } from './reducer'
 import {
   buyOffers,
   castOffMs,
@@ -29,6 +29,20 @@ const ctx = createContext(CLASSIC_PACK)
 /** Open a table, seat the given traders and start play. */
 function seated(names: string[], options: Parameters<typeof createGame>[1] = {}) {
   return replay(ctx, createGame(ctx, options), openingActions(names))
+}
+
+/**
+ * Make the market certain to speak at its next turn.
+ *
+ * It ordinarily keeps quiet about half the time, which is the point of it —
+ * but a test about what a card does should not also be a coin toss about
+ * whether the card arrives.
+ */
+function speaking(s: GameState): GameState {
+  return {
+    ...s,
+    config: { ...s.config, realtime: { ...s.config.realtime, marketChancePercent: 100 } },
+  }
 }
 
 describe('content', () => {
@@ -448,7 +462,7 @@ describe('real-time sailing', () => {
   })
 
   it('turns the world market on its own schedule', () => {
-    const s = afloat()
+    const s = speaking(afloat())
     expect(s.marketCardId).toBeNull()
     const later = applyAction(ctx, s, {
       type: 'tick',
@@ -508,7 +522,7 @@ describe('the world market in real time', () => {
     applyAction(
       ctx,
       {
-        ...s,
+        ...speaking(s),
         deck: [cardId, ...s.deck.filter((d) => d !== cardId)],
         marketSince: s.now - INTERVAL * MIN,
       },
@@ -655,6 +669,205 @@ describe('the world market in real time', () => {
 
     const next = turn(s, CLASSIC_PACK.konjunktur.find((c) => c.title === 'Hausse')!.id)
     expect(next.state.marketSettled).toHaveLength(0)
+  })
+})
+
+/**
+ * The market's right to say nothing.
+ *
+ * A card every twenty minutes without fail meant something was always in
+ * force, and a thing always in force is not news — it is the weather one
+ * stops looking at. Half the sessions now pass in silence.
+ */
+describe('a market that does not always speak', () => {
+  const T0 = 1_800_000_000_000
+  const MIN = 60_000
+  const INTERVAL = CLASSIC_PACK.config.realtime.marketIntervalMinutes
+
+  const afloat = (seed = 'stille') =>
+    replay(
+      ctx,
+      createGame(ctx, { seed, travel: 'echtzeit', minutesPerPip: 1, durationHours: 48 }),
+      [
+        { type: 'tick', at: T0 },
+        { type: 'join', playerId: 'a', name: 'Ada' },
+        { type: 'start' },
+      ],
+    )
+
+  /** Set the odds for this table, whatever the pack says. */
+  const odds = (s: GameState, percent: number): GameState => ({
+    ...s,
+    config: { ...s.config, realtime: { ...s.config.realtime, marketChancePercent: percent } },
+  })
+
+  /** Let one market session fall due and pass. */
+  const session = (s: GameState) =>
+    applyAction(ctx, { ...s, marketSince: s.now - INTERVAL * MIN }, { type: 'tick', at: s.now + 1000 })
+
+  it('speaks about half the time over a long season', () => {
+    // Seeded, so this is a fixed number, not a flake — but it is written as a
+    // band because the point is the proportion, not the particular draw.
+    let s = odds(afloat(), 50)
+    let spoke = 0
+    for (let i = 0; i < 120; i++) {
+      const out = session(s)
+      if (out.events.some((e) => e.type === 'marketTurned')) spoke++
+      s = out.state
+    }
+    expect(spoke).toBeGreaterThan(120 * 0.35)
+    expect(spoke).toBeLessThan(120 * 0.65)
+  })
+
+  it('honours the two ends of the dial', () => {
+    const never = session(odds(afloat(), 0))
+    expect(never.state.marketCardId).toBeNull()
+
+    const always = session(odds(afloat(), 100))
+    expect(always.state.marketCardId).not.toBeNull()
+  })
+
+  it('lets the standing notice lapse when it goes quiet', () => {
+    const hausse = CLASSIC_PACK.konjunktur.find((c) => c.title === 'Hausse')!
+    const loud = session({
+      ...odds(afloat(), 100),
+      deck: [hausse.id, ...afloat().deck.filter((d) => d !== hausse.id)],
+    })
+    expect(loud.state.saleModifierPercent).not.toBe(0)
+
+    const quiet = session(odds(loud.state, 0))
+    expect(quiet.state.marketCardId).toBeNull()
+    expect(quiet.state.saleModifierPercent).toBe(0)
+    expect(quiet.events.some((e) => e.type === 'marketCalm')).toBe(true)
+  })
+
+  it('does not announce a silence that follows a silence', () => {
+    // Nothing has stood yet, so there is nothing to report as over. A news
+    // sheet that prints "no news" every twenty minutes stops being read.
+    const first = session(odds(afloat(), 0))
+    expect(first.events.some((e) => e.type === 'marketCalm')).toBe(false)
+  })
+
+  it('costs the deck nothing to stay silent', () => {
+    // The roll happens before the draw, so a quiet spell does not quietly
+    // eat its way through the pack.
+    const s = odds(afloat(), 0)
+    const before = s.deck
+    const after = session(s).state
+    expect(after.deck).toEqual(before)
+  })
+
+  it('leaves a Warenbericht standing over a quiet session', () => {
+    // Silence ends the standing card, not every notice in force: a report on
+    // coffee has its own four turns of the market to run.
+    const deck = CLASSIC_PACK.konjunkturErweitert!
+    const bericht = deck.find((c) => c.effects.some((e) => e.kind === 'goodPriceDelta'))!
+    const base = replay(
+      ctx,
+      createGame(ctx, {
+        seed: 'stille',
+        travel: 'echtzeit',
+        minutesPerPip: 1,
+        durationHours: 48,
+        konjunktur: 'erweitert',
+      }),
+      [
+        { type: 'tick', at: T0 },
+        { type: 'join', playerId: 'a', name: 'Ada' },
+        { type: 'start' },
+      ],
+    )
+    const loud = session({
+      ...odds(base, 100),
+      deck: [bericht.id, ...base.deck.filter((d) => d !== bericht.id)],
+    })
+    expect(loud.state.weather.length).toBeGreaterThan(0)
+
+    const quiet = session(odds(loud.state, 0)).state
+    expect(quiet.marketCardId).toBeNull()
+    expect(quiet.weather.length).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * The Telegramm.
+ *
+ * The one action that changes nothing. Three houses on three telephones had
+ * no way to say "verkaufst du mir den Kaffee?", and the log — the only thing
+ * every device already agrees about — is exactly the right place to put one.
+ */
+describe('a telegram to the whole table', () => {
+  const table = () => seated(['Ada', 'Bo'], { seed: 'telegramm' })
+
+  const wire = (s: GameState, text: string, by: string) =>
+    applyAction(ctx, s, { type: 'telegramm', text, by })
+
+  it('leaves a message in the news and nothing else in the game', () => {
+    const before = table()
+    const out = wire(before, 'kaufe kaffee jeden preis', 'p1')
+
+    const sent = out.events.find((e) => e.type === 'telegramm')
+    expect(sent).toMatchObject({ playerId: 'p1', text: 'kaufe kaffee jeden preis' })
+    // Nothing moved: not the cash, not the round, not the clock.
+    expect(out.state).toBe(before)
+  })
+
+  it('waits for no turn — that is the whole point of it', () => {
+    // Round play: Ada is at the wheel, Bo is not, and Bo still gets to speak.
+    const s = table()
+    expect(s.players[s.activeIndex]!.id).toBe('p1')
+
+    const out = wire(s, 'biete zucker', 'p2')
+    expect(out.events.some((e) => e.type === 'rejected')).toBe(false)
+    expect(out.events.some((e) => e.type === 'telegramm' && e.playerId === 'p2')).toBe(true)
+  })
+
+  it('goes in the lobby too, where the waiting is', () => {
+    const lobby = replay(ctx, createGame(ctx, { seed: 'telegramm' }), [
+      { type: 'join', playerId: 'p1', name: 'Ada' },
+      { type: 'join', playerId: 'p2', name: 'Bo' },
+    ])
+    expect(lobby.phase).toBe('lobby')
+
+    const out = applyAction(ctx, lobby, { type: 'telegramm', text: 'bin gleich da', by: 'p2' })
+    expect(out.events.some((e) => e.type === 'telegramm')).toBe(true)
+  })
+
+  it('takes nothing from someone who is not at the table', () => {
+    const out = wire(table(), 'hallo', 'niemand')
+    expect(out.events.some((e) => e.type === 'rejected')).toBe(true)
+    expect(out.events.some((e) => e.type === 'telegramm')).toBe(false)
+  })
+
+  it('refuses an empty form, however it is padded', () => {
+    for (const text of ['', '   ', '\n\t ']) {
+      const out = wire(table(), text, 'p1')
+      expect(out.events.some((e) => e.type === 'rejected')).toBe(true)
+    }
+  })
+
+  it('presses the message onto one line and cuts it to length', () => {
+    // A message with newlines in it could otherwise lay out the page it lands
+    // on, and one long enough could push a day of news off the screen.
+    const messy = wire(table(), '  erste\nzweite\t\tdritte  ', 'p1')
+    const line = messy.events.find((e) => e.type === 'telegramm')!
+    expect(line.type === 'telegramm' && line.text).toBe('erste zweite dritte')
+
+    const long = wire(table(), 'x'.repeat(500), 'p1')
+    const cut = long.events.find((e) => e.type === 'telegramm')!
+    expect(cut.type === 'telegramm' && cut.text.length).toBe(TELEGRAM_LIMIT)
+  })
+
+  it('comes back with the log, so a reload does not lose the conversation', () => {
+    // The point of putting it in the log rather than beside it.
+    const actions: GameAction[] = [
+      ...openingActions(['Ada', 'Bo']),
+      { type: 'telegramm', text: 'moin', by: 'p1' },
+      { type: 'roll' },
+    ]
+    const first = replay(ctx, createGame(ctx, { seed: 'telegramm' }), actions)
+    const again = replay(ctx, createGame(ctx, { seed: 'telegramm' }), actions)
+    expect(again).toEqual(first)
   })
 })
 
@@ -859,7 +1072,7 @@ describe('weather over one part of the world', () => {
     applyAction(
       ctx,
       {
-        ...s,
+        ...speaking(s),
         deck: [card.id, ...s.deck.filter((d) => d !== card.id)],
         marketSince: s.now - s.config.realtime.marketIntervalMinutes * MIN,
       },
@@ -1075,7 +1288,7 @@ describe('a report on one ware', () => {
     applyAction(
       ctx,
       {
-        ...s,
+        ...speaking(s),
         deck: [card.id, ...s.deck.filter((d) => d !== card.id)],
         marketSince: s.now - s.config.realtime.marketIntervalMinutes * MIN,
       },
@@ -1251,7 +1464,7 @@ describe('a harbour shut to trade', () => {
     applyAction(
       ctx,
       {
-        ...s,
+        ...speaking(s),
         deck: [card.id, ...s.deck.filter((d) => d !== card.id)],
         marketSince: s.now - s.config.realtime.marketIntervalMinutes * MIN,
       },

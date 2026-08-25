@@ -304,6 +304,12 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
         'wichtig',
         [],
       )
+    // A telegram belongs to nobody's column: it was sent to the whole table,
+    // so filtering the paper down to one house must not lose it.
+    case 'telegramm':
+      return line(`${nameOf(event.playerId)} telegrafiert: „${event.text}“`, 'wichtig', [])
+    case 'marketCalm':
+      return line('Die Börse meldet nichts. Die letzte Notierung ist damit verfallen.', 'neutral', [])
     case 'roundStarted':
       return line(
         `Runde ${event.round}${event.red ? ' — rotes Feld, die Konjunktur spricht mit.' : '.'}`,
@@ -579,7 +585,15 @@ export const useGame = create<Store>((set, get) => ({
 
       onPresence: (online) => set((s) => ({ net: s.net ? { ...s.net, online } : s.net })),
       onFocus: (playerId, step) => set({ focus: { playerId, step } }),
-      onError: (reason) => set({ notice: reason }),
+      onError: (reason) => {
+        // A refusal that arrives before any state is a refusal to seat us at
+        // all — a table closed to latecomers, most often. Retrying will not
+        // help, and the code was written down before the socket was even
+        // open, so leaving it there would walk the app back into the same
+        // dead end every time it starts. Forget the table; keep the reason.
+        if (!get().state) forgetTable()
+        set({ notice: reason })
+      },
     })
     session.connect()
   },
@@ -631,6 +645,18 @@ export const useGame = create<Store>((set, get) => ({
     type ActorAction = Extract<GameAction, { type: (typeof NAMES_AN_ACTOR)[number] }>
     const namesAnActor = (a: GameAction): a is ActorAction =>
       (NAMES_AN_ACTOR as readonly string[]).includes(a.type)
+
+    // A telegram names its sender in both modes. It waits for no turn, so
+    // there is no turn to read the sender off — and in round play the actor
+    // would otherwise come out as whoever happens to be at the wheel.
+    if (action.type === 'telegramm' && !action.by) {
+      const me = get().acting()
+      if (!me) {
+        set({ notice: 'Sie sitzen nicht mit am Tisch — Sie sehen nur zu.' })
+        return
+      }
+      action = { ...action, by: me.id }
+    }
 
     if (state.config.travel === 'echtzeit' && namesAnActor(action) && !action.by) {
       const me = get().acting()

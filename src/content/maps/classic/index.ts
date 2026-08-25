@@ -31,6 +31,7 @@ export const CLASSIC_CONFIG: RuleConfig = {
     minutesPerPip: 6,
     portCallPips: 0.4,
     marketIntervalMinutes: 20,
+    marketChancePercent: 50,
     durationHours: 24,
   },
   startingCapital: 500_000,

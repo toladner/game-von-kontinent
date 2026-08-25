@@ -69,6 +69,18 @@ export type GameAction =
   /** The player's own notes; the game remembers nothing for them. */
   | { readonly type: 'writeNote'; readonly text: string; readonly by?: string }
   /**
+   * A line of text from one house to the whole table.
+   *
+   * It is an action rather than a chat channel bolted on beside the game for
+   * the same reason a join is: the log is the only thing every device agrees
+   * about. A message in it arrives everywhere, survives a reload, and reads
+   * back in its right place among the day's news.
+   *
+   * It always names its sender — unlike a move, it waits for no turn, so
+   * there is no turn to infer the sender from.
+   */
+  | { readonly type: 'telegramm'; readonly text: string; readonly by?: string }
+  /**
    * The world clock, carried as data so the reducer never reads it itself.
    * Only this action moves time, which is what keeps replays exact.
    */
@@ -94,6 +106,8 @@ export type GameEvent =
       readonly arrivesAt: number
     }
   | { readonly type: 'marketTurned'; readonly cardId: string }
+  /** The market was asked and had nothing to say; `cardId` is what lapsed. */
+  | { readonly type: 'marketCalm'; readonly cardId: string }
   | {
       readonly type: 'vehicleBought'
       readonly playerId: string
@@ -187,6 +201,7 @@ export type GameEvent =
   | { readonly type: 'turnEnded'; readonly playerId: string }
   | { readonly type: 'roundStarted'; readonly round: number; readonly red: boolean }
   | { readonly type: 'gameOver' }
+  | { readonly type: 'telegramm'; readonly playerId: string; readonly text: string }
   | { readonly type: 'rejected'; readonly reason: string }
 
 export interface ActionResult {

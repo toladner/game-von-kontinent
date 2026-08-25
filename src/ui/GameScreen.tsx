@@ -13,6 +13,7 @@ import { PigeonSheet } from './PigeonSheet'
 import { formatMoney, PLAYER_COLORS, playerLabel, useGame, type LogLine } from '@app/store'
 import { arrivalAt, legalSteps, marketReport, portAt, standings } from '@engine/selectors'
 import { konjunkturOutcome, type HarbourStep } from '@engine/advice'
+import { TELEGRAM_LIMIT } from '@engine/reducer'
 import { Emph } from './Emph'
 import type { GameEvent } from '@engine/actions'
 import {
@@ -210,11 +211,11 @@ export function GameScreen() {
       />
 
       {/* Kopfzeile: das Handelshaus links, die Leiste rechts.
-          Sie *soll* umbrechen, wenn der Platz nicht reicht — bisher stand das
-          nur als Absicht hier, ohne flex-wrap, und die Leiste (shrink-0) hat
-          das Handelshaus stattdessen zusammengedrückt, bis vom Namen zwei
-          Buchstaben übrig waren. Jetzt rutscht die Leiste auf eine eigene
-          Zeile, sobald es eng wird, und ml-auto hält sie dabei rechts. */}
+          Der Umbruch bleibt als Notnagel — bei sehr großer Schrift oder einem
+          sehr schmalen Gerät rutscht die Leiste auf eine eigene Zeile, statt
+          das Handelshaus zusammenzudrücken, bis vom Namen zwei Buchstaben
+          übrig sind; ml-auto hält sie dabei rechts. Im Normalfall soll es
+          gar nicht so weit kommen, dafür steht die Leiste gestapelt. */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start gap-2 px-3"
         style={{ paddingTop: 'calc(var(--safe-t) + 0.6rem)' }}
@@ -242,43 +243,14 @@ export function GameScreen() {
         )}
 
         {/* Eine Leiste statt vier Merkzettel: ein Papier, ein Schatten,
-            Haarlinien dazwischen. */}
-        <div className="paper anim-rise pointer-events-auto ml-auto flex shrink-0 items-stretch divide-x divide-black/15 overflow-hidden rounded-lg shadow-lg">
-          <Cell label={`Nachrichten${unread > 0 ? `, ${unread} ungelesen` : ''}`} onOpen={() => open('nachrichten')}>
-            <span className="text-base leading-none" aria-hidden>
-              📰
-            </span>
-            {unread > 0 && (
-              <span className="bg-rot tnum rounded-full px-1 text-[9px] leading-[1.4] font-bold text-white">
-                {unread > 99 ? '99+' : unread}
-              </span>
-            )}
-          </Cell>
+            Haarlinien dazwischen.
 
-          {/* Nur wenn es etwas zu verwalten gibt: bei einem Schiff, keiner
-              Post und geschlossener Werft ist das Register ein Knopf ohne
-              Inhalt. Unter Sicht realistisch immer — dort hängen Notizbuch
-              und Brieftauben daran, und die sind das halbe Spiel. */}
-          {(player.fleet.length > 1 ||
-            waitingMail > 0 ||
-            state.config.maxFleetSize > 1 ||
-            state.config.sicht === 'realistisch') && (
-            <Cell
-              label={`Flotte: ${player.fleet.length} Schiffe${waitingMail > 0 ? `, ${waitingMail} Briefe` : ''}`}
-              onOpen={() => open('flotte')}
-            >
-              <span className="text-base leading-none" aria-hidden>
-                ⚓
-              </span>
-              <span className="tnum text-base leading-none font-bold">{player.fleet.length}</span>
-              {waitingMail > 0 && (
-                <span className="bg-rot tnum rounded-full px-1 text-[9px] leading-[1.4] font-bold text-white">
-                  {waitingMail}
-                </span>
-              )}
-            </Cell>
-          )}
-
+            Zwei Zeilen statt einer: die Uhr als Überschrift, die Knöpfe als
+            Skalen darunter. In einer Zeile war die Leiste breiter als der
+            halbe Bildschirm, und für das Handelshaus daneben blieb kein Platz
+            mehr — sie rutschte darunter und legte sich auf den Plan.
+            Gestapelt ist sie halb so breit und bleibt oben rechts stehen. */}
+        <div className="paper anim-rise pointer-events-auto ml-auto flex shrink-0 flex-col overflow-hidden rounded-lg shadow-lg">
           {realtime ? (
             <ClockCell state={state} now={now} onOpen={() => open('runde')} />
           ) : (
@@ -290,11 +262,53 @@ export function GameScreen() {
             />
           )}
 
-          <Cell label="Einstellungen" onOpen={() => open('einstellungen')}>
-            <span className="text-base leading-none" aria-hidden>
-              ⚙
-            </span>
-          </Cell>
+          <div className="flex items-stretch divide-x divide-black/15 border-t border-black/15">
+            <Cell
+              label={`Nachrichten${unread > 0 ? `, ${unread} ungelesen` : ''}`}
+              onOpen={() => open('nachrichten')}
+            >
+              <span className="text-base leading-none" aria-hidden>
+                📰
+              </span>
+              {unread > 0 && (
+                <span className="bg-rot tnum rounded-full px-1 text-[9px] leading-[1.4] font-bold text-white">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
+            </Cell>
+
+            {/* Nur wenn es etwas zu verwalten gibt: bei einem Schiff, keiner
+                Post und geschlossener Werft ist das Register ein Knopf ohne
+                Inhalt. Unter Sicht realistisch immer — dort hängen Notizbuch
+                und Brieftauben daran, und die sind das halbe Spiel. */}
+            {(player.fleet.length > 1 ||
+              waitingMail > 0 ||
+              state.config.maxFleetSize > 1 ||
+              state.config.sicht === 'realistisch') && (
+              <Cell
+                label={`Flotte: ${player.fleet.length} Schiffe${waitingMail > 0 ? `, ${waitingMail} Briefe` : ''}`}
+                onOpen={() => open('flotte')}
+              >
+                <span className="text-base leading-none" aria-hidden>
+                  ⚓
+                </span>
+                <span className="tnum text-base leading-none font-bold">{player.fleet.length}</span>
+                {waitingMail > 0 && (
+                  <span className="bg-rot tnum rounded-full px-1 text-[9px] leading-[1.4] font-bold text-white">
+                    {waitingMail}
+                  </span>
+                )}
+              </Cell>
+            )}
+
+            <MarketCell percent={state.saleModifierPercent} onOpen={() => open('runde')} />
+
+            <Cell label="Einstellungen" onOpen={() => open('einstellungen')}>
+              <span className="text-base leading-none" aria-hidden>
+                ⚙
+              </span>
+            </Cell>
+          </div>
         </div>
       </div>
 
@@ -443,6 +457,10 @@ export function GameScreen() {
           sinceId={newsMark}
           snap={snap}
           onSnap={close}
+          // Nur wo jemand am anderen Ende sitzt: ein Tisch über das Netz,
+          // und ein eigener Platz daran. An einem Gerät telegrafierte man
+          // sich selbst.
+          onSend={net && seated ? (text) => dispatch({ type: 'telegramm', text }) : null}
         />
       )}
 
@@ -530,7 +548,8 @@ export function GameScreen() {
  * settings gear — each with its own paper, its own shadow and its own gap,
  * and on a telephone they had begun to wrap onto a second line. As cells of a
  * single strip they cost one shadow between them, sit at one height, and read
- * as an instrument panel rather than as things dropped on the chart.
+ * as an instrument panel rather than as things dropped on the chart. They share
+ * the width of the strip evenly, because the clock above them sets it.
  *
  * Counts ride inline rather than as corner badges: the strip clips its
  * children so that it can round its own ends, and a badge hung off the corner
@@ -549,9 +568,41 @@ function Cell({
     <button
       onClick={onOpen}
       aria-label={label}
-      className="flex items-center gap-1.5 px-2.5 py-1.5 transition-colors hover:bg-black/5"
+      className="flex flex-1 items-center justify-center gap-1.5 px-2.5 py-2 transition-colors hover:bg-black/5"
     >
       {children}
+    </button>
+  )
+}
+
+/**
+ * What the world market is doing, as a division of its own.
+ *
+ * It used to ride inside the clock, which made the widest cell in the strip
+ * wider still. Standing alone it is a dial like the others, and it sits beside
+ * the newspaper the news of it arrived in.
+ *
+ * It reads ±0 rather than going blank when nothing is in force. A dial that
+ * disappears leaves a merchant wondering whether the market is quiet or the
+ * strip is broken — and it would shift the other cells about every time a
+ * card turned.
+ */
+function MarketCell({ percent, onOpen }: { percent: number; onOpen: () => void }) {
+  const tone = percent === 0 ? 'text-ink-faint' : percent > 0 ? 'text-press' : 'text-rot'
+  return (
+    <button
+      onClick={onOpen}
+      aria-label={
+        percent === 0
+          ? 'Weltmarkt: Verkaufspreise unverändert'
+          : `Weltmarkt: Verkaufspreise ${percent > 0 ? 'plus' : 'minus'} ${Math.abs(percent)} Prozent`
+      }
+      className={`flex flex-1 items-center justify-center px-2.5 py-2 transition-colors hover:bg-black/5 ${tone}`}
+    >
+      <span className="tnum text-[13px] leading-none font-bold">
+        {percent === 0 ? '±' : percent > 0 ? '+' : '−'}
+        {Math.abs(percent)}%
+      </span>
     </button>
   )
 }
@@ -641,11 +692,11 @@ function ActionBar({
 }
 
 /**
- * Time left in the season, and what the world market is doing.
+ * Time left in the season, as the headline of the strip.
  *
- * The word "Saison" stands down on a narrow screen. It is the widest thing in
- * the strip and the least informative — a running clock beside a chart of the
- * oceans is not going to be mistaken for anything else.
+ * It has the top row to itself, so the word "Saison" no longer has to stand
+ * down on a narrow screen — the row is as wide as the dials beneath it either
+ * way, and a bare number wants naming.
  */
 function ClockCell({
   state,
@@ -661,28 +712,18 @@ function ClockCell({
   return (
     <button
       onClick={onOpen}
-      className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors hover:bg-black/5 ${
+      className={`flex w-full items-center justify-center gap-1.5 px-3 py-1.5 transition-colors hover:bg-black/5 ${
         closing ? 'text-rot' : ''
       }`}
       aria-label={`Noch ${durationText(left)} Saison`}
     >
-      <span className="smallcaps hidden text-[10px] sm:inline">Saison</span>
+      <span className="smallcaps text-[10px]">Saison</span>
       <span className="tnum text-base leading-none font-bold">{durationText(left)}</span>
-      {state.saleModifierPercent !== 0 && (
-        <span
-          className={`tnum text-[11px] font-bold ${
-            state.saleModifierPercent > 0 ? 'text-press' : 'text-rot'
-          }`}
-        >
-          {state.saleModifierPercent > 0 ? '+' : '−'}
-          {Math.abs(state.saleModifierPercent)}%
-        </span>
-      )}
     </button>
   )
 }
 
-/** The Kegelfigur, as a division of the strip. Tap for the whole track. */
+/** The Kegelfigur, as the headline of the strip. Tap for the whole track. */
 function RoundCell({
   round,
   total,
@@ -697,13 +738,13 @@ function RoundCell({
   return (
     <button
       onClick={onOpen}
-      className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors hover:bg-black/5 ${
+      className={`flex w-full items-center justify-center gap-1.5 px-3 py-1.5 transition-colors hover:bg-black/5 ${
         red ? 'text-rot' : ''
       }`}
       aria-label={`Runde ${round} von ${total}${red ? ', rotes Feld' : ''}`}
     >
       {red && <span className="bg-rot h-2.5 w-2.5 shrink-0 rounded-full" aria-hidden />}
-      <span className="smallcaps hidden text-[10px] sm:inline">Runde</span>
+      <span className="smallcaps text-[10px]">Runde</span>
       <span className="tnum text-base leading-none font-bold">{round}</span>
       <span className="text-ink-faint text-[10px]">/{total}</span>
     </button>
@@ -834,7 +875,7 @@ function SeasonSheet({
         <KonjunkturSlip card={card} standing />
       ) : (
         <p className="text-ink-faint text-xs italic">
-          Noch keine Notierung. Die erste Karte fällt {untilText(nextTurn, now)}.
+          Die Börse meldet nichts. Preise stehen, wie das Warenverzeichnis sie führt.
         </p>
       )}
       <p className="text-ink-soft mt-3 text-center text-[11px]">
@@ -1210,6 +1251,7 @@ function NewsSheet({
   sinceId,
   snap,
   onSnap,
+  onSend,
 }: {
   log: LogLine[]
   readonly players: readonly PlayerState[]
@@ -1219,6 +1261,8 @@ function NewsSheet({
   sinceId: number
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
+  /** Null where there is nobody to telegraph, and the form stays away. */
+  onSend: ((text: string) => void) | null
 }) {
   /** Null reads the whole paper; an id reads one house's column. */
   const [only, setOnly] = useState<string | null>(null)
@@ -1263,6 +1307,8 @@ function NewsSheet({
               : `${log.length} Meldungen`
       }
     >
+      {onSend && <TelegramForm onSend={onSend} />}
+
       {/* Die Spalten des Blattes: das ganze Blatt oder ein Haus. Bei einem
           einzigen Mitspieler gibt es nichts auseinanderzuhalten. */}
       {players.length > 1 && log.length > 0 && (
@@ -1362,6 +1408,65 @@ function NewsSheet({
         </div>
       )}
     </Sheet>
+  )
+}
+
+/**
+ * Ein Telegramm aufgeben.
+ *
+ * Das Blatt war bisher nur zu lesen. Sitzen aber drei Häuser an drei Geräten,
+ * so fehlt irgendwo die Zeile „verkaufst du mir den Kaffee?" — und der einzige
+ * Ort, den alle drei ohnehin aufschlagen, ist dieser hier. Die Meldung geht
+ * als Eintrag in den Spielverlauf und steht damit auf jedem Gerät, überlebt
+ * jedes Neuladen und sortiert sich unter die Nachrichten des Tages ein.
+ *
+ * Knapp gehalten wie ein Formular der Post: eine Zeile, ein Knopf. Der Zähler
+ * erscheint erst, wenn das Blatt knapp wird — vorher wäre er nur Buchhaltung
+ * über eine Sache, die niemand ausreizt.
+ */
+function TelegramForm({ onSend }: { onSend: (text: string) => void }) {
+  const [text, setText] = useState('')
+  const left = TELEGRAM_LIMIT - text.length
+  const ready = text.trim().length > 0
+
+  return (
+    <form
+      className="mb-3 rounded-[2px] border border-black/15 bg-black/[0.03] px-2.5 py-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!ready) return
+        onSend(text)
+        setText('')
+      }}
+    >
+      <div className="flex items-baseline gap-2">
+        <label
+          htmlFor="telegramm"
+          className="smallcaps text-ink-soft shrink-0 text-[10px] tracking-[0.2em]"
+        >
+          Telegramm an alle
+        </label>
+        {left <= 30 && <span className="tnum text-ink-faint ml-auto text-[10px]">{left}</span>}
+      </div>
+      <div className="mt-1 flex items-center gap-2">
+        <input
+          id="telegramm"
+          className="teletype placeholder:text-ink-faint focus:border-ink min-w-0 flex-1 border-b border-black/20 bg-transparent py-1 text-[13px] outline-none"
+          value={text}
+          maxLength={TELEGRAM_LIMIT}
+          autoComplete="off"
+          placeholder="kaufe kaffee jeden preis"
+          onChange={(event) => setText(event.target.value)}
+        />
+        <button
+          type="submit"
+          className="btn-sm shrink-0 rounded-[2px] px-3 py-1 text-[12px]"
+          disabled={!ready}
+        >
+          Aufgeben
+        </button>
+      </div>
+    </form>
   )
 }
 

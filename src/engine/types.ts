@@ -316,6 +316,14 @@ export interface RealtimeConfig {
   readonly portCallPips: number
   /** How often the world market turns a new Konjunktur card. */
   readonly marketIntervalMinutes: number
+  /**
+   * How likely the market is to have anything to say when it is asked.
+   *
+   * A notice every twenty minutes without fail made the Konjunktur wallpaper:
+   * something was always in force, so nothing was news. At even odds the quiet
+   * stretches come back, and a card turning up means something again.
+   */
+  readonly marketChancePercent: number
   /** The season closes this many real hours after departure. */
   readonly durationHours: number
 }

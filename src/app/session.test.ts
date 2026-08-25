@@ -70,6 +70,116 @@ describe('coming back to a table', () => {
   })
 })
 
+/**
+ * Being turned away from a table.
+ *
+ * A party opened "nur zu Beginn" answers a latecomer with a refusal and no
+ * log. The client stored the reason in `notice` and drew nothing with it, so
+ * the screen went on saying "Die Leitung wird gelegt …" for ever — and since
+ * the code is written down before the socket is even open, restarting the app
+ * walked straight back into the same silence.
+ */
+describe('a table that will not have us', () => {
+  /** A socket the test can speak through, in both directions. */
+  class TalkingSocket {
+    static readonly OPEN = 1
+    static last: TalkingSocket | null = null
+    readyState = TalkingSocket.OPEN
+    sent: string[] = []
+    private listeners = new Map<string, ((e: unknown) => void)[]>()
+
+    constructor() {
+      TalkingSocket.last = this
+      // The real socket opens a tick later; a microtask is near enough, and
+      // it lets `connect` attach its listeners first.
+      queueMicrotask(() => this.fire('open', {}))
+    }
+    addEventListener(type: string, fn: (e: unknown) => void): void {
+      this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn])
+    }
+    send(data: string): void {
+      this.sent.push(data)
+    }
+    close(): void {}
+    fire(type: string, event: unknown): void {
+      for (const fn of this.listeners.get(type) ?? []) fn(event)
+    }
+    /** What the Partieserver says back. */
+    say(message: unknown): void {
+      this.fire('message', { data: JSON.stringify(message) })
+    }
+  }
+
+  const REFUSAL = 'Diese Partie nimmt keine Nachzügler auf.'
+
+  const META = {
+    seed: 'abgewiesen',
+    totalRounds: 20,
+    startingCapital: 500_000,
+    joinPolicy: 'nur-zu-beginn' as const,
+    sicht: 'normal' as const,
+    travel: 'runde' as const,
+    minutesPerPip: 6,
+    durationHours: 24,
+    packId: 'classic',
+    createdAt: 0,
+  }
+
+  /** Ask for a seat and let the handshake run. */
+  async function asking(): Promise<TalkingSocket> {
+    ;(globalThis as { WebSocket: unknown }).WebSocket = TalkingSocket
+    useGame.getState().join('WZUH', 'Tobias')
+    await Promise.resolve()
+    return TalkingSocket.last!
+  }
+
+  it('says why, instead of laying the line for ever', async () => {
+    const socket = await asking()
+    socket.say({ t: 'error', reason: REFUSAL })
+
+    expect(useGame.getState().state).toBeNull()
+    // The connecting screen now has something to draw besides a dash.
+    expect(useGame.getState().notice).toBe(REFUSAL)
+    expect(useGame.getState().net?.code).toBe('WZUH')
+  })
+
+  it('forgets a table it was never let into', async () => {
+    // Otherwise every later start walks back into the same refusal, and the
+    // app has locked itself out of its own title page.
+    const socket = await asking()
+    expect(rememberedTable()).toMatchObject({ code: 'WZUH' })
+
+    socket.say({ t: 'error', reason: REFUSAL })
+    expect(rememberedTable()).toBeNull()
+    expect(useGame.getState().restore()).toBe(false)
+  })
+
+  it('keeps the table when the refusal is only of a move', async () => {
+    // A rejected action is not a rejected seat. Only a refusal arriving
+    // before there is any state means we never got in at all.
+    const socket = await asking()
+    socket.say({ t: 'welcome', playerId: 'p1-abc', token: 'tk', meta: META, actions: [] })
+    expect(useGame.getState().state).not.toBeNull()
+
+    socket.say({ t: 'error', reason: 'Dieser Zug ist nicht erlaubt.' })
+    expect(useGame.getState().notice).toBe('Dieser Zug ist nicht erlaubt.')
+    expect(rememberedTable()).toMatchObject({ code: 'WZUH' })
+  })
+
+  it('lets the refused watch instead, with no seat', async () => {
+    const socket = await asking()
+    socket.say({ t: 'error', reason: REFUSAL })
+
+    // Watching asks for no name, which is exactly what the server reads as
+    // "no seat, but here is the log".
+    useGame.getState().join('WZUH', '')
+    await Promise.resolve()
+    const hello = JSON.parse(TalkingSocket.last!.sent[0] ?? '{}') as { t: string; name?: string }
+    expect(hello.t).toBe('hello')
+    expect(hello.name).toBe('')
+  })
+})
+
 describe('the Börsenblatt after a reload', () => {
   /**
    * The journal was only ever written by events arriving live, so anything

@@ -64,7 +64,7 @@ describe('the front page', () => {
     render(<App />)
     expect(screen.getByText(/Von Kontinent/)).toBeTruthy()
     expect(screen.getByText('Klassisch')).toBeTruthy()
-    expect(screen.getByText('Vollständig')).toBeTruthy()
+    expect(screen.getByText('Erweitert')).toBeTruthy()
 
     fireEvent.click(screen.getByText('Klassisch'))
 
@@ -96,7 +96,7 @@ describe('the front page', () => {
     // A dropdown that traps a keyboard user is worse than a plain select
     // with no descriptions at all.
     render(<App />)
-    fireEvent.click(screen.getByText('Vollständig'))
+    fireEvent.click(screen.getByText('Erweitert'))
     const control = opener('Konjunktur')
 
     expect(control.getAttribute('aria-expanded')).toBe('false')
@@ -118,7 +118,7 @@ describe('the front page', () => {
 
   it('shuts a dropdown when the page is clicked elsewhere', () => {
     render(<App />)
-    fireEvent.click(screen.getByText('Vollständig'))
+    fireEvent.click(screen.getByText('Erweitert'))
     fireEvent.click(opener('Preise'))
     expect(screen.getByRole('listbox', { name: 'Preise' })).toBeTruthy()
 
@@ -128,7 +128,7 @@ describe('the front page', () => {
 
   it('opens the option page on the full path', () => {
     render(<App />)
-    fireEvent.click(screen.getByText('Vollständig'))
+    fireEvent.click(screen.getByText('Erweitert'))
 
     // Settings are grouped under headings and worked through dropdowns; the
     // page used to be fourteen full-width cards in a flat list.
@@ -1410,6 +1410,82 @@ describe('reading one house’s column', () => {
       fireEvent.click(screen.getByLabelText(/^Nachrichten/))
     })
     expect(screen.queryByRole('button', { name: 'Alle' })).toBeNull()
+  })
+})
+
+/**
+ * Telegraphing the table.
+ *
+ * The Börsenblatt was a thing to read. Three houses on three telephones had
+ * nowhere at all to say "verkaufst du mir den Kaffee?", and this is the one
+ * page all three open anyway.
+ */
+describe('telegraphing the table', () => {
+  const openPaper = (seed: string) => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed }))
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+  }
+
+  /** What a table over the wire looks like from this device: a seat at it. */
+  const overTheWire = () => {
+    const me = useGame.getState().state!.players[0]!.id
+    act(() =>
+      useGame.setState({
+        net: { code: 'WZUH', status: 'verbunden', playerId: me, online: [] },
+      }),
+    )
+  }
+
+  it('offers no form at a table of one device', () => {
+    // Everyone is in the room. A telegram to yourself is a note, and the
+    // Kontor already has a notebook.
+    openPaper('draht-lokal')
+    expect(screen.queryByLabelText('Telegramm an alle')).toBeNull()
+  })
+
+  it('offers one where the other houses are elsewhere', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'draht-netz' }))
+    overTheWire()
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    expect(screen.getByLabelText('Telegramm an alle')).toBeTruthy()
+  })
+
+  it('will not send a blank form', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'draht-leer' }))
+    overTheWire()
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    const send = screen.getByRole('button', { name: 'Aufgeben' }) as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+
+    act(() => {
+      fireEvent.change(screen.getByLabelText('Telegramm an alle'), {
+        target: { value: 'kaufe kaffee' },
+      })
+    })
+    expect((screen.getByRole('button', { name: 'Aufgeben' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    )
+  })
+
+  it('prints the message in the paper, in nobody’s column', () => {
+    openPaper('draht-blatt')
+    act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'kaufe kaffee jeden preis' }))
+
+    const top = useGame.getState().log[0]!
+    expect(top.text).toContain('Ada')
+    expect(top.text).toContain('kaufe kaffee jeden preis')
+    // Sent to the whole table, so narrowing the paper to one house must not
+    // lose it — that is what an empty `who` means here.
+    expect(top.who).toEqual([])
   })
 })
 

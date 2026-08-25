@@ -36,7 +36,7 @@ interface Trader {
 /**
  * Setup as a short walk, not a form.
  *
- * "Klassisch" is one tap from the names screen. "Vollständig" opens the same
+ * "Klassisch" is one tap from the names screen. "Erweitert" opens the same
  * settings the classic path silently assumes. Joining skips all of it — the
  * host already decided.
  */
@@ -637,10 +637,19 @@ function StepModus({
           onClick={onClassic}
         />
         <Choice
-          title="Vollständig"
+          title="Erweitert"
           blurb="Spielplan, Fahrtweise, Dauer, Kapital und Mitspieler selbst bestimmen — auch über mehrere Geräte."
           onClick={onFull}
         />
+
+        {/* Die beiden darüber eröffnen eine Partie, die darunter tritt einer
+            fremden bei. Ein Strich sagt das schneller als ein Satz — und
+            steht in einem eigenen Kästchen, damit space-y ihm Luft läßt,
+            statt ihn wie eine weitere Karte anzusetzen. */}
+        <div className="py-1.5" aria-hidden>
+          <hr className="mx-auto w-2/3 border-t border-black/15" />
+        </div>
+
         <Choice
           title="Partie beitreten"
           blurb="Sie haben einen Code — die Partie ist eingerichtet, Sie tragen nur Ihren Namen ein."

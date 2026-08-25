@@ -854,6 +854,9 @@ export function applyAction(
   // belong to whoever is currently at the table.
   if (action.type === 'join') return applyJoin(ctx, state, action)
   if (action.type === 'start') return applyStart(state)
+  // Above the lobby check on purpose: waiting for the table to fill is
+  // exactly when there is something to say.
+  if (action.type === 'telegramm') return applyTelegramm(state, action)
 
   if (state.phase === 'lobby') {
     return reject(state, 'Die Partie hat noch nicht begonnen.')
@@ -1514,6 +1517,12 @@ function releasePigeon(
  * The world market. Instead of red fields on a round track, a Konjunktur card
  * is turned every so often and stands for everyone until the next one — which
  * is what makes looking in on a running game worth doing.
+ *
+ * It does not speak every time it is asked. A notice standing without a break
+ * from one to the next made the Konjunktur into wallpaper: something was
+ * always in force, so nothing was news, and the market never simply was what
+ * the register said it was. Half the sessions now pass in silence, the last
+ * notice lapses with them, and a card arriving is an event again.
  */
 function turnMarket(ctx: EngineContext, draft: Draft, events: GameEvent[]): void {
   const intervalMs = draft.config.realtime.marketIntervalMinutes * 60_000
@@ -1521,11 +1530,27 @@ function turnMarket(ctx: EngineContext, draft: Draft, events: GameEvent[]): void
 
   let guard = 0
   while (draft.now - draft.marketSince >= intervalMs && guard++ < 200) {
+    draft.marketSince += intervalMs
+
+    // The roll comes before the draw, so a quiet session costs the deck
+    // nothing: the same card is still on top when the market next speaks.
+    const [roll, rng] = nextInt(draft.rng, 100)
+    draft.rng = rng
+    if (roll >= draft.config.realtime.marketChancePercent) {
+      const lapsed = draft.marketCardId
+      draft.marketCardId = null
+      draft.saleModifierPercent = 0
+      draft.marketSettled = []
+      // Only worth saying if something was standing. Announcing silence where
+      // there was already silence is how a news sheet loses its reader.
+      if (lapsed) events.push({ type: 'marketCalm', cardId: lapsed })
+      continue
+    }
+
     const cardId = draft.deck[0]
     if (!cardId) return
     draft.deck = [...draft.deck.slice(1), cardId]
     const card = ctx.cardsById.get(cardId)
-    draft.marketSince += intervalMs
     draft.marketCardId = cardId
     if (!card) continue
 
@@ -1644,6 +1669,39 @@ function applyJoin(
       },
     ],
   }
+}
+
+/** As many characters as the Post would put on one form. */
+export const TELEGRAM_LIMIT = 160
+
+/**
+ * A telegram: one line from one house to the whole table.
+ *
+ * It touches nothing — no cash, no cargo, no clock — which is why it sits up
+ * with `join` and `start` instead of down in the switch. It is not a move, so
+ * it waits for no turn and no phase; all it leaves behind is an entry in the
+ * Börsenblatt, and since the Börsenblatt is folded out of the log, that entry
+ * reaches every device and survives every reload without a word of new
+ * plumbing.
+ *
+ * Nothing here rings a telephone. An arrival and the close of the season are
+ * worth waking somebody for; a message is not, and a game that buzzes every
+ * time a player says "moin" gets its notifications turned off for good.
+ */
+function applyTelegramm(
+  state: GameState,
+  action: Extract<GameAction, { type: 'telegramm' }>,
+): ActionResult {
+  const sender = state.players.find((p) => p.id === action.by)
+  if (!sender) return reject(state, 'Nur wer mit am Tisch sitzt, kann telegrafieren.')
+
+  // One line, as a telegram is. Newlines and runs of space collapse, so no
+  // message can rearrange the page it lands on.
+  const text = action.text.replace(/\s+/g, ' ').trim().slice(0, TELEGRAM_LIMIT)
+  if (!text) return reject(state, 'Ein leeres Telegramm nimmt die Post nicht an.')
+
+  // The state is untouched: this is the one action that only says something.
+  return { state, events: [{ type: 'telegramm', playerId: sender.id, text }] }
 }
 
 function applyStart(state: GameState): ActionResult {

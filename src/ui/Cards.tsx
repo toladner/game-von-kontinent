@@ -49,7 +49,17 @@ export function Warenkarte({
             <span className="smallcaps press-green text-[15px] leading-tight font-bold">
               {good.name}
             </span>
-            <span className="display press-green text-xl leading-none">{good.id}</span>
+            {/* Die Nummer aus dem Warenverzeichnis — kein Bestand.
+                Groß und in Pressgrün neben zwei Geldbeträgen las sie sich wie
+                eine Menge: „Kaffee 29" klingt nach neunundzwanzig Sack. Klein,
+                blaß und mit vorangestelltem Nº ist sie das, was sie ist: die
+                Ordnungsnummer, unter der die Ware im Verzeichnis steht. */}
+            <span
+              className="display text-ink-faint shrink-0 text-[12px] leading-none"
+              aria-label={`Warenverzeichnis Nummer ${good.id}`}
+            >
+              N<sup className="text-[8px]">o</sup> {good.id}
+            </span>
           </div>
 
           <dl className="teletype mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5 text-[13px]">

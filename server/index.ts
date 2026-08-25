@@ -453,6 +453,11 @@ export class GameRoom {
     const by = 'by' in action ? action.by : undefined
     if (by && by !== playerId) return 'Sie handeln nur für Ihr eigenes Haus.'
 
+    // A telegram is not a move. It goes whenever its sender likes, whosever
+    // turn it is — a table where you may only speak when it is your turn is
+    // not a table anybody would talk at. The sender is already pinned above.
+    if (action.type === 'telegramm') return null
+
     /*
      * Real-time play has no turn to wait for. The ships sail on a clock and
      * every house trades whenever it likes — that is the whole point of the
