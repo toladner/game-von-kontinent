@@ -1588,8 +1588,10 @@ describe('telegraphing the table', () => {
     act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'kaufe kaffee jeden preis' }))
 
     const top = useGame.getState().log[0]!
-    expect(top.text).toContain('Ada')
-    expect(top.text).toContain('kaufe kaffee jeden preis')
+    // The entry carries the message and the sender's house; the paper puts
+    // the name back in front of it, in that house's ink.
+    expect(top.text).toBe('kaufe kaffee jeden preis')
+    expect(top.cause).toBe(useGame.getState().state!.players[0]!.id)
     // Sent to the whole table, so narrowing the paper to one house must not
     // lose it — that is what an empty `who` means here.
     expect(top.who).toEqual([])
@@ -1718,5 +1720,123 @@ describe('the stock a Konjunkturkarte is printed on', () => {
   it('leaves the card that cuts both ways on straw', () => {
     const { container } = render(<KonjunkturSlip card={titled('Hafengebühr')} />)
     expect(container.querySelector('.paper-slip')!.className).toContain('slip-gemischt')
+  })
+})
+
+/**
+ * The paper reports the world, not the reader.
+ *
+ * The unread pill counted everything the journal wrote, including the entry
+ * the reader had just caused by pressing a button — so buying a sack of
+ * coffee lit the 📰 with "1 ungelesen" about the purchase you were looking at
+ * the receipt for.
+ */
+describe('news that is not news to the man who made it', () => {
+  const label = () => screen.getByLabelText(/^Nachrichten/).getAttribute('aria-label')!
+
+  it('marks each entry with the house whose order wrote it', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'urheber' }))
+    enterHarbour()
+
+    const ctx = useGame.getState().ctx
+    const state = useGame.getState().state!
+    const ada = state.players[0]!
+    const offer = buyOffers(ctx, state, ada, portAt(ctx, flagship(ada).nodeId)!).find(
+      (o) => o.status === 'ok',
+    )!
+    act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+
+    expect(useGame.getState().log[0]!.cause).toBe(ada.id)
+  })
+
+  it('leaves the world’s own doings unclaimed, so they count for everybody', () => {
+    // A tick is nobody's order. Arrivals, weather and the Börse come out of
+    // one, and they are news to every house at the table including the one
+    // whose ship it is.
+    render(<App />)
+    act(() =>
+      useGame.getState().begin(['Ada', 'Bo'], {
+        totalRounds: 20,
+        travel: 'echtzeit',
+        minutesPerPip: 1,
+        durationHours: 6,
+        seed: 'uhrwerk',
+      }),
+    )
+    const world = useGame.getState().log.filter((l) => l.kind === 'roundStarted' || !l.cause)
+    expect(world.length).toBeGreaterThan(0)
+    expect(world.every((l) => l.cause === undefined)).toBe(true)
+  })
+
+  it('does not count one’s own purchase as unread', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'eigenkauf' }))
+    enterHarbour()
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+    })
+    const before = label()
+
+    const ctx = useGame.getState().ctx
+    const state = useGame.getState().state!
+    const ada = state.players[0]!
+    const offer = buyOffers(ctx, state, ada, portAt(ctx, flagship(ada).nodeId)!).find(
+      (o) => o.status === 'ok',
+    )!
+    act(() => useGame.getState().dispatch({ type: 'buy', goodId: offer.goodId }))
+
+    // The journal wrote the purchase down — it just did not shout about it.
+    expect(useGame.getState().log.some((l) => l.cause === ada.id)).toBe(true)
+    expect(label()).toBe(before)
+  })
+
+  it('still counts what another house did', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'fremdkauf' }))
+    const bo = useGame.getState().state!.players[1]!.id
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+    })
+    expect(label()).toBe('Nachrichten')
+
+    act(() => useGame.getState().dispatch({ type: 'telegramm', text: 'biete zucker', by: bo }))
+    expect(label()).toContain('1 ungelesen')
+  })
+})
+
+/**
+ * A telegram is the only line in the paper a person wrote. It gets the
+ * sender's ink, so the wire reads as a voice and the rest as bookkeeping.
+ */
+describe('a telegram in the sender’s colour', () => {
+  it('sets the name in the house’s ink and rules the entry in it', () => {
+    render(<App />)
+    act(() => useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'farbe-draht' }))
+    const bo = useGame.getState().state!.players[1]!
+    // jsdom gibt Farben als rgb() zurück, nie als Hex.
+    const hex = PLAYER_COLORS[bo.colorIndex % PLAYER_COLORS.length]!.ink
+    const ink = `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`
+    act(() =>
+      useGame.getState().dispatch({ type: 'telegramm', text: 'suche kautschuk', by: bo.id }),
+    )
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+
+    const entry = [...document.querySelectorAll('aside.sheet ol li')].find((li) =>
+      (li.textContent ?? '').includes('suche kautschuk'),
+    )! as HTMLElement
+    expect(entry.textContent).toContain('Bo')
+    expect(entry.style.borderColor).toBe(ink)
+    const name = entry.querySelector('p span') as HTMLElement
+    expect(name.textContent).toBe('Bo')
+    expect(name.style.color).toBe(ink)
   })
 })

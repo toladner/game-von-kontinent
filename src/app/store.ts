@@ -5,6 +5,7 @@ import { createGame, openingActions, type Seat } from '@engine/setup'
 import type { Gender } from '@engine/persona'
 import { applyAction, replay } from '@engine/reducer'
 import type { GameAction, GameEvent } from '@engine/actions'
+import { activePlayer } from '@engine/state'
 import type { GameState, JoinPolicy, PlayerState } from '@engine/state'
 import type { AngebotMode, KonjunkturMode, PreisMode } from '@engine/types'
 import { projectFor } from '@engine/fog'
@@ -73,14 +74,19 @@ export interface LogLine {
    */
   readonly kind: GameEvent['type']
   /**
-   * The house that spoke or acted, where the event named one.
+   * The house whose order produced this entry, if it was anybody's doing.
    *
-   * Not the same question as `who`, which asks whose news an entry is. A
-   * telegram belongs to nobody's column — it went to the whole table — but it
-   * was still written by somebody, and one's own words are not news to
-   * oneself.
+   * Not the same question as `who`, which asks whom the news is about. A
+   * storm names the house it caught and a Hafengebühr names the house it
+   * charged; both are very much news to that house. What is never news to you
+   * is the thing you just did — so the unread count skips whatever your own
+   * orders wrote, and a telegram, which belongs to nobody's column on purpose,
+   * still remembers who sent it and gets his colour in the paper.
+   *
+   * Empty on everything the world did by itself: a tick names nobody, which is
+   * what keeps arrivals, weather and the Börse counting for everyone.
    */
-  readonly by?: string
+  readonly cause?: string
   /**
    * The houses this entry concerns. Empty means the world at large — a round
    * opening, a storm, the close of the season — which is what lets the
@@ -213,7 +219,25 @@ function persist(): void {
 
 const money = (n: number) => `${n.toLocaleString('de-DE')},—`
 
-function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLine | null {
+/**
+ * Whose order this was.
+ *
+ * Real-time actions name their actor; in round play nobody has to, because
+ * the turn says who it was. A tick is the world's own doing, and joining or
+ * opening a table is news to everybody including the man who did it.
+ */
+function actorOf(state: GameState, action: GameAction): string | undefined {
+  if (action.type === 'tick' || action.type === 'join' || action.type === 'start') return undefined
+  const by = 'by' in action ? action.by : undefined
+  return by ?? activePlayer(state)?.id
+}
+
+function describe(
+  ctx: EngineContext,
+  state: GameState,
+  event: GameEvent,
+  cause?: string,
+): LogLine | null {
   const nameOf = (id: string) => state.players.find((p) => p.id === id)?.name ?? id
   const goodOf = (id: number) => ctx.goodsById.get(id)?.name ?? `Ware ${id}`
   const portOf = (id: string) => ctx.portsById.get(id)?.name ?? id
@@ -229,7 +253,7 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
     tone,
     who,
     kind: event.type,
-    ...('playerId' in event ? { by: event.playerId } : {}),
+    ...(cause ? { cause } : {}),
     at: state.now,
   })
 
@@ -332,8 +356,10 @@ function describe(ctx: EngineContext, state: GameState, event: GameEvent): LogLi
       )
     // A telegram belongs to nobody's column: it was sent to the whole table,
     // so filtering the paper down to one house must not lose it.
+    // Nur die Nachricht selbst. Wer sie aufgegeben hat, steht in `cause`, und
+    // das Blatt setzt den Namen in der Farbe seines Hauses davor.
     case 'telegramm':
-      return line(`${nameOf(event.playerId)} telegrafiert: „${event.text}“`, 'wichtig', [])
+      return line(event.text, 'wichtig', [])
     // A market that says nothing is not news. The strip already reads ±0 %
     // and the Saison sheet says it in full; a line in the paper for every
     // quiet turn buried the turns where something actually happened.
@@ -383,10 +409,11 @@ function foldWithLog(
   const openingId = ++logId
   const lines: LogLine[] = []
   for (const action of actions) {
+    const cause = actorOf(state, action)
     const result = applyAction(ctx, state, action)
     state = result.state
     for (const event of result.events) {
-      const line = describe(ctx, state, event)
+      const line = describe(ctx, state, event, cause)
       if (line) lines.push(line)
     }
   }
@@ -600,10 +627,11 @@ export const useGame = create<Store>((set, get) => ({
         let next = current
         const fresh: LogLine[] = []
         for (const action of actions) {
+          const cause = actorOf(next, action)
           const result = applyAction(ctx, next, action)
           next = result.state
           for (const event of result.events) {
-            const line = describe(ctx, next, event)
+            const line = describe(ctx, next, event, cause)
             if (line) fresh.push(line)
           }
         }
@@ -710,6 +738,7 @@ export const useGame = create<Store>((set, get) => ({
     }
 
     // Local play reduces against the truth, never against the projection.
+    const cause = actorOf(truth ?? state, action)
     const result = applyAction(ctx, truth ?? state, action)
 
     const rejection = result.events.find((e) => e.type === 'rejected')
@@ -724,7 +753,7 @@ export const useGame = create<Store>((set, get) => ({
     }
 
     const fresh = result.events
-      .map((e) => describe(ctx, result.state, e))
+      .map((e) => describe(ctx, result.state, e, cause))
       .filter((l): l is LogLine => l !== null)
 
     set((s) => ({

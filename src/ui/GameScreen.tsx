@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Children, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Board } from './Board'
 import { PortSheet, MarketReport, PortPreviewSheet } from './PortPanel'
 import { KonjunkturSlip } from './Cards'
@@ -58,6 +59,8 @@ export function GameScreen() {
   const acting = useGame((s) => s.acting())
   const setActing = useGame((s) => s.setActing)
   const net = useGame((s) => s.net)
+  // Am eigenen Gerät ist das eigene Haus das, für das gerade gehandelt wird.
+  const localActing = useGame((s) => s.localActing)
   const myTurn = useGame((s) => s.myTurn())
   const focus = useGame((s) => s.focus)
   const announceFocus = useGame((s) => s.announceFocus)
@@ -137,14 +140,16 @@ export function GameScreen() {
   /**
    * What one has not seen yet.
    *
-   * One's own telegram does not count. The form to send it sits inside this
-   * very sheet, so the pill lit up saying "1 ungelesen" about a message the
-   * player had just typed, while looking at it.
+   * Nothing one did oneself counts. A merchant does not need the paper to
+   * tell him he bought coffee: he was there, he pressed the button, and the
+   * Kontor showed him the receipt. The pill is for the rest of the world —
+   * the other houses, the weather, the Börse — and it went off for every
+   * purchase, every course set and every telegram sent from this very sheet.
    */
-  const mine = net?.playerId ?? null
-  const isOwnWord = (l: LogLine) => l.kind === 'telegramm' && mine !== null && l.by === mine
+  const mine = net?.playerId ?? localActing
+  const isMine = (l: LogLine) => mine !== null && l.cause === mine
   const unread = useMemo(
-    () => log.filter((l) => l.id > newsSeen && !isOwnWord(l)).length,
+    () => log.filter((l) => l.id > newsSeen && !isMine(l)).length,
     [log, newsSeen, mine],
   )
 
@@ -230,18 +235,12 @@ export function GameScreen() {
           : {})}
       />
 
-      {/* Kopfzeile: das Handelshaus links, die Leiste rechts.
-          Der Umbruch bleibt als Notnagel — bei sehr großer Schrift oder einem
-          sehr schmalen Gerät rutscht die Leiste auf eine eigene Zeile, statt
-          das Handelshaus zusammenzudrücken, bis vom Namen zwei Buchstaben
-          übrig sind; ml-auto hält sie dabei rechts. Im Normalfall soll es
-          gar nicht so weit kommen, dafür steht die Leiste gestapelt. */}
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start gap-2 px-3"
-        style={{ paddingTop: 'calc(var(--safe-t) + 0.6rem)' }}
-      >
+      {/* Kopfzeile: das Handelshaus links, die Leiste rechts — und wenn der
+          Platz nicht reicht, beide eine Spur kleiner statt eines davon quer
+          über dem Plan. */}
+      <HeaderRow>
         {!seated ? (
-          <div className="paper anim-rise pointer-events-auto rounded-lg px-3 py-2 shadow-lg">
+          <div className="paper anim-rise pointer-events-auto max-w-[16rem] rounded-lg px-3 py-2 shadow-lg">
             <p className="smallcaps text-[11px] tracking-[0.2em]">Zuschauer</p>
             <p className="text-ink-soft text-[12px] leading-snug">
               Sie haben keinen Platz an diesem Tisch und sehen nur zu.
@@ -270,7 +269,7 @@ export function GameScreen() {
             halbe Bildschirm, und für das Handelshaus daneben blieb kein Platz
             mehr — sie rutschte darunter und legte sich auf den Plan.
             Gestapelt ist sie halb so breit und bleibt oben rechts stehen. */}
-        <div className="paper anim-rise pointer-events-auto ml-auto flex shrink-0 flex-col overflow-hidden rounded-lg shadow-lg">
+        <div className="paper anim-rise pointer-events-auto flex flex-col overflow-hidden rounded-lg shadow-lg">
           {realtime ? (
             <ClockCell state={state} now={now} onOpen={() => open('runde')} />
           ) : (
@@ -327,7 +326,7 @@ export function GameScreen() {
             </Cell>
           </div>
         </div>
-      </div>
+      </HeaderRow>
 
       {/* Fußzeile. Ruder und Handlungsleiste standen vorher als zwei
           absolute Ebenen übereinander, jede mit einem von Hand gewählten
@@ -558,6 +557,79 @@ export function GameScreen() {
 }
 
 // ---------------------------------------------------------------------------
+
+/** Der Abstand zwischen Handelshaus und Leiste, in Pixeln wie im Layout. */
+const HEADER_GAP = 8
+/** Weiter herunter wird nichts mehr lesbar, nur kleiner. */
+const HEADER_MIN_SCALE = 0.62
+
+/**
+ * Die Kopfzeile: das Handelshaus links, die Leiste rechts — und beide oben.
+ *
+ * Nebeneinander passen sie auf ein Telefon, solange das Vermögen sechsstellig
+ * bleibt und die Saison keine dreistellige Stundenzahl anzeigt. Danach nicht
+ * mehr, und der Umbruch, der bisher als Notnagel diente, half nicht: die
+ * Leiste rutschte auf eine zweite Zeile, legte sich quer über den Plan und
+ * stand dort trotzdem noch halb aus dem Bild.
+ *
+ * Statt umzubrechen werden nun beide Karten gleichmäßig verkleinert, bis sie
+ * nebeneinander stehen. Gleichmäßig, weil zwei verschieden große Schriften
+ * nebeneinander nach Fehler aussähen und nicht nach Platznot.
+ *
+ * Gemessen wird die ungeskalierte Breite: `transform` rührt das Layout nicht
+ * an, deshalb liefert `offsetWidth` weiter das Maß der ungeschrumpften Karte
+ * und die Messung kann sich nicht selbst hinterherlaufen. Beide hängen in
+ * ihrer Ecke, damit der Maßstab sie nach innen zieht statt aus dem Bild.
+ */
+function HeaderRow({ children }: { children: ReactNode }) {
+  const [left, right] = Children.toArray(children)
+  const row = useRef<HTMLDivElement>(null)
+  const leftBox = useRef<HTMLDivElement>(null)
+  const rightBox = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const room = row.current?.clientWidth ?? 0
+      const needed =
+        (leftBox.current?.offsetWidth ?? 0) + (rightBox.current?.offsetWidth ?? 0) + HEADER_GAP
+      if (room <= 0 || needed <= room) return setScale(1)
+      // Auf ganze Prozent gerundet, damit ein Pixel Unterschied an der Uhr
+      // nicht jede Sekunde einen neuen Maßstab ergibt.
+      setScale(Math.max(HEADER_MIN_SCALE, Math.floor((room / needed) * 100) / 100))
+    }
+    measure()
+    // jsdom kennt den Beobachter nicht; dort bleibt es beim einen Maß.
+    if (typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(measure)
+    for (const box of [row.current, leftBox.current, rightBox.current]) if (box) watch.observe(box)
+    return () => watch.disconnect()
+  }, [])
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 z-20 px-3"
+      style={{ paddingTop: 'calc(var(--safe-t) + 0.6rem)' }}
+    >
+      <div ref={row} className="relative">
+        <div
+          ref={leftBox}
+          className="absolute top-0 left-0 w-max origin-top-left"
+          style={{ transform: `scale(${scale})` }}
+        >
+          {left}
+        </div>
+        <div
+          ref={rightBox}
+          className="absolute top-0 right-0 w-max origin-top-right"
+          style={{ transform: `scale(${scale})` }}
+        >
+          {right}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /**
  * One division of the instrument strip.
@@ -1278,7 +1350,7 @@ function NewsSheet({
   now: number
   /** Entries above this id are new since the sheet was last opened. */
   sinceId: number
-  /** This device's own house, whose telegrams are not news to it. */
+  /** This device's own house, whose own doings are not news to it. */
   mine: string | null
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
@@ -1308,10 +1380,9 @@ function NewsSheet({
     }
     return log.filter((l) => l.who.length === 0 || l.who.includes(only.id))
   }, [log, only])
-  // A line one wrote oneself never gets the "neu" rule: it appeared because
-  // the reader pressed Aufgeben, which is the opposite of news.
-  const unseen = (l: LogLine) =>
-    l.id > sinceId && !(l.kind === 'telegramm' && mine !== null && l.by === mine)
+  // A line one's own orders wrote never gets the "neu" rule: it is on the
+  // page because the reader pressed a button, which is the opposite of news.
+  const unseen = (l: LogLine) => l.id > sinceId && !(mine !== null && l.cause === mine)
   const fresh = shown.filter(unseen).length
   // The clock is redrawn every second; the headings only ever change at
   // midnight, so they are grouped against the day rather than the instant.
@@ -1425,36 +1496,69 @@ function NewsSheet({
 
                 {open && (
                   <ol className="anim-fade mt-0.5 space-y-px">
-                    {group.lines.map((line) => (
-                      <li
-                        key={line.id}
-                        className={`flex gap-2 ${
-                          unseen(line)
-                            ? 'border-gold border-l-2 pl-2'
-                            : 'border-l-2 border-transparent pl-2'
-                        }`}
-                      >
-                        {/* Die Uhrzeit nur dort, wo eine Uhr läuft. */}
-                        {realtime && (
-                          <span className="tnum text-ink-faint shrink-0 py-0.5 text-[11px] leading-snug">
-                            {clockText(line.at)}
-                          </span>
-                        )}
-                        <p
-                          className={`min-w-0 flex-1 py-0.5 text-[13px] leading-snug ${
-                            line.tone === 'gut'
-                              ? 'text-press'
-                              : line.tone === 'schlecht'
-                                ? 'text-rot'
-                                : line.tone === 'wichtig'
-                                  ? 'font-semibold'
-                                  : ''
+                    {group.lines.map((line) => {
+                      // Ein Telegramm ist das einzige, was ein Mensch in dieses
+                      // Blatt schreibt — der Rest ist Buchhaltung. Es bekommt
+                      // den Namen des Absenders in der Farbe seines Hauses und
+                      // den Randstrich dazu, damit die Stimme am Draht sich vom
+                      // Rechnungswesen unterscheidet, auch wenn man das Blatt
+                      // nur überfliegt.
+                      const wire =
+                        line.kind === 'telegramm'
+                          ? (players.find((p) => p.id === line.cause) ?? null)
+                          : null
+                      const ink = wire
+                        ? PLAYER_COLORS[wire.colorIndex % PLAYER_COLORS.length]!.ink
+                        : null
+                      return (
+                        <li
+                          key={line.id}
+                          className={`flex gap-2 border-l-2 pl-2 ${
+                            ink ? '' : unseen(line) ? 'border-gold' : 'border-transparent'
                           }`}
+                          style={
+                            ink
+                              ? {
+                                  borderColor: ink,
+                                  // Ungelesenes liegt zusätzlich auf getöntem
+                                  // Papier: die Farbe sagt, wer, der Ton, daß
+                                  // es noch niemand gelesen hat.
+                                  ...(unseen(line) ? { backgroundColor: `${ink}14` } : {}),
+                                }
+                              : undefined
+                          }
                         >
-                          {line.text}
-                        </p>
-                      </li>
-                    ))}
+                          {/* Die Uhrzeit nur dort, wo eine Uhr läuft. */}
+                          {realtime && (
+                            <span className="tnum text-ink-faint shrink-0 py-0.5 text-[11px] leading-snug">
+                              {clockText(line.at)}
+                            </span>
+                          )}
+                          <p
+                            className={`min-w-0 flex-1 py-0.5 text-[13px] leading-snug ${
+                              line.tone === 'gut'
+                                ? 'text-press'
+                                : line.tone === 'schlecht'
+                                  ? 'text-rot'
+                                  : line.tone === 'wichtig'
+                                    ? 'font-semibold'
+                                    : ''
+                            }`}
+                          >
+                            {wire ? (
+                              <>
+                                <span className="font-bold" style={{ color: ink! }}>
+                                  {wire.name}
+                                </span>{' '}
+                                telegrafiert: „{line.text}“
+                              </>
+                            ) : (
+                              line.text
+                            )}
+                          </p>
+                        </li>
+                      )
+                    })}
                   </ol>
                 )}
               </section>
