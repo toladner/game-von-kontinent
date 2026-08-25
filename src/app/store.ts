@@ -58,6 +58,14 @@ export interface BeginOptions {
   readonly preise?: PreisMode
   /** 'erweitert' adds storms, regional weather and pirates to the deck. */
   readonly konjunktur?: KonjunkturMode
+  /**
+   * Whether the table takes latecomers.
+   *
+   * Belongs to the Partie, not to the wire: a local table cannot be joined
+   * over a socket, but the rule is the same rule, and the state should not
+   * claim otherwise.
+   */
+  readonly joinPolicy?: JoinPolicy
 }
 
 export interface LogLine {
@@ -257,7 +265,9 @@ export function isNoteworthy(kind: GameEvent['type']): boolean {
  * opening a table is news to everybody including the man who did it.
  */
 function actorOf(state: GameState, action: GameAction): string | undefined {
-  if (action.type === 'tick' || action.type === 'join' || action.type === 'start') return undefined
+  // Wer beitritt, nennt sich selbst — an der Reihe ist er dabei nicht.
+  if (action.type === 'join') return action.playerId
+  if (action.type === 'tick' || action.type === 'start') return undefined
   const by = 'by' in action ? action.by : undefined
   return by ?? activePlayer(state)?.id
 }
@@ -288,6 +298,20 @@ function describe(
   })
 
   switch (event.type) {
+    /*
+     * Ein Haus, das mitten in der Fahrt an den Tisch kommt, ist eine Nachricht
+     * für alle, die schon fahren: ein Mitbieter mehr in jedem Hafen, und einer,
+     * der mit vollem Kapital anfängt. Vor dem Ablegen bleibt die Zeile aus —
+     * dort steht die Liste am Kai ohnehin auf dem Bildschirm, und die Zeitung
+     * würde mit der Anwesenheitsliste anfangen.
+     *
+     * Der Name ist ausgezeichnet, damit ihn das Blatt in der Farbe des Hauses
+     * setzen kann; er gehört in niemandes Spalte, weil er alle angeht.
+     */
+    case 'playerJoined':
+      return event.midGame
+        ? line(`*${event.name}* nimmt in ${portOf(event.portId)} den Handel auf.`, 'wichtig', [])
+        : null
     case 'rolled':
       return line(`${nameOf(event.playerId)} würfelt ${event.value}.`)
     case 'arrived':
@@ -539,6 +563,10 @@ export const useGame = create<Store>((set, get) => ({
         startingCapital,
         travel,
         ...(options.sicht ? { sicht: options.sicht } : {}),
+        // Auch am eigenen Gerät festgehalten: die Wahl gehört zur Partie,
+        // nicht zur Leitung, und der Zustand soll nicht anderes behaupten
+        // als die Anmeldung.
+        ...(options.joinPolicy ? { joinPolicy: options.joinPolicy } : {}),
         ...(options.minutesPerPip ? { minutesPerPip: options.minutesPerPip } : {}),
         ...(options.durationHours ? { durationHours: options.durationHours } : {}),
         ...(options.maxFleetSize ? { maxFleetSize: options.maxFleetSize } : {}),

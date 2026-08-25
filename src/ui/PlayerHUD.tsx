@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Portrait } from './Portrait'
+import { PortraitRing } from './Portrait'
 import { CargoHold } from './Cargo'
 import { flagship, type PlayerState } from '@engine/state'
 import type { EngineContext } from '@engine/context'
@@ -75,12 +75,7 @@ export function PlayerHUD({
       style={{ borderLeftColor: color.ink }}
       aria-label={`${rank !== null ? `Platz ${rank}, ` : ''}${player.name}, ${player.cash.toLocaleString('de-DE')} Einheiten. Kontor öffnen.`}
     >
-      <span
-        className="shrink-0 rounded-full ring-2 ring-offset-1"
-        style={{ boxShadow: `0 0 0 2px ${color.ink}` }}
-      >
-        <Portrait traits={player.persona.portrait} size={40} />
-      </span>
+      <PortraitRing traits={player.persona.portrait} ink={color.ink} size={40} />
 
       <span className="min-w-0">
         {/* The rank rides with the name rather than in a corner of its own:

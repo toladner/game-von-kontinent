@@ -505,7 +505,7 @@ describe('the set course on the plan', () => {
     expect(wake.length).toBeGreaterThan(0)
   })
 
-  it('shows a rival heading somewhere without letting them shout', () => {
+  it('lets a rival’s course march too, a little slower', () => {
     const { to } = setSail('rivale')
     act(() => useGame.getState().dispatch({ type: 'setCourse', to }))
 
@@ -519,11 +519,26 @@ describe('the set course on the plan', () => {
       useGame.getState().dispatch({ type: 'setCourse', to: target, by: bo.id }),
     )
 
-    // Bo is the second house, and the second house is red.
-    const theirs = [...document.querySelectorAll('path[stroke="#b03027"]')]
-    expect(theirs.length).toBe(2)
-    expect(theirs.every((p) => !((p as SVGElement).style.animation ?? '').includes('ants'))).toBe(
-      true,
+    // Bo is the second house, and the second house is red; Ada is the first,
+    // and the first is blue.
+    const dashed = (ink: string) =>
+      ([...document.querySelectorAll(`path[stroke="${ink}"]`)] as SVGElement[]).filter((p) =>
+        (p.style.animation ?? '').includes('ants'),
+      )
+    const theirs = dashed('#b03027')
+    const ours = dashed('#1f4f8f')
+    expect(theirs).toHaveLength(1)
+    expect(ours).toHaveLength(1)
+
+    // Beide marschieren — ein Plan, auf dem drei Schiffe fahren, soll auch
+    // nach drei fahrenden Schiffen aussehen.
+    expect(theirs[0]!.style.animation).toContain('1.8s')
+    expect(ours[0]!.style.animation).toContain('1.1s')
+
+    // Der Unterschied liegt im Gewicht, nicht in der Bewegung: die eigene
+    // Linie bleibt kräftiger.
+    expect(Number(theirs[0]!.getAttribute('opacity'))).toBeLessThan(
+      Number(ours[0]!.getAttribute('opacity')),
     )
   })
 })
@@ -2074,5 +2089,86 @@ describe('the table one is about to join', () => {
     await settle()
 
     expect(screen.getByText(/keine Partie zu finden/)).toBeTruthy()
+  })
+})
+
+/**
+ * Ein Nachzügler am Tisch.
+ *
+ * An einer Partie, die Nachzügler zuläßt, kann mitten in der Saison ein Haus
+ * dazukommen. Für alle, die schon fahren, ist das eine Nachricht — bisher
+ * stand darüber nichts im Blatt, und der Neue tauchte einfach im Hafen auf.
+ */
+describe('a house that comes late to the table', () => {
+  const openTable = (seed: string) => {
+    render(<App />)
+    act(() =>
+      useGame
+        .getState()
+        .begin(['Ada', 'Bo'], { totalRounds: 20, seed, joinPolicy: 'jederzeit' }),
+    )
+  }
+
+  it('writes the arrival into the paper, and nobody else’s column', () => {
+    openTable('nachzuegler')
+    act(() =>
+      useGame.getState().dispatch({ type: 'join', playerId: 'zoe', name: 'Zoe' }),
+    )
+
+    const top = useGame.getState().log[0]!
+    expect(top.kind).toBe('playerJoined')
+    expect(top.text).toContain('*Zoe*')
+    expect(top.text).toMatch(/nimmt in .+ den Handel auf/)
+    // Es geht alle an, gehört also in keine Spalte und verschwindet unter
+    // keinem Filter.
+    expect(top.who).toEqual([])
+    expect(top.cause).toBe('zoe')
+  })
+
+  it('says nothing at the quay, where the list is on the screen anyway', () => {
+    render(<App />)
+    // Kein begin: die Anmeldung selbst trägt die Häuser ein, und die Zeitung
+    // soll nicht mit der Anwesenheitsliste anfangen.
+    act(() =>
+      useGame.getState().begin(['Ada', 'Bo'], { totalRounds: 20, seed: 'am-kai' }),
+    )
+    expect(useGame.getState().log.some((l) => l.kind === 'playerJoined')).toBe(false)
+  })
+
+  it('sets the newcomer’s name in the colour of their house', () => {
+    openTable('farbe-nachzuegler')
+    act(() =>
+      useGame.getState().dispatch({ type: 'join', playerId: 'zoe', name: 'Zoe' }),
+    )
+    const zoe = useGame.getState().state!.players.find((p) => p.id === 'zoe')!
+    const hex = PLAYER_COLORS[zoe.colorIndex % PLAYER_COLORS.length]!.ink
+    const ink = `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`
+
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    const name = [...document.querySelectorAll('aside.sheet ol li strong')].find(
+      (s) => s.textContent === 'Zoe',
+    ) as HTMLElement
+    expect(name).toBeTruthy()
+    expect(name.style.color).toBe(ink)
+  })
+
+  it('counts as news at one device, where a new competitor is real news', () => {
+    openTable('marke-nachzuegler')
+    act(() => {
+      fireEvent.click(screen.getByLabelText(/^Nachrichten/))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+    })
+    expect(screen.getByLabelText(/^Nachrichten/).getAttribute('aria-label')).toBe('Nachrichten')
+
+    act(() =>
+      useGame.getState().dispatch({ type: 'join', playerId: 'zoe', name: 'Zoe' }),
+    )
+    expect(screen.getByLabelText(/^Nachrichten/).getAttribute('aria-label')).toContain(
+      '1 ungelesen',
+    )
   })
 })

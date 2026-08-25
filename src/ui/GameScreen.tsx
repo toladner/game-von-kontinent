@@ -3,7 +3,7 @@ import type { ComponentProps, ReactNode } from 'react'
 import { Board } from './Board'
 import { PortSheet, MarketReport, PortPreviewSheet } from './PortPanel'
 import { KonjunkturSlip } from './Cards'
-import { Portrait } from './Portrait'
+import { Portrait, PortraitRing } from './Portrait'
 import { PlayerHUD, useCountUp } from './PlayerHUD'
 import { Die } from './Dice'
 import { CargoHold } from './Cargo'
@@ -1579,13 +1579,14 @@ function NewsSheet({
                       // den Randstrich dazu, damit die Stimme am Draht sich vom
                       // Rechnungswesen unterscheidet, auch wenn man das Blatt
                       // nur überfliegt.
-                      const wire =
-                        line.kind === 'telegramm'
-                          ? (players.find((p) => p.id === line.cause) ?? null)
-                          : null
-                      const ink = wire
-                        ? PLAYER_COLORS[wire.colorIndex % PLAYER_COLORS.length]!.ink
+                      const house = line.cause
+                        ? (players.find((p) => p.id === line.cause) ?? null)
                         : null
+                      const wire = line.kind === 'telegramm' ? house : null
+                      const ink =
+                        house && (wire || line.kind === 'playerJoined')
+                          ? PLAYER_COLORS[house.colorIndex % PLAYER_COLORS.length]!.ink
+                          : null
                       return (
                         <li
                           key={line.id}
@@ -1629,7 +1630,13 @@ function NewsSheet({
                                 telegrafiert: „{line.text}“
                               </>
                             ) : (
-                              line.text
+                              // Ausgezeichnete Wörter tragen die Farbe des
+                              // Hauses, um das es geht — heute ist das der
+                              // Name eines Nachzüglers.
+                              <Emph
+                                text={line.text}
+                                {...(ink ? { strong: 'font-bold', strongStyle: { color: ink } } : {})}
+                              />
                             )}
                           </p>
                         </li>
@@ -1867,14 +1874,16 @@ function Rangliste({
             >
               {row.rank}.
             </span>
-            {gross ? (
-              <Portrait traits={row.player.persona.portrait} size={40} />
-            ) : (
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/30"
-                style={{ background: color.ink }}
-              />
-            )}
+            {/* Das Bildnis statt des Farbpunkts: der Punkt sagte, welche von
+                zehn Farben, aber nicht, wer darunter fährt — und die Gesichter
+                der Mitspieler bekam man sonst nirgends zu sehen. Der Ring hält
+                die Farbe fest, damit die Zuordnung zum Schiff auf dem Plan
+                bleibt. */}
+            <PortraitRing
+              traits={row.player.persona.portrait}
+              ink={color.ink}
+              size={gross ? 40 : 24}
+            />
             <div className="min-w-0 flex-1">
               <p
                 className={`truncate ${

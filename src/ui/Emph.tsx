@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, type CSSProperties } from 'react'
 
 /**
  * Bold the words that matter, marked *like this* in the engine's copy.
@@ -10,7 +10,16 @@ import { Fragment } from 'react'
  * and it is the same convention everywhere the game speaks, so a reader
  * learns very quickly that the heavy words are the actionable ones.
  */
-export function Emph({ text, strong = 'text-ink font-bold' }: { text: string; strong?: string }) {
+export function Emph({
+  text,
+  strong = 'text-ink font-bold',
+  strongStyle,
+}: {
+  text: string
+  strong?: string
+  /** Für Auszeichnungen, deren Farbe erst zur Laufzeit feststeht — die Häuser. */
+  strongStyle?: CSSProperties
+}) {
   return (
     <>
       {text
@@ -18,7 +27,7 @@ export function Emph({ text, strong = 'text-ink font-bold' }: { text: string; st
         .filter(Boolean)
         .map((part, i) =>
           part.length > 2 && part.startsWith('*') && part.endsWith('*') ? (
-            <strong key={i} className={strong}>
+            <strong key={i} className={strong} style={strongStyle}>
               {part.slice(1, -1)}
             </strong>
           ) : (

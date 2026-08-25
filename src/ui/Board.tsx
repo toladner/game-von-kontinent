@@ -498,9 +498,11 @@ export function Board({
    * realistisch the projection has already set `voyage` to null on anything
    * the viewer has no business seeing, so there is nothing here to leak.
    *
-   * The player's own course is drawn in full and the dashes march along it
-   * towards the destination; the others are faint and still, so the chart says
-   * where everyone is heading without three ships shouting at once.
+   * Every course marches: the dashes run along it towards the destination, so
+   * a chart with three ships under way looks like three ships under way. What
+   * separates one's own from the rest is weight rather than motion — thicker,
+   * darker, a ring at the destination, and the ants a little quicker — so the
+   * eye still finds it first without the others being frozen to the paper.
    */
   const courses = useMemo(() => {
     /** A polyline through named nodes, skipping any this plan does not know. */
@@ -635,9 +637,7 @@ export function Board({
                 strokeLinejoin="round"
                 strokeDasharray="6 5"
                 opacity={c.own ? 0.95 : 0.45}
-                style={
-                  c.own ? { animation: 'course-ants 1.1s linear infinite' } : undefined
-                }
+                style={{ animation: `course-ants ${c.own ? '1.1s' : '1.8s'} linear infinite` }}
               />
               {c.own && c.end && (
                 <>

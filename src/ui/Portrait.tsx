@@ -247,6 +247,32 @@ export interface PortraitProps {
   readonly title?: string
 }
 
+/**
+ * Ein Bildnis im Siegelring seines Hauses.
+ *
+ * Die Farbe allein ist ein Punkt und sagt nur, welcher von zehn; das Bildnis
+ * allein sagt, wer, aber nicht, wessen Schiff das rote auf dem Plan ist. Erst
+ * beides zusammen verbindet das Gesicht mit der Farbe, unter der es fährt —
+ * darum steht es überall gleich: oben in der Kopfzeile, in der Rangliste und
+ * am Ende in der Schlußabrechnung.
+ */
+export function PortraitRing({
+  traits,
+  ink,
+  size,
+}: {
+  traits: PortraitTraits
+  /** Die Hausfarbe, als Ring um das Oval. */
+  ink: string
+  size: number
+}) {
+  return (
+    <span className="shrink-0 rounded-full" style={{ boxShadow: `0 0 0 2px ${ink}` }}>
+      <Portrait traits={traits} size={size} />
+    </span>
+  )
+}
+
 export const Portrait = memo(function Portrait({
   traits,
   size = 56,
