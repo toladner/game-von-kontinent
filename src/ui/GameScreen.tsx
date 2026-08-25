@@ -276,6 +276,11 @@ export function GameScreen() {
               )}
             </Cell>
 
+            {/* Die Konjunktur steht neben der Zeitung, weil sie dasselbe ist:
+                was die Welt gerade macht. Erst danach kommt, was das eigene
+                Haus angeht. */}
+            <MarketCell percent={state.saleModifierPercent} onOpen={() => open('runde')} />
+
             {/* Nur wenn es etwas zu verwalten gibt: bei einem Schiff, keiner
                 Post und geschlossener Werft ist das Register ein Knopf ohne
                 Inhalt. Unter Sicht realistisch immer — dort hängen Notizbuch
@@ -297,8 +302,6 @@ export function GameScreen() {
                 )}
               </Cell>
             )}
-
-            <MarketCell percent={state.saleModifierPercent} onOpen={() => open('runde')} />
 
             <Cell label="Einstellungen" onOpen={() => open('einstellungen')}>
               <GearGlyph />
@@ -1483,7 +1486,7 @@ function TelegramForm({ onSend }: { onSend: (text: string) => void }) {
           value={text}
           maxLength={TELEGRAM_LIMIT}
           autoComplete="off"
-          placeholder="kaufe kaffee jeden preis"
+          placeholder="…"
           onChange={(event) => setText(event.target.value)}
         />
         <button
