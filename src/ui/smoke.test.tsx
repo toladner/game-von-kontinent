@@ -441,6 +441,8 @@ describe('the set course on the plan', () => {
   }
 
   const hints = () => document.querySelectorAll('circle[stroke="#1c6b4d"]').length
+  /** The gold ring the plan puts round a harbour it has been asked about. */
+  const marked = () => document.querySelectorAll('circle[fill="#a9863f"]').length
   // Ada is the first house, and the first house is blue.
   const ownCourse = () => document.querySelectorAll('path[stroke="#1f4f8f"]').length
 
@@ -540,6 +542,26 @@ describe('the set course on the plan', () => {
     expect(Number(theirs[0]!.getAttribute('opacity'))).toBeLessThan(
       Number(ours[0]!.getAttribute('opacity')),
     )
+  })
+
+  it('takes the plan to the harbour named in the strip', () => {
+    // At sea there is nothing to do but wonder where she is headed, and the
+    // strip already names it. Now it also points at it.
+    const { to } = setSail('hinsehen')
+    act(() => useGame.getState().dispatch({ type: 'setCourse', to }))
+    const name = useGame.getState().ctx.portsById.get(to)!.name
+    expect(marked()).toBe(0)
+
+    const strip = screen.getByRole('button', { name: `${name} auf dem Plan zeigen` })
+    act(() => {
+      fireEvent.click(strip)
+    })
+
+    // Picked out on the chart, and only picked out: the harbour of a voyage
+    // still under way has no counter to step up to, so nothing opens over the
+    // plan — which is why the strip is still there to tap again.
+    expect(marked()).toBe(1)
+    expect(screen.getByRole('button', { name: `${name} auf dem Plan zeigen` })).toBeTruthy()
   })
 })
 

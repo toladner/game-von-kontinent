@@ -13,6 +13,7 @@ import {
   createOnlineGame,
   forgetSeat,
   forgetTable,
+  hasSeatAt,
   rememberedTable,
   rememberTable,
   Session,
@@ -175,8 +176,14 @@ interface Store {
    *
    * Called once at start-up, before the first render, so a reload or a
    * reopened app goes straight back aboard rather than to the title page.
+   *
+   * `invitation` is the table named in the address bar, if one is. A table
+   * this device holds no seat at outranks everything — that is a link from
+   * somebody else, and the join screen is where it belongs. A table it *does*
+   * hold a seat at is not an invitation at all but the way back in, which is
+   * what an arrival notification taps.
    */
-  restore: () => boolean
+  restore: (invitation?: string | null) => boolean
   /**
    * Put the game down and go back to the title page, keeping the seat.
    *
@@ -878,10 +885,19 @@ export const useGame = create<Store>((set, get) => ({
     }
   },
 
-  restore() {
+  restore(invitation) {
     const table = rememberedTable()
-    if (!table) return false
-    get().join(table.code, table.name, table.gender)
+    if (invitation && !hasSeatAt(invitation)) return false
+    /*
+     * The notification came from a table we hold a seat at, and the token is
+     * proof of who we are there — asking for a name would be asking what we
+     * already know. Nearly always it is the remembered table anyway; the two
+     * part company only for a table left behind whose ship is still at sea,
+     * and the tap says plainly which of them the player wants.
+     */
+    const code = invitation ?? table?.code
+    if (!code) return false
+    get().join(code, table?.name ?? '', table?.gender)
     return true
   },
 

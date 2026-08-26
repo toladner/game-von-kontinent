@@ -363,6 +363,7 @@ export function GameScreen() {
               player={player}
               now={now}
               onOpenPort={() => open('port')}
+              onShowPort={(to) => setMarked((m) => ({ portId: to, nonce: (m?.nonce ?? 0) + 1 }))}
             />
           ) : (
             <ActionBar
@@ -924,12 +925,14 @@ function RealtimeBar({
   player,
   now,
   onOpenPort,
+  onShowPort,
 }: {
   ctx: EngineContext
   state: GameState
   player: PlayerState
   now: number
   onOpenPort: () => void
+  onShowPort: (portId: string) => void
 }) {
   if (state.phase === 'over') return null
 
@@ -944,14 +947,26 @@ function RealtimeBar({
     // The course is set but the hatches are still open: say so, or a ship
     // sitting at the quay for two minutes looks like a game that has hung.
     const loading = now < voyage.departsAt
+    // A ship at sea leaves nothing to press, and the one thing wanted while it
+    // sails is a look at where it is going. So the strip itself is the way
+    // there: it moves the plan to the harbour and stops, because opening the
+    // harbour of a voyage still under way promises a counter nobody is at yet.
     return wrap(
-      <div className="paper flex items-center gap-3 rounded-xl px-4 py-2.5 shadow-xl">
+      <button
+        type="button"
+        onClick={() => onShowPort(voyage.destination)}
+        aria-label={`${destination} auf dem Plan zeigen`}
+        className="paper flex items-center gap-3 rounded-xl px-4 py-2.5 text-left shadow-xl transition-colors hover:bg-black/5"
+      >
         <span className={`text-2xl ${loading ? 'opacity-60' : ''}`} aria-hidden>
           {loading ? '🏗' : '⛴'}
         </span>
         <div>
           <p className="text-sm leading-tight font-semibold">
-            {loading ? `Wird beladen · Kurs auf ${destination}` : `Kurs auf ${destination}`}
+            {loading ? 'Wird beladen · ' : ''}Kurs auf{' '}
+            <span className="decoration-ink-faint underline decoration-dotted underline-offset-2">
+              {destination}
+            </span>
           </p>
           <p className="text-ink-soft text-[11px]">
             {loading
@@ -959,7 +974,7 @@ function RealtimeBar({
               : `Ankunft ${untilText(eta, now)} · ${clockText(eta)} Uhr`}
           </p>
         </div>
-      </div>,
+      </button>,
     )
   }
 

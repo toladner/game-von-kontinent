@@ -288,3 +288,50 @@ describe('the two ways out', () => {
     expect(rememberedTable()).toBeNull()
   })
 })
+
+/**
+ * Coming in by the door the notification opened.
+ *
+ * A push saying a ship has made port carries the table's code in the address,
+ * exactly as a hosted invitation does — and the app could not tell the two
+ * apart, so tapping the notice about your own ship put you in front of a form
+ * asking you to introduce yourself to your own trading house. The seat token
+ * is the difference: hold one, and there is nothing left to ask.
+ */
+describe('an address that names a table', () => {
+  it('walks straight in when the seat there is already ours', () => {
+    localStorage.setItem('vkzk.tisch.v1', JSON.stringify({ code: 'WZUH', name: 'Tobias' }))
+    localStorage.setItem('vkzk.token.WZUH', 'platz-1')
+
+    expect(useGame.getState().restore('WZUH')).toBe(true)
+    expect(useGame.getState().net?.code).toBe('WZUH')
+  })
+
+  it('still sends a stranger to the join screen', () => {
+    // Somebody else's link. That we happen to sit at another table is no
+    // reason to walk past the invitation into it.
+    localStorage.setItem('vkzk.tisch.v1', JSON.stringify({ code: 'WZUH', name: 'Tobias' }))
+    localStorage.setItem('vkzk.token.WZUH', 'platz-1')
+
+    expect(useGame.getState().restore('FREM')).toBe(false)
+    expect(useGame.getState().net).toBeNull()
+  })
+
+  it('prefers the table it names over the one last sat at', () => {
+    // A table left behind whose ship is still at sea can still knock, and the
+    // tap says plainly which of the two the player means.
+    localStorage.setItem('vkzk.tisch.v1', JSON.stringify({ code: 'WZUH', name: 'Tobias' }))
+    localStorage.setItem('vkzk.token.WZUH', 'platz-1')
+    localStorage.setItem('vkzk.token.BQGC', 'platz-2')
+
+    expect(useGame.getState().restore('BQGC')).toBe(true)
+    expect(useGame.getState().net?.code).toBe('BQGC')
+  })
+
+  it('names no table at all, and the remembered one still wins', () => {
+    localStorage.setItem('vkzk.tisch.v1', JSON.stringify({ code: 'WZUH', name: 'Tobias' }))
+
+    expect(useGame.getState().restore(null)).toBe(true)
+    expect(useGame.getState().net?.code).toBe('WZUH')
+  })
+})

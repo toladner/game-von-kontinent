@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from '@app/App'
 import { useGame } from '@app/store'
+import { hasSeatAt } from '@app/net'
 import { keepUpToDate } from '@app/updates'
 import './index.css'
 
@@ -22,8 +23,19 @@ keepUpToDate()
  * An invitation in the address bar outranks it. Somebody who has just been
  * sent a link to a new table is asking for that table, not for the one they
  * were sitting at yesterday — and the join screen is where they say so.
+ *
+ * Unless the seat at that table is already ours. A notification saying a ship
+ * has made port carries the same kind of address, and it was landing the
+ * player on a form asking them to introduce themselves to their own house.
+ * Where a seat is held there is nothing to ask, so we walk straight in and
+ * take the invitation back out of the address bar, so that leaving the table
+ * later does not put the player in front of that form after all.
  */
-if (!/partie=[A-Za-z0-9]{3,8}/.test(location.hash)) useGame.getState().restore()
+const invitation = location.hash.match(/partie=([A-Za-z0-9]{3,8})/)?.[1]?.toUpperCase() ?? null
+useGame.getState().restore(invitation)
+if (invitation && hasSeatAt(invitation)) {
+  history.replaceState(null, '', location.pathname + location.search)
+}
 
 createRoot(root).render(
   <StrictMode>
