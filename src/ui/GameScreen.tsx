@@ -963,10 +963,7 @@ function RealtimeBar({
         </span>
         <div>
           <p className="text-sm leading-tight font-semibold">
-            {loading ? 'Wird beladen · ' : ''}Kurs auf{' '}
-            <span className="decoration-ink-faint underline decoration-dotted underline-offset-2">
-              {destination}
-            </span>
+            {loading ? `Wird beladen · Kurs auf ${destination}` : `Kurs auf ${destination}`}
           </p>
           <p className="text-ink-soft text-[11px]">
             {loading
