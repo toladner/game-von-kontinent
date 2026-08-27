@@ -81,7 +81,7 @@ export const DEFAULT_OPTIONS: GameOptions = {
   packId: 'classic',
   travel: 'wuerfel',
   totalRounds: 30,
-  minutesPerPip: 6,
+  minutesPerPip: 30,
   durationHours: 24,
   startingCapital: 500_000,
   fleetLimit: 1,

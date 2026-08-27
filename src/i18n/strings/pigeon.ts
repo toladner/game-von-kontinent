@@ -59,4 +59,5 @@ export const PIGEON = {
     en: 'Whether the pigeon arrives you will not learn. Some never do.',
   },
   'pigeon.searchPort': { de: 'Hafen suchen …', en: 'Search for a harbour …' },
+  'pigeon.noSuchPort': { de: 'Kein solcher Hafen.', en: 'No such harbour.' },
 } satisfies Catalog

@@ -301,7 +301,7 @@ export function GameScreen() {
 
           <div className="flex items-stretch divide-x divide-black/15 border-t border-black/15">
             <Cell
-              label={`Nachrichten${unread > 0 ? `, ${unread} ungelesen` : ''}`}
+              label={unread > 0 ? t('strip.news.unread', { n: unread }) : t('strip.news')}
               onOpen={() => open('nachrichten')}
             >
               <NewsGlyph />
@@ -326,7 +326,11 @@ export function GameScreen() {
               state.config.maxFleetSize > 1 ||
               state.config.sicht === 'realistisch') && (
               <Cell
-                label={`Flotte: ${player.fleet.length} Schiffe${waitingMail > 0 ? `, ${waitingMail} Briefe` : ''}`}
+                label={
+                  waitingMail > 0
+                    ? t('strip.fleet.mail', { n: player.fleet.length, mail: waitingMail })
+                    : t('strip.fleet', { n: player.fleet.length })
+                }
                 onOpen={() => open('flotte')}
               >
                 <AnchorGlyph />
@@ -339,7 +343,7 @@ export function GameScreen() {
               </Cell>
             )}
 
-            <Cell label="Einstellungen" onOpen={() => open('einstellungen')}>
+            <Cell label={t('strip.settings')} onOpen={() => open('einstellungen')}>
               <GearGlyph />
             </Cell>
           </div>

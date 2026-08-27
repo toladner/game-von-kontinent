@@ -27,8 +27,11 @@ export const CLASSIC_CONFIG: RuleConfig = {
   },
   notebookLimit: 480,
   realtime: {
-    // A ten-pip Atlantic crossing takes about an hour at this pace.
-    minutesPerPip: 6,
+    // A twelve-pip Atlantic crossing takes about six hours at this pace, so a
+    // day's season is three or four ocean crossings — a ship set going in the
+    // morning is worth looking in on at lunch and again in the evening, which
+    // is the rhythm the mode is actually played at.
+    minutesPerPip: 30,
     portCallPips: 0.4,
     marketIntervalMinutes: 20,
     marketChancePercent: 50,

@@ -4,6 +4,7 @@ import { CargoHold } from './Cargo'
 import { flagship, type PlayerState } from '@engine/state'
 import type { EngineContext } from '@engine/context'
 import { PLAYER_COLORS } from '@app/store'
+import { useT } from '@app/locale'
 
 /** Rolls a figure up or down so money visibly moves. */
 export function useCountUp(value: number, ms = 520): number {
@@ -52,6 +53,7 @@ export function PlayerHUD({
   rank: number | null
   onOpen: () => void
 }) {
+  const { t, tn, num } = useT()
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
   const cash = useCountUp(player.cash)
   const [flash, setFlash] = useState(false)
@@ -73,7 +75,11 @@ export function PlayerHUD({
       onClick={onOpen}
       className="paper anim-rise pointer-events-auto flex min-w-0 max-w-[min(78vw,22rem)] shrink items-center gap-2.5 rounded-lg border-l-4 py-2 pr-3 pl-2.5 text-left shadow-lg"
       style={{ borderLeftColor: color.ink }}
-      aria-label={`${rank !== null ? `Platz ${rank}, ` : ''}${player.name}, ${player.cash.toLocaleString('de-DE')} Einheiten. Kontor öffnen.`}
+      aria-label={t('game.house.aria', {
+        place: rank !== null ? t('game.house.place', { rank }) : '',
+        name: player.name,
+        cash: num(player.cash),
+      })}
     >
       <PortraitRing traits={player.persona.portrait} ink={color.ink} size={40} />
 
@@ -87,15 +93,15 @@ export function PlayerHUD({
         <span
           className={`tnum block rounded-sm text-lg leading-tight font-bold ${flash ? 'anim-flash' : ''}`}
         >
-          {cash.toLocaleString('de-DE')}
+          {num(cash)}
         </span>
         {/* Beide Zeilen schneiden ab statt zu wachsen. Sonst diktieren sie
             die Mindestbreite der Karte — die Ladeluken allein sind über
             hundert Pixel, die nicht kleiner werden können — und die Kopfzeile
             bricht auf jedem Telefon um, obwohl der Platz gereicht hätte. */}
         <span className="text-ink-soft block truncate text-[10px] leading-tight">
-          {cargoCount === 0 ? 'Laderaum leer' : `${cargoCount} Posten an Bord`}
-          {purchasesLeft !== null && ` · ${purchasesLeft} Kauf frei`}
+          {cargoCount === 0 ? t('hud.holdEmpty') : tn('hud.aboard', cargoCount)}
+          {purchasesLeft !== null && ` · ${tn('hud.purchasesLeft', purchasesLeft)}`}
         </span>
         {cargoCount > 0 && (
           <span className="mt-1 block overflow-hidden">

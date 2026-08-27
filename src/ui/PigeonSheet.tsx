@@ -200,7 +200,9 @@ function PortChoice({
             </li>
           ))}
           {shown.length === 0 && (
-            <li className="text-ink-faint px-2.5 py-2 text-xs italic">Kein solcher Hafen.</li>
+            <li className="text-ink-faint px-2.5 py-2 text-xs italic">
+              {t('pigeon.noSuchPort')}
+            </li>
           )}
         </ul>
       )}

@@ -801,15 +801,15 @@ export function Board({
         <button
           className="pointer-events-auto px-2.5 py-1.5 text-lg leading-none transition-colors hover:bg-black/5"
           onClick={() => zoomAt(1 / 1.4, midX(), midY())}
-          aria-label="Weiter weg"
+          aria-label={t('board.zoomOut')}
         >
           −
         </button>
         <button
           className="pointer-events-auto flex items-center justify-center px-2.5 py-1.5 transition-colors hover:bg-black/5"
           onClick={() => centreOn(focusNode, 3)}
-          aria-label="Zum eigenen Schiff"
-          title="Zum eigenen Schiff"
+          aria-label={t('board.toMyShip')}
+          title={t('board.toMyShip')}
         >
           <AnchorGlyph size={17} />
         </button>

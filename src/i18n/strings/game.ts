@@ -33,6 +33,16 @@ export const GAME = {
   'game.market.plus': { de: 'plus', en: 'plus' },
   'game.market.minus': { de: 'minus', en: 'minus' },
 
+  // --- The dials along the strip, which only a screen reader reads --------
+  'strip.news': { de: 'Nachrichten', en: 'News' },
+  'strip.news.unread': { de: 'Nachrichten, {n} ungelesen', en: 'News, {n} unread' },
+  'strip.fleet': { de: 'Flotte: {n} Schiffe', en: 'Fleet: {n} ships' },
+  'strip.fleet.mail': {
+    de: 'Flotte: {n} Schiffe, {mail} Briefe',
+    en: 'Fleet: {n} ships, {mail} letters',
+  },
+  'strip.settings': { de: 'Einstellungen', en: 'Settings' },
+
   // --- The one thing to do next -------------------------------------------
   'game.roll': { de: 'Würfeln', en: 'Throw' },
   'game.moveLeft': { de: 'noch {n}', en: '{n} left' },

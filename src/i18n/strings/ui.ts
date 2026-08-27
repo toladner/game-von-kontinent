@@ -28,6 +28,22 @@ export const UI = {
   },
   'ui.seatNumber': { de: 'Spieler {n}', en: 'Player {n}' },
 
+  // --- The house's own strip, top left ------------------------------------
+  'hud.holdEmpty': { de: 'Laderaum leer', en: 'Hold empty' },
+  'hud.aboard.one': { de: '{n} Posten an Bord', en: '{n} lot aboard' },
+  'hud.aboard.other': { de: '{n} Posten an Bord', en: '{n} lots aboard' },
+  // The German is a ledger's shorthand and stays in the singular however many
+  // are left, as it was written; English will not carry that off.
+  'hud.purchasesLeft.one': { de: '{n} Kauf frei', en: '{n} purchase left' },
+  'hud.purchasesLeft.other': { de: '{n} Kauf frei', en: '{n} purchases left' },
+
+  // --- The chart's own controls -------------------------------------------
+  'board.zoomOut': { de: 'Weiter weg', en: 'Further out' },
+  'board.toMyShip': { de: 'Zum eigenen Schiff', en: 'To your own ship' },
+
+  // --- Elsewhere -----------------------------------------------------------
+  'cargo.holdEmpty': { de: 'Der Laderaum ist leer.', en: 'The hold is empty.' },
+
   // --- The chart itself ---------------------------------------------------
   'board.chart': {
     de: 'Spielplan mit Schiffahrtslinien',

@@ -16,7 +16,7 @@ import type { Localized } from '../i18n/locale'
  * engine free of any knowledge of this file. The reducer reads a field; it
  * does not consult a dictionary.
  *
- * "Only the differences" is meant literally: Hamburg, Dakar and Vanille are
+ * "Only the differences" is meant literally: Hamburg, Dakar and Aluminium are
  * absent below because they are the same word in both languages, and a lookup
  * that misses leaves the printed name to stand. That keeps this file to the
  * cases where a choice was actually made.
@@ -104,6 +104,7 @@ const GOODS_EN: Readonly<Record<number, string>> = {
   62: 'Carpets',
   63: 'Textiles',
   64: 'Uranium ores',
+  65: 'Vanilla',
   66: 'Livestock',
   67: 'Woven goods',
   68: 'Wine',
@@ -190,6 +191,7 @@ const COUNTRIES_EN: Readonly<Record<string, string>> = {
 
 const PORTS_EN: Readonly<Record<string, string>> = {
   kopenhagen: 'Copenhagen',
+  ostende: 'Ostend',
   lissabon: 'Lisbon',
   genua: 'Genoa',
   neapel: 'Naples',

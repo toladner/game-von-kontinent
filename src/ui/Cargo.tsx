@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useT } from '@app/locale'
 import type { CargoItem } from '@engine/state'
 import type { EngineContext } from '@engine/context'
 import type { GoodCategory, Vehicle } from '@engine/types'
@@ -83,13 +84,14 @@ export function CargoHold({
   /** Cap how many crates are drawn; the rest are summarised. */
   max?: number
 }) {
+  const { t } = useT()
   const shown = max ? cargo.slice(0, max) : cargo
   const hidden = cargo.length - shown.length
   const empties =
     vehicle.capacity === null ? 0 : Math.max(0, vehicle.capacity - cargo.length)
 
   if (cargo.length === 0 && empties === 0) {
-    return <p className="text-ink-faint text-xs italic">Der Laderaum ist leer.</p>
+    return <p className="text-ink-faint text-xs italic">{t('cargo.holdEmpty')}</p>
   }
 
   return (

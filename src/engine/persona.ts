@@ -202,7 +202,7 @@ const ORIGINS: readonly Localized<string>[] = [
   { de: 'Danzig', en: 'Danzig' },
   { de: 'Kopenhagen', en: 'Copenhagen' },
   { de: 'Lissabon', en: 'Lisbon' },
-  { de: 'Marseille', en: 'Marseilles' },
+  { de: 'Marseille', en: 'Marseille' },
   { de: 'Bergen', en: 'Bergen' },
   { de: 'Stettin', en: 'Stettin' },
   { de: 'Le Havre', en: 'Le Havre' },
