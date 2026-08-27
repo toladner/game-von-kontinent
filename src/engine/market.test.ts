@@ -184,7 +184,7 @@ describe('Konjunktur "erweitert"', () => {
     expect(deck(s)).toBeGreaterThan(CLASSIC_PACK.konjunktur.length)
     // The printed cards are still in there: this adds, it does not replace.
     for (const card of CLASSIC_PACK.konjunktur) {
-      expect(s.deck.includes(card.id), card.title).toBe(true)
+      expect(s.deck.includes(card.id), card.title.de).toBe(true)
     }
   })
 
@@ -195,7 +195,7 @@ describe('Konjunktur "erweitert"', () => {
       weather: [
         {
           id: 'w1',
-          title: 'Hausse in Europa',
+          title: { de: 'Hausse in Europa', en: 'Boom in Europe' },
           continent: 'europa',
           goodId: null,
           category: null,
@@ -220,7 +220,7 @@ describe('Konjunktur "erweitert"', () => {
       weather: [
         {
           id: 'w1',
-          title: 'Baisse in Europa',
+          title: { de: 'Baisse in Europa', en: 'Slump in Europe' },
           continent: 'europa',
           goodId: null,
           category: null,
@@ -253,9 +253,16 @@ describe('Konjunktur "erweitert"', () => {
     const dearest = [...before].sort((a, b) => b.pricePaid - a.pricePaid)[0]!
     const card: KonjunkturCard = {
       id: 'storm-test',
-      title: 'Sturm',
-      lines: [],
-      effects: [{ kind: 'stormInRegion', continent: 'europa', lose: 1, title: 'Sturm' }],
+      title: { de: 'Sturm', en: 'Gale' },
+      lines: { de: [], en: [] },
+      effects: [
+        {
+          kind: 'stormInRegion',
+          continent: 'europa',
+          lose: 1,
+          title: { de: 'Sturm', en: 'Gale' },
+        },
+      ],
     }
     const withCard: GameState = { ...loaded, phase: 'konjunktur', deck: [card.id] }
     const probe = createContext({
@@ -338,7 +345,7 @@ describe('the Wohin? list under distance pricing', () => {
       const partial = rows.filter((d) => d.sellable < held)
       expect(partial.length, `${preise}: partial options`).toBe(2)
       // And they are real options, not empty ones.
-      for (const row of partial) expect(row.sellable, row.name).toBeGreaterThan(0)
+      for (const row of partial) expect(row.sellable, row.name.de).toBeGreaterThan(0)
     }
   })
 
@@ -352,7 +359,7 @@ describe('the Wohin? list under distance pricing', () => {
     expect(flagship(one.players[0]!).cargo).toHaveLength(1)
 
     for (const row of marketReport(ctx, one, one.players[0]!, 6)) {
-      expect(row.sellable, row.name).toBe(1)
+      expect(row.sellable, row.name.de).toBe(1)
     }
   })
 
@@ -414,7 +421,7 @@ describe('what the chart says a voyage will take', () => {
     const rows = marketReport(ctx, s, s.players[0]!, 6)
     expect(rows.length).toBeGreaterThan(0)
     for (const row of rows) {
-      expect(row.travelMs, row.name).toBeGreaterThan(0)
+      expect(row.travelMs, row.name.de).toBeGreaterThan(0)
     }
   })
 
@@ -423,7 +430,7 @@ describe('what the chart says a voyage will take', () => {
     const s = afloat()
     const ship = flagship(s.players[0]!)
     for (const row of marketReport(ctx, s, s.players[0]!, 6)) {
-      expect(row.travelMs, row.name).toBe(sailingTimeMs(ctx, s, ship, row.portId))
+      expect(row.travelMs, row.name.de).toBe(sailingTimeMs(ctx, s, ship, row.portId))
     }
   })
 
@@ -439,7 +446,7 @@ describe('what the chart says a voyage will take', () => {
     const s = afloat({ preise: 'entfernung' })
     const rows = marketReport(ctx, s, s.players[0]!, 6)
     for (let i = 1; i < rows.length; i++) {
-      expect(rows[i]!.travelMs!, rows[i]!.name).toBeGreaterThan(rows[i - 1]!.travelMs!)
+      expect(rows[i]!.travelMs!, rows[i]!.name.de).toBeGreaterThan(rows[i - 1]!.travelMs!)
     }
   })
 })

@@ -36,6 +36,9 @@ import type { EngineContext } from '@engine/context'
 import { clockText, durationText, roughDuration, untilText, useNow } from './useNow'
 import { useArrivalNotice } from './useArrivalNotice'
 import { PLAYER_COLORS as COLORS } from '@app/store'
+import { useT } from '@app/locale'
+import { bcp47, named, type Locale } from '@i18n/locale'
+import { t as translate } from '@i18n'
 
 type SheetKind =
   | 'port'
@@ -70,6 +73,7 @@ export function GameScreen() {
   const focus = useGame((s) => s.focus)
   const announceFocus = useGame((s) => s.announceFocus)
 
+  const { t, render } = useT()
   const realtime = state.config.travel === 'echtzeit'
   const now = useNow(1000, realtime)
 
@@ -264,10 +268,8 @@ export function GameScreen() {
         left={(tight) =>
           !seated ? (
             <div className="paper anim-rise pointer-events-auto max-w-[16rem] rounded-lg px-3 py-2 shadow-lg">
-              <p className="smallcaps text-[11px] tracking-[0.2em]">Zuschauer</p>
-              <p className="text-ink-soft text-[12px] leading-snug">
-                Sie haben keinen Platz an diesem Tisch und sehen nur zu.
-              </p>
+              <p className="smallcaps text-[11px] tracking-[0.2em]">{t('game.spectator')}</p>
+              <p className="text-ink-soft text-[12px] leading-snug">{t('game.spectator.note')}</p>
             </div>
           ) : tight ? (
             <HouseBadge {...house} />
@@ -382,7 +384,7 @@ export function GameScreen() {
       {notice && (
         <div className="pointer-events-none absolute inset-x-0 bottom-32 z-40 flex justify-center px-4">
           <p className="paper-card text-rot anim-rise max-w-md rounded-sm px-3 py-2 text-center text-sm shadow-lg">
-            {notice}
+            {render(notice)}
           </p>
         </div>
       )}
@@ -607,11 +609,16 @@ const HEADER_HYSTERESIS = 0.05
  * steht.
  */
 export function HouseBadge({ player, rank, onOpen }: ComponentProps<typeof PlayerHUD>) {
+  const { t, num } = useT()
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
   return (
     <button
       onClick={onOpen}
-      aria-label={`${rank !== null ? `Platz ${rank}, ` : ''}${player.name}, ${player.cash.toLocaleString('de-DE')} Einheiten. Kontor öffnen.`}
+      aria-label={t('game.house.aria', {
+        place: rank !== null ? t('game.house.place', { rank }) : '',
+        name: player.name,
+        cash: num(player.cash),
+      })}
       className="paper anim-rise pointer-events-auto grid h-12 w-12 place-items-center rounded-full border-2 shadow-lg"
       style={{ borderColor: color.ink }}
     >
@@ -758,14 +765,18 @@ function Cell({
  * card turned.
  */
 function MarketCell({ percent, onOpen }: { percent: number; onOpen: () => void }) {
+  const { t } = useT()
   const tone = percent === 0 ? 'text-ink-faint' : percent > 0 ? 'text-press' : 'text-rot'
   return (
     <button
       onClick={onOpen}
       aria-label={
         percent === 0
-          ? 'Weltmarkt: Verkaufspreise unverändert'
-          : `Weltmarkt: Verkaufspreise ${percent > 0 ? 'plus' : 'minus'} ${Math.abs(percent)} Prozent`
+          ? t('game.market.flat')
+          : t('game.market.moved', {
+              direction: t(percent > 0 ? 'game.market.plus' : 'game.market.minus'),
+              percent: Math.abs(percent),
+            })
       }
       className={`flex flex-1 items-center justify-center px-2.5 py-2 transition-colors hover:bg-black/5 ${tone}`}
     >
@@ -810,6 +821,7 @@ function ActionBar({
   onOpenPort: () => void
   onDraw: () => void
 }) {
+  const { t } = useT()
   const wrap = (children: React.ReactNode) => (
     <div className="pointer-events-auto anim-rise">{children}</div>
   )
@@ -818,7 +830,7 @@ function ActionBar({
     case 'roll':
       return wrap(
         <button className="btn btn-primary px-10 py-3 text-lg shadow-xl" onClick={onRoll}>
-          Würfeln
+          {t('game.roll')}
         </button>,
       )
 
@@ -828,9 +840,9 @@ function ActionBar({
           <Die value={state.movement?.rolled ?? 1} size={44} />
           <div className="pr-1">
             <p className="tnum text-lg leading-none font-bold">
-              noch {state.movement?.remaining}
+              {t('game.moveLeft', { n: state.movement?.remaining ?? 0 })}
             </p>
-            <p className="text-ink-soft text-[11px]">grünen Punkt antippen</p>
+            <p className="text-ink-soft text-[11px]">{t('game.tapGreen')}</p>
           </div>
         </div>,
       )
@@ -838,21 +850,21 @@ function ActionBar({
     case 'endOfTurn':
       return wrap(
         <button className="btn btn-primary px-8 py-3 text-base shadow-xl" onClick={onEnd}>
-          Zug beenden
+          {t('game.endTurn')}
         </button>,
       )
 
     case 'port':
       return wrap(
         <button className="btn btn-primary px-8 py-3 text-base shadow-xl" onClick={onOpenPort}>
-          Hafen öffnen
+          {t('game.openPort')}
         </button>,
       )
 
     case 'konjunktur':
       return wrap(
         <button className="btn btn-danger px-8 py-3 text-base shadow-xl" onClick={onDraw}>
-          Konjunkturkarte abheben
+          {t('game.drawCard')}
         </button>,
       )
 
@@ -877,6 +889,7 @@ function ClockCell({
   now: number
   onOpen: () => void
 }) {
+  const { t } = useT()
   const left = state.endsAt - now
   const closing = left < 15 * 60_000
   return (
@@ -885,9 +898,9 @@ function ClockCell({
       className={`flex w-full items-center justify-center gap-1.5 px-3 py-1.5 transition-colors hover:bg-black/5 ${
         closing ? 'text-rot' : ''
       }`}
-      aria-label={`Noch ${durationText(left)} Saison`}
+      aria-label={t('game.season.aria', { left: durationText(left) })}
     >
-      <span className="smallcaps text-[10px]">Saison</span>
+      <span className="smallcaps text-[10px]">{t('game.season')}</span>
       <span className="tnum text-base leading-none font-bold">{roughDuration(left)}</span>
     </button>
   )
@@ -905,16 +918,21 @@ function RoundCell({
   red: boolean
   onOpen: () => void
 }) {
+  const { t } = useT()
   return (
     <button
       onClick={onOpen}
       className={`flex w-full items-center justify-center gap-1.5 px-3 py-1.5 transition-colors hover:bg-black/5 ${
         red ? 'text-rot' : ''
       }`}
-      aria-label={`Runde ${round} von ${total}${red ? ', rotes Feld' : ''}`}
+      aria-label={t('game.round.aria', {
+        round,
+        total,
+        red: red ? t('game.round.redField') : '',
+      })}
     >
       {red && <span className="bg-rot h-2.5 w-2.5 shrink-0 rounded-full" aria-hidden />}
-      <span className="smallcaps text-[10px]">Runde</span>
+      <span className="smallcaps text-[10px]">{t('game.round')}</span>
       <span className="tnum text-base leading-none font-bold">{round}</span>
       <span className="text-ink-faint text-[10px]">/{total}</span>
     </button>
@@ -937,6 +955,7 @@ function RealtimeBar({
   onOpenPort: () => void
   onShowPort: (portId: string) => void
 }) {
+  const { t, locale } = useT()
   if (state.phase === 'over') return null
 
   const voyage = flagship(player).voyage ?? null
@@ -946,7 +965,8 @@ function RealtimeBar({
 
   if (voyage) {
     const eta = arrivalAt(ctx, state, player) ?? now
-    const destination = ctx.portsById.get(voyage.destination)?.name ?? voyage.destination
+    const destinationPort = ctx.portsById.get(voyage.destination)
+    const destination = destinationPort ? named(destinationPort)[locale] : voyage.destination
     // The course is set but the hatches are still open: say so, or a ship
     // sitting at the quay for two minutes looks like a game that has hung.
     const loading = now < voyage.departsAt
@@ -958,7 +978,7 @@ function RealtimeBar({
       <button
         type="button"
         onClick={() => onShowPort(voyage.destination)}
-        aria-label={`${destination} auf dem Plan zeigen`}
+        aria-label={t('game.showOnPlan', { port: destination })}
         className="paper flex items-center gap-3 rounded-xl px-4 py-2.5 text-left shadow-xl transition-colors hover:bg-black/5"
       >
         <span className={`text-2xl ${loading ? 'opacity-60' : ''}`} aria-hidden>
@@ -966,12 +986,15 @@ function RealtimeBar({
         </span>
         <div>
           <p className="text-sm leading-tight font-semibold">
-            {loading ? `Wird beladen · Kurs auf ${destination}` : `Kurs auf ${destination}`}
+            {t(loading ? 'game.loading' : 'game.underCourse', { port: destination })}
           </p>
           <p className="text-ink-soft text-[11px]">
             {loading
-              ? `Legt ab ${untilText(voyage.departsAt, now)} · Ankunft ${untilText(eta, now)}`
-              : `Ankunft ${untilText(eta, now)} · ${clockText(eta)} Uhr`}
+              ? t('game.castsOff', {
+                  when: untilText(voyage.departsAt, now),
+                  eta: untilText(eta, now),
+                })
+              : t('game.arrivesAt', { eta: untilText(eta, now), clock: clockText(eta) })}
           </p>
         </div>
       </button>,
@@ -981,10 +1004,10 @@ function RealtimeBar({
   return wrap(
     <div className="paper flex items-center gap-3 rounded-xl px-3 py-2 shadow-xl">
       <button className="btn btn-primary" onClick={onOpenPort}>
-        Hafen
+        {t('game.harbour')}
       </button>
       <p className="text-ink-soft max-w-[10rem] text-[11px] leading-snug">
-        Einen Hafen auf dem Plan antippen, um Kurs zu setzen.
+        {t('game.tapAHarbour')}
       </p>
     </div>,
   )
@@ -1041,6 +1064,7 @@ function SeasonSheet({
   onSnap: (s: SheetSnap) => void
   onSettings: () => void
 }) {
+  const { t, locale } = useT()
   const card = state.marketCardId ? ctx.cardsById.get(state.marketCardId) : null
   const nextTurn = state.marketSince + state.config.realtime.marketIntervalMinutes * 60_000
 
@@ -1048,30 +1072,35 @@ function SeasonSheet({
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title="Die Saison"
-      subtitle={`Schluß ${clockText(state.endsAt)} Uhr · noch ${durationText(state.endsAt - now)}`}
+      title={t('season.title')}
+      subtitle={t('season.subtitle', {
+        end: clockText(state.endsAt),
+        left: durationText(state.endsAt - now),
+      })}
     >
-      <h3 className="smallcaps text-ink-soft mb-2 text-[11px]">Weltmarkt</h3>
+      <h3 className="smallcaps text-ink-soft mb-2 text-[11px]">{t('season.worldMarket')}</h3>
       {card ? (
         <KonjunkturSlip card={card} standing />
       ) : (
-        <p className="text-ink-faint text-xs italic">
-          Die Börse meldet nichts. Preise stehen, wie das Warenverzeichnis sie führt.
-        </p>
+        <p className="text-ink-faint text-xs italic">{t('season.quiet')}</p>
       )}
       <p className="text-ink-soft mt-3 text-center text-[11px]">
-        Nächste Notierung {untilText(nextTurn, now)}
+        {t('season.nextQuotation', { when: untilText(nextTurn, now) })}
       </p>
 
-      <h3 className="smallcaps text-ink-soft mt-5 mb-2 text-[11px]">Die Flotte</h3>
+      <h3 className="smallcaps text-ink-soft mt-5 mb-2 text-[11px]">{t('season.fleet')}</h3>
       <ul className="space-y-1.5 text-[12px]">
         {state.players.map((p) => {
           const color = COLORS[p.colorIndex % COLORS.length]!
           const eta = arrivalAt(ctx, state, p)
           const ship = flagship(p)
+          const bound = ship.voyage ? ctx.portsById.get(ship.voyage.destination) : null
+          const lying = ctx.portsById.get(ship.nodeId)
           const where = ship.voyage
-            ? `unterwegs nach ${ctx.portsById.get(ship.voyage.destination)?.name ?? ''}`
-            : `liegt in ${ctx.portsById.get(ship.nodeId)?.name ?? 'See'}`
+            ? t('season.boundFor', { port: bound ? named(bound)[locale] : '' })
+            : t('season.lyingIn', {
+                port: lying ? named(lying)[locale] : t('season.atSea'),
+              })
           return (
             <li key={p.id} className="flex items-center gap-2">
               <span
@@ -1090,7 +1119,7 @@ function SeasonSheet({
       {/* Aufgeben steht unter Einstellungen, mit dem Unterschied zwischen
           Weggehen und Aufgeben daneben — hier war beides derselbe Knopf. */}
       <button className="btn mt-6 w-full" onClick={onSettings}>
-        Einstellungen
+        {t('season.settings')}
       </button>
     </Sheet>
   )
@@ -1109,6 +1138,7 @@ function KontorSheet({
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
 }) {
+  const { t, num, locale } = useT()
   const [tab, setTab] = useState<'kasse' | 'wohin'>('kasse')
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
   const worth = useCountUp(netWorth(player))
@@ -1126,22 +1156,22 @@ function KontorSheet({
         value={tab}
         onChange={setTab}
         items={[
-          { id: 'kasse', label: 'Kasse' },
-          { id: 'wohin', label: 'Wohin?' },
+          { id: 'kasse', label: t('kontor.tab.cash') },
+          { id: 'wohin', label: t('kontor.tab.where') },
         ]}
       />
 
       {tab === 'kasse' && (
         <div className="anim-fade">
           <dl className="teletype space-y-1 text-[13px]">
-            <Row label="Barmittel" value={formatMoney(player.cash)} />
-            <Row label="Warenwert" value={formatMoney(cargoValue(player))} />
+            <Row label={t('kontor.cash')} value={formatMoney(player.cash)} />
+            <Row label={t('kontor.goodsValue')} value={formatMoney(cargoValue(player))} />
             <hr className="rule my-1.5" />
-            <Row label="Vermögen" value={formatMoney(worth)} strong />
+            <Row label={t('kontor.worth')} value={formatMoney(worth)} strong />
           </dl>
 
           <h3 className="smallcaps text-ink-soft mt-4 mb-1.5 text-[11px]">
-            Laderaum · {flagship(player).kind.name}
+            {t('kontor.hold', { ship: flagship(player).kind.name })}
           </h3>
           <CargoHold ctx={ctx} cargo={flagship(player).cargo} vehicle={flagship(player).kind} size={38} />
           {flagship(player).cargo.length > 0 && (
@@ -1149,18 +1179,23 @@ function KontorSheet({
               {flagship(player).cargo.map((c) => (
                 <li key={c.uid} className="flex justify-between gap-2">
                   <span className="min-w-0 truncate">
-                    {ctx.goodsById.get(c.goodId)?.name}
-                    {c.damaged && <span className="text-rot ml-1 text-[11px]">havariert</span>}
+                    {(() => {
+                      const good = ctx.goodsById.get(c.goodId)
+                      return good ? named(good)[locale] : ''
+                    })()}
+                    {c.damaged && (
+                      <span className="text-rot ml-1 text-[11px]">{t('kontor.damaged')}</span>
+                    )}
                   </span>
-                  <span className="tnum text-ink-soft">
-                    {c.pricePaid.toLocaleString('de-DE')}
-                  </span>
+                  <span className="tnum text-ink-soft">{num(c.pricePaid)}</span>
                 </li>
               ))}
             </ul>
           )}
 
-          <h3 className="smallcaps text-ink-soft mt-4 mb-1.5 text-[11px]">Die Rangliste</h3>
+          <h3 className="smallcaps text-ink-soft mt-4 mb-1.5 text-[11px]">
+            {t('kontor.standings')}
+          </h3>
           <Rangliste state={state} highlight={player.id} />
         </div>
       )}
@@ -1181,12 +1216,13 @@ function RoundSheet({
   onSnap: (s: SheetSnap) => void
   onSettings: () => void
 }) {
+  const { t } = useT()
   return (
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title={`Runde ${state.round}`}
-      subtitle={`von ${state.config.totalRounds} · rote Felder bringen die Konjunktur ins Spiel`}
+      title={t('roundSheet.title', { round: state.round })}
+      subtitle={t('roundSheet.subtitle', { total: state.config.totalRounds })}
     >
       <div className="flex flex-wrap gap-1">
         {Array.from({ length: state.config.totalRounds }, (_, i) => {
@@ -1207,7 +1243,7 @@ function RoundSheet({
         })}
       </div>
       <button className="btn mt-6 w-full" onClick={onSettings}>
-        Einstellungen
+        {t('season.settings')}
       </button>
     </Sheet>
   )
@@ -1236,19 +1272,20 @@ function KonjunkturSheet({
   onSnap: (s: SheetSnap) => void
   onDraw: () => void
 }) {
+  const { t, locale } = useT()
   const card = state.pendingCard ? ctx.cardsById.get(state.pendingCard.cardId) : null
-  const outcome = card ? konjunkturOutcome(ctx, player, card) : null
+  const outcome = card ? konjunkturOutcome(ctx, player, card, locale) : null
 
   return (
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title="Rotes Feld"
-      subtitle="Vor dem Verkauf ist eine Karte abzuheben"
+      title={t('konjunktur.title')}
+      subtitle={t('konjunktur.subtitle')}
       footer={
         !card ? (
           <button className="btn btn-primary w-full" onClick={onDraw}>
-            Karte abheben
+            {t('konjunktur.draw')}
           </button>
         ) : undefined
       }
@@ -1287,7 +1324,9 @@ function KonjunkturSheet({
         </div>
       ) : (
         <div className="paper-slip mx-auto grid h-36 w-60 place-items-center rounded-[2px] shadow-md">
-          <span className="smallcaps text-xs tracking-[0.3em] text-black/40">Konjunktur</span>
+          <span className="smallcaps text-xs tracking-[0.3em] text-black/40">
+            {t('konjunktur.deck')}
+          </span>
         </div>
       )}
     </Sheet>
@@ -1333,30 +1372,24 @@ function FinalSheet({
     return byPlayer
   }, [closing])
 
+  const { t, num, locale } = useT()
   const anySales = soldUp.size > 0
 
   return (
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title="Schlußabrechnung"
-      subtitle="Wer hat den Handel gemacht?"
+      title={t('final.title')}
+      subtitle={t('final.subtitle')}
       footer={
         <button className="btn btn-primary w-full" onClick={onNew}>
-          Neue Partie
+          {t('final.newGame')}
         </button>
       }
     >
       <div className="paper-slip mb-3 rounded-sm px-3 py-2.5">
         <p className="text-press text-[13px] leading-snug">
-          <Emph
-            strong="press-dark font-bold"
-            text={
-              'Die *letzte Runde* ist gefahren. Jedes Schiff hat den *nächsten Hafen* angelaufen und ' +
-              'seine Ladung abgestoßen: was der Hafen *nicht selbst führt*, zum vollen Verkaufspreis — ' +
-              'alles andere zu *75 % des Einkaufs*. Sieger ist das größte Vermögen.'
-            }
-          />
+          <Emph strong="press-dark font-bold" text={t('final.explainer')} />
         </p>
       </div>
 
@@ -1381,20 +1414,23 @@ function FinalSheet({
                   {rows.map((r, i) => (
                     <li key={i} className="flex items-baseline justify-between gap-2">
                       <span className="min-w-0 flex-1 truncate">
-                        {ctx.goodsById.get(r.goodId)?.name ?? `Ware ${r.goodId}`}
+                        {(() => {
+                          const good = ctx.goodsById.get(r.goodId)
+                          return good ? named(good)[locale] : `${r.goodId}`
+                        })()}
                       </span>
-                      <span className="tnum">{r.price.toLocaleString('de-DE')}</span>
+                      <span className="tnum">{num(r.price)}</span>
                       <span
                         className={`tnum w-20 text-right ${r.profit >= 0 ? 'text-press' : 'text-rot'}`}
                       >
                         {r.profit >= 0 ? '+' : '−'}
-                        {Math.abs(r.profit).toLocaleString('de-DE')}
+                        {num(Math.abs(r.profit))}
                       </span>
                     </li>
                   ))}
                   <li className="flex items-baseline justify-between gap-2 border-t border-black/10 pt-1 font-bold">
-                    <span className="smallcaps text-[11px]">Schlußverkauf</span>
-                    <span className="tnum">{takings.toLocaleString('de-DE')}</span>
+                    <span className="smallcaps text-[11px]">{t('final.closingSale')}</span>
+                    <span className="tnum">{num(takings)}</span>
                     <span className="w-20" />
                   </li>
                 </ul>
@@ -1402,7 +1438,7 @@ function FinalSheet({
 
               {anySales && rows.length === 0 && (
                 <p className="text-ink-soft mt-1.5 border-t border-black/10 pt-1.5 text-[12px]">
-                  Fuhr mit leerem Laderaum ein — nichts mehr abzurechnen.
+                  {t('final.emptyHold')}
                 </p>
               )}
             </li>
@@ -1478,11 +1514,12 @@ function NewsSheet({
   // The clock is redrawn every second; the headings only ever change at
   // midnight, so they are grouped against the day rather than the instant.
   const today = new Date(now).setHours(0, 0, 0, 0)
+  const { t, tn, locale } = useT()
   const rounds = useMemo(
-    () => (realtime ? groupByDay(shown, today) : groupByRound(shown)),
-    [shown, realtime, today],
+    () => (realtime ? groupByDay(shown, today, locale) : groupByRound(shown, locale)),
+    [shown, realtime, today, locale],
   )
-  const named =
+  const house =
     only?.kind === 'haus' ? (players.find((p) => p.id === only.id)?.name ?? null) : null
   const onWire = only?.kind === 'telegramm'
 
@@ -1495,17 +1532,17 @@ function NewsSheet({
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title="Nachrichten"
+      title={t('news.title')}
       subtitle={
         log.length === 0
-          ? 'Noch ist nichts eingegangen'
+          ? t('news.empty')
           : onWire
-            ? `${wire.length} ${wire.length === 1 ? 'Telegramm' : 'Telegramme'} · ${log.length} Meldungen insgesamt`
-            : named
-              ? `${shown.length} zu ${named} · ${log.length} insgesamt`
+            ? tn('news.wire', wire.length, { total: log.length })
+            : house
+              ? t('news.aboutHouse', { n: shown.length, name: house, total: log.length })
               : fresh > 0
-                ? `${fresh} neu · ${log.length} insgesamt`
-                : `${log.length} Meldungen`
+                ? t('news.fresh', { n: fresh, total: log.length })
+                : t('news.count', { n: log.length })
       }
     >
       {onSend && <TelegramForm onSend={onSend} />}
@@ -1516,9 +1553,9 @@ function NewsSheet({
         <div
           className="-mx-1 mb-2.5 flex gap-1 overflow-x-auto px-1 pb-1"
           role="group"
-          aria-label="Nachrichten filtern"
+          aria-label={t('news.filter')}
         >
-          <FilterChip label="Alle" active={only === null} onPick={() => setOnly(null)} />
+          <FilterChip label={t('news.all')} active={only === null} onPick={() => setOnly(null)} />
           {/* Der Draht steht gleich hinter „Alle" und nicht am Ende der Reihe:
               die Reihe scrollt, und wer die Nachrichten aufschlägt, um zu
               lesen was die anderen geschrieben haben, soll nicht erst an vier
@@ -1526,7 +1563,7 @@ function NewsSheet({
               telegrafiert wurde — ein Filter auf nichts ist eine Sackgasse. */}
           {wire.length > 0 && (
             <FilterChip
-              label="Telegramme"
+              label={t('news.telegrams')}
               active={onWire}
               onPick={() => setOnly(onWire ? null : { kind: 'telegramm' })}
             />
@@ -1548,12 +1585,12 @@ function NewsSheet({
       )}
 
       {log.length === 0 ? (
-        <p className="text-ink-soft py-6 text-center text-[13px]">
-          Sobald gewürfelt, gehandelt und angelandet wird, steht es hier.
-        </p>
+        <p className="text-ink-soft py-6 text-center text-[13px]">{t('news.nothingYet')}</p>
       ) : rounds.length === 0 ? (
         <p className="text-ink-soft py-6 text-center text-[13px]">
-          {onWire ? 'Über den Draht ist noch nichts gekommen.' : `Von ${named} ist noch nichts zu berichten.`}
+          {onWire
+            ? t('news.nothingOnWire')
+            : t('news.nothingAbout', { name: house ?? '' })}
         </p>
       ) : (
         <div className="space-y-2">
@@ -1579,7 +1616,7 @@ function NewsSheet({
                   </span>
                   {neu > 0 && (
                     <span className="bg-gold/25 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-                      {neu} neu
+                      {t('news.newCount', { n: neu })}
                     </span>
                   )}
                   <span className="text-ink-faint tnum text-[10px]">{group.lines.length}</span>
@@ -1638,12 +1675,11 @@ function NewsSheet({
                             }`}
                           >
                             {wire ? (
-                              <>
-                                <span className="font-bold" style={{ color: ink! }}>
-                                  {wire.name}
-                                </span>{' '}
-                                telegrafiert: „{line.text}“
-                              </>
+                              <Emph
+                                text={t('news.wires', { name: `*${wire.name}*`, text: line.text })}
+                                strong="font-bold"
+                                strongStyle={{ color: ink! }}
+                              />
                             ) : (
                               // Ausgezeichnete Wörter tragen die Farbe des
                               // Hauses, um das es geht — heute ist das der
@@ -1685,6 +1721,7 @@ type Column = null | { readonly kind: 'haus'; readonly id: string } | { readonly
  * über eine Sache, die niemand ausreizt.
  */
 function TelegramForm({ onSend }: { onSend: (text: string) => void }) {
+  const { t } = useT()
   const [text, setText] = useState('')
   const left = TELEGRAM_LIMIT - text.length
   const ready = text.trim().length > 0
@@ -1704,7 +1741,7 @@ function TelegramForm({ onSend }: { onSend: (text: string) => void }) {
           htmlFor="telegramm"
           className="smallcaps text-ink-soft shrink-0 text-[10px] tracking-[0.2em]"
         >
-          Telegramm an alle
+          {t('telegram.label')}
         </label>
         {left <= 30 && <span className="tnum text-ink-faint ml-auto text-[10px]">{left}</span>}
       </div>
@@ -1723,7 +1760,7 @@ function TelegramForm({ onSend }: { onSend: (text: string) => void }) {
           className="btn-sm shrink-0 rounded-[2px] px-3 py-1 text-[12px]"
           disabled={!ready}
         >
-          Aufgeben
+          {t('telegram.send')}
         </button>
       </div>
     </form>
@@ -1786,13 +1823,13 @@ interface NewsGroup {
  *
  * The log already runs newest first, so the days do too.
  */
-function groupByDay(log: LogLine[], now: number): NewsGroup[] {
+function groupByDay(log: LogLine[], now: number, locale: Locale): NewsGroup[] {
   const groups: NewsGroup[] = []
   for (const line of log) {
     const key = dayKey(line.at)
     let group = groups.at(-1)
     if (!group || group.key !== key) {
-      group = { key, title: dayTitle(line.at, now), lines: [] }
+      group = { key, title: dayTitle(line.at, now, locale), lines: [] }
       groups.push(group)
     }
     group.lines.push(line)
@@ -1812,10 +1849,10 @@ const dayKey = (at: number) => {
  * two — and a date is a poor thing to have to work out when the answer is
  * "an hour ago".
  */
-function dayTitle(at: number, now: number): string {
-  if (dayKey(at) === dayKey(now)) return 'Heute'
-  if (dayKey(at) === dayKey(now - 86_400_000)) return 'Gestern'
-  return new Date(at).toLocaleDateString('de-DE', {
+function dayTitle(at: number, now: number, locale: Locale): string {
+  if (dayKey(at) === dayKey(now)) return translate(locale, 'news.today')
+  if (dayKey(at) === dayKey(now - 86_400_000)) return translate(locale, 'news.yesterday')
+  return new Date(at).toLocaleDateString(bcp47(locale), {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -1828,14 +1865,17 @@ function dayTitle(at: number, now: number): string {
  * The log runs newest first, and a "Runde N" line is written when that round
  * opens — so in this order a round's heading arrives *after* the entries that
  * belong to it. Anything above the first heading is the round in progress.
+ *
+ * A heading used to be spotted by matching the words "Runde N" against the
+ * entry's own text, which worked exactly as long as there was one language to
+ * match. The entry already says what it is, so it is asked instead.
  */
-function groupByRound(log: LogLine[]): NewsGroup[] {
+function groupByRound(log: LogLine[], locale: Locale): NewsGroup[] {
   const groups: { key: string; title: string; lines: LogLine[] }[] = []
   let pending: LogLine[] = []
 
   for (const line of log) {
-    const heading = /^Runde \d+/.exec(line.text)
-    if (heading) {
+    if (line.kind === 'roundStarted') {
       groups.push({ key: `r${line.id}`, title: line.text.replace(/\.$/, ''), lines: pending })
       pending = []
     } else {
@@ -1843,7 +1883,7 @@ function groupByRound(log: LogLine[]): NewsGroup[] {
     }
   }
   if (pending.length > 0) {
-    groups.unshift({ key: 'laufend', title: 'Laufende Runde', lines: pending })
+    groups.unshift({ key: 'laufend', title: translate(locale, 'news.currentRound'), lines: pending })
   }
   return groups.filter((g) => g.lines.length > 0)
 }
@@ -1867,6 +1907,7 @@ function Rangliste({
   highlight?: string
   size?: 'klein' | 'gross'
 }) {
+  const { t, num } = useT()
   const table = useMemo(() => standings(state), [state])
   const gross = size === 'gross'
 
@@ -1906,14 +1947,16 @@ function Rangliste({
                 }`}
               >
                 {row.player.name}
-                {you && !gross && <span className="text-ink-soft font-normal"> · Sie</span>}
+                {you && !gross && (
+                  <span className="text-ink-soft font-normal">{t('kontor.you')}</span>
+                )}
               </p>
               {gross && (
                 <p className="text-ink-soft truncate text-[11px]">{playerLabel(row.player)}</p>
               )}
             </div>
             <span className={`tnum font-bold ${gross ? 'text-sm' : 'text-[13px]'}`}>
-              {gross ? formatMoney(row.worth) : row.worth.toLocaleString('de-DE')}
+              {gross ? formatMoney(row.worth) : num(row.worth)}
             </span>
           </li>
         )

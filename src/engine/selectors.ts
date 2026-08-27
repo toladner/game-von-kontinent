@@ -1,4 +1,6 @@
 import type { CargoItem, GameState, PlayerState, PortClosure } from './state'
+import type { MsgKey, Vars } from '../i18n'
+import { named, type Localized } from '../i18n/locale'
 import { activePlayer, flagship, netWorth, type VehicleInstance } from './state'
 import { goodOf, type EngineContext } from './context'
 import { edgeKey, isPort } from './mapbuild'
@@ -173,7 +175,7 @@ export function verkaufszwangOpen(
 
 export interface Destination {
   readonly portId: PortId
-  readonly name: string
+  readonly name: Localized<string>
   /** Sea miles in pips, i.e. how many dice points away. */
   readonly distance: number
   /**
@@ -197,7 +199,7 @@ export interface Destination {
 /** Where one particular piece of cargo fetches the most, per point of sailing. */
 export interface SellDestination {
   readonly portId: PortId
-  readonly name: string
+  readonly name: Localized<string>
   readonly distance: number
   readonly price: Money
   readonly profit: Money
@@ -228,7 +230,7 @@ export function sellDestinations(
     const price = sellPriceAt(ctx, state, port.id, item.goodId)
     rows.push({
       portId: port.id,
-      name: port.name,
+      name: named(port),
       distance,
       price,
       profit: price - item.pricePaid,
@@ -502,7 +504,7 @@ export function marketReport(
     const sailing = clock?.get(port.id)
     rows.push({
       portId: port.id,
-      name: port.name,
+      name: named(port),
       distance,
       ...(sailing === undefined ? {} : { travelMs: castOff + sailing }),
       proceeds,
@@ -738,10 +740,10 @@ export function hasShipyard(state: GameState): boolean {
 }
 
 /** Why the yard will not sell, in words that fit the setting. */
-export function fleetLimitNote(maxFleetSize: number): string {
+export function fleetLimitNote(maxFleetSize: number): [MsgKey, Vars] {
   return maxFleetSize <= 1
-    ? 'Ein Haus, ein Schiff — so will es die Anleitung.'
-    : `Mehr als ${maxFleetSize} Schiffe verwaltet kein Haus.`
+    ? ['reject.oneHouseOneShip', {}]
+    : ['reject.fleetLimit', { n: maxFleetSize }]
 }
 
 /** Whether a world card is worth having drawn. */

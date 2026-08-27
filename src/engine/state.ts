@@ -1,3 +1,4 @@
+import type { Localized } from '../i18n/locale'
 import type {
   Continent,
   GoodCategory,
@@ -150,7 +151,7 @@ export interface Letter {
   readonly id: string
   readonly vehicleId: string
   readonly vehicleName: string
-  readonly captain: string
+  readonly captain: Localized<string>
   readonly writtenAt: number
   readonly writtenIn: PortId
   readonly sighting: Sighting
@@ -247,7 +248,7 @@ export interface PendingCard {
 export interface MarketWeather {
   readonly id: string
   /** Shown in the news and on the harbour sheet. */
-  readonly title: string
+  readonly title: Localized<string>
   readonly continent: Continent | null
   /** A single ware, named on the Warenkarte. */
   readonly goodId: GoodId | null
@@ -272,7 +273,7 @@ export interface MarketWeather {
 export interface PortClosure {
   readonly id: string
   /** Shown on the harbour sheet and in the news, e.g. "Gelbfieber in Rio". */
-  readonly title: string
+  readonly title: Localized<string>
   readonly portId: PortId
   readonly untilRound: number | null
   readonly untilTime: number | null

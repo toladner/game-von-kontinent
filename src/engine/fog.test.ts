@@ -127,7 +127,12 @@ describe('Sicht: realistisch', () => {
       by: 'a',
     })
     expect(refused.events[0]).toMatchObject({ type: 'rejected' })
-    expect(String((refused.events[0] as { reason: string }).reason)).toMatch(/Taube/)
+    // The refusal travels as a key now, so this asks which one rather than
+    // matching a German word that would not survive the app being read in
+    // English.
+    expect((refused.events[0] as { reason: { key: string } }).reason.key).toBe(
+      'reject.needPigeon',
+    )
   })
 
   it('delivers an order when the letter is addressed correctly', () => {

@@ -55,7 +55,7 @@ export const CLASSIC_CONFIG: RuleConfig = {
   diceSides: 6,
   startingVehicle: {
     id: 'frachtdampfer',
-    name: 'Frachtdampfer',
+    name: { de: 'Frachtdampfer', en: 'Cargo steamer' },
     // The Anleitung sets no limit on the hold of the ship you begin with.
     capacity: null,
     modes: ['see'],
@@ -83,36 +83,45 @@ export const CLASSIC_CONFIG: RuleConfig = {
 export const CLASSIC_VEHICLES: readonly Vehicle[] = [
   {
     id: 'kuestenschoner',
-    name: 'Küstenschoner',
+    name: { de: 'Küstenschoner', en: 'Coasting schooner' },
     capacity: 3,
     modes: ['see'],
     price: 450_000,
     speedFactor: 0.75,
-    blurb: 'Flink und noch erschwinglich, nimmt aber nur drei Posten.',
+    blurb: {
+      de: 'Flink und noch erschwinglich, nimmt aber nur drei Posten.',
+      en: 'Quick, and still affordable, but she takes only three lots.',
+    },
   },
   {
     id: 'frachtdampfer',
-    name: 'Frachtdampfer',
+    name: { de: 'Frachtdampfer', en: 'Cargo steamer' },
     capacity: 6,
     modes: ['see'],
     price: 1_100_000,
     speedFactor: 1,
-    blurb: 'Das übliche Arbeitstier der Linie. Ein gutes Jahr Handel.',
+    blurb: {
+      de: 'Das übliche Arbeitstier der Linie. Ein gutes Jahr Handel.',
+      en: 'The usual workhorse of the line. A good year of trading.',
+    },
   },
   {
     id: 'grossfrachter',
-    name: 'Großfrachter',
+    name: { de: 'Großfrachter', en: 'Heavy freighter' },
     capacity: 12,
     modes: ['see'],
     price: 2_400_000,
     speedFactor: 1.35,
-    blurb: 'Ein schwimmendes Lagerhaus. Nicht eilig, und nicht billig.',
+    blurb: {
+      de: 'Ein schwimmendes Lagerhaus. Nicht eilig, und nicht billig.',
+      en: 'A floating warehouse. In no hurry, and no bargain.',
+    },
   },
 ]
 
 export const CLASSIC_MAP = buildMap({
   id: 'classic',
-  name: 'Europa · Afrika · Amerika',
+  name: { de: 'Europa · Afrika · Amerika', en: 'Europe · Africa · America' },
   ports: PORTS,
   countries: COUNTRIES,
   legs: LEGS,
@@ -122,7 +131,12 @@ export const CLASSIC_MAP = buildMap({
 
 export const CLASSIC_PACK: ContentPack = {
   id: 'classic',
-  name: 'Von Kontinent zu Kontinent — Originalplan',
+  // The game was only ever published in German and the title stays as it was
+  // printed; only what follows the dash is translated.
+  name: {
+    de: 'Von Kontinent zu Kontinent — Originalplan',
+    en: 'Von Kontinent zu Kontinent — the printed board',
+  },
   map: CLASSIC_MAP,
   vehicles: CLASSIC_VEHICLES,
   goods: GOODS,

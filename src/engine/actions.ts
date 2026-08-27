@@ -1,3 +1,5 @@
+import type { Message } from '../i18n'
+import type { Localized } from '../i18n/locale'
 import type { GoodId, Money, NodeId, PortId } from './types'
 import type { Gender } from './persona'
 
@@ -168,27 +170,27 @@ export type GameEvent =
       readonly goodId: GoodId
       readonly value: Money
       /** Headline of the card that did it, so the news can name the cause. */
-      readonly reason: string
+      readonly reason: Localized<string>
     }
   /** Erweiterte Konjunktur: cargo spoiled by weather but still in the hold. */
   | {
       readonly type: 'cargoDamaged'
       readonly playerId: string
       readonly goodId: GoodId
-      readonly reason: string
+      readonly reason: Localized<string>
     }
   /** Erweiterte Konjunktur: weather that cost time rather than goods. */
   | {
       readonly type: 'heldUp'
       readonly playerId: string
       readonly minutes: number
-      readonly reason: string
+      readonly reason: Localized<string>
     }
   /** Erweiterte Konjunktur: a harbour shut its Kontor, or opened it again. */
   | {
       readonly type: 'portClosed'
       readonly portId: PortId
-      readonly title: string
+      readonly title: Localized<string>
     }
   | { readonly type: 'portReopened'; readonly portId: PortId }
   /** Erweiterte Konjunktur: price weather settled over a continent. */
@@ -196,13 +198,21 @@ export type GameEvent =
       readonly type: 'weatherSet'
       readonly continent: string
       readonly percent: number
-      readonly title: string
+      readonly title: Localized<string>
     }
   | { readonly type: 'turnEnded'; readonly playerId: string }
   | { readonly type: 'roundStarted'; readonly round: number; readonly red: boolean }
   | { readonly type: 'gameOver' }
   | { readonly type: 'telegramm'; readonly playerId: string; readonly text: string }
-  | { readonly type: 'rejected'; readonly reason: string }
+  /**
+   * Why an order was refused — as a key and its variables, not a sentence.
+   *
+   * At a table played across several devices the refusal is composed on
+   * whichever machine holds the game and read on another, and those two need
+   * not have the app set to the same language. A key survives the crossing;
+   * a sentence would arrive in somebody else's.
+   */
+  | { readonly type: 'rejected'; readonly reason: Message }
 
 export interface ActionResult {
   readonly state: import('./state').GameState

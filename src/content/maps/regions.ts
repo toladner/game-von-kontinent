@@ -1,4 +1,5 @@
 import type { Continent, ContentPack, Country, GoodId, Port } from '../../engine/types'
+import type { Localized } from '../../i18n/locale'
 import { buildMap } from '../../engine/mapbuild'
 import { MAX_PLAYERS } from '../../engine/reducer'
 import { GOODS } from '../goods'
@@ -36,9 +37,9 @@ const ALL_START: readonly string[] = [...START_PORTS, ...START_PORTS_WELT]
 
 export interface RegionSpec {
   readonly id: string
-  readonly name: string
+  readonly name: Localized<string>
   /** Shown on the setup screen. */
-  readonly blurb: string
+  readonly blurb: Localized<string>
   readonly continents: readonly Continent[]
   readonly totalRounds: number
 }
@@ -153,7 +154,10 @@ export function buildRegionPack(spec: RegionSpec): ContentPack {
   const cut = carve(spec.continents)
   return {
     id: spec.id,
-    name: `Von Kontinent zu Kontinent — ${spec.name}`,
+    name: {
+      de: `Von Kontinent zu Kontinent — ${spec.name.de}`,
+      en: `Von Kontinent zu Kontinent — ${spec.name.en}`,
+    },
     map: buildMap({
       id: spec.id,
       name: spec.name,
@@ -181,36 +185,51 @@ export function buildRegionPack(spec: RegionSpec): ContentPack {
 export const REGIONS: readonly RegionSpec[] = [
   {
     id: 'europa',
-    name: 'Europa',
-    blurb: 'Ostsee, Nordsee und Mittelmeer. Kurze Wege, schnelle Partien.',
+    name: { de: 'Europa', en: 'Europe' },
+    blurb: {
+      de: 'Ostsee, Nordsee und Mittelmeer. Kurze Wege, schnelle Partien.',
+      en: 'The Baltic, the North Sea and the Mediterranean. Short runs, quick games.',
+    },
     continents: ['europa'],
     totalRounds: 24,
   },
   {
     id: 'amerika',
-    name: 'Amerika',
-    blurb: 'Von Vancouver bis Feuerland, beide Küsten.',
+    name: { de: 'Amerika', en: 'The Americas' },
+    blurb: {
+      de: 'Von Vancouver bis Feuerland, beide Küsten.',
+      en: 'Vancouver to Tierra del Fuego, both coasts.',
+    },
     continents: ['nordamerika', 'suedamerika'],
     totalRounds: 30,
   },
   {
     id: 'afrika',
-    name: 'Afrika',
-    blurb: 'Rund um den Kontinent, vom Mittelmeer bis Sansibar.',
+    name: { de: 'Afrika', en: 'Africa' },
+    blurb: {
+      de: 'Rund um den Kontinent, vom Mittelmeer bis Sansibar.',
+      en: 'Round the continent, from the Mediterranean to Zanzibar.',
+    },
     continents: ['afrika'],
     totalRounds: 28,
   },
   {
     id: 'asien',
-    name: 'Asien und Ozeanien',
-    blurb: 'Vom Persischen Golf über Malakka bis Japan und Australien.',
+    name: { de: 'Asien und Ozeanien', en: 'Asia and Oceania' },
+    blurb: {
+      de: 'Vom Persischen Golf über Malakka bis Japan und Australien.',
+      en: 'From the Persian Gulf by way of Malacca to Japan and Australia.',
+    },
     continents: ['asien', 'ozeanien'],
     totalRounds: 34,
   },
   {
     id: 'atlantik',
-    name: 'Atlantik',
-    blurb: 'Europa, Afrika und Amerika — der gedruckte Plan als Weltmeer.',
+    name: { de: 'Atlantik', en: 'The Atlantic' },
+    blurb: {
+      de: 'Europa, Afrika und Amerika — der gedruckte Plan als Weltmeer.',
+      en: 'Europe, Africa and the Americas — the printed board as one ocean.',
+    },
     continents: ['europa', 'afrika', 'nordamerika', 'suedamerika'],
     totalRounds: 40,
   },

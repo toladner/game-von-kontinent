@@ -5,6 +5,8 @@ import { portAt } from '@engine/selectors'
 import { flagship, type GameState, type PlayerState } from '@engine/state'
 import { makeShipIdentity } from '@engine/persona'
 import type { EngineContext } from '@engine/context'
+import { useT } from '@app/locale'
+import { bcp47, named } from '@i18n/locale'
 
 /**
  * Writing to a captain you cannot see.
@@ -30,14 +32,20 @@ export function PigeonSheet({
   onSnap: (s: SheetSnap) => void
   onSend: (toPort: string, destination: string, replyTo: string | null) => void
 }) {
+  const { t, num, locale } = useT()
   const vessel = player.fleet.find((v) => v.id === vehicleId)
   const sighting = player.knowledge.sightings[vehicleId]
   const here = flagship(player)
   const herePort = portAt(ctx, here.nodeId)
 
+  // Sorted in the language they are shown in, so the list reads alphabetically
+  // to whoever is looking at it — Genoa and Genua do not sit in the same place.
   const ports = useMemo(
-    () => [...ctx.portsById.values()].sort((a, b) => a.name.localeCompare(b.name, 'de')),
-    [ctx],
+    () =>
+      [...ctx.portsById.values()]
+        .map((port) => ({ id: port.id, name: named(port)[locale] }))
+        .sort((a, b) => a.name.localeCompare(b.name, bcp47(locale))),
+    [ctx, locale],
   )
 
   // The obvious guess: where she was headed, else where she was last seen.
@@ -59,46 +67,53 @@ export function PigeonSheet({
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title="Brieftaube"
-      subtitle={`An ${master.captainGender === 'w' ? 'die Kapitänin' : 'den Kapitän'} der ${vessel.name} — ${master.captain.replace(/^Kapitänin |^Kapitän /, '')}`}
+      title={t('pigeon.title')}
+      subtitle={t(master.captainGender === 'w' ? 'pigeon.to.w' : 'pigeon.to.m', {
+        ship: vessel.name,
+        // The title is already in the subtitle's phrase, so only the name
+        // itself belongs in the hole.
+        name: master.captain[locale].replace(/^Kapitänin |^Kapitän |^Master /, ''),
+      })}
       footer={
         <button
           className="btn btn-primary w-full"
           disabled={!ready || player.cash < cost}
           onClick={() => onSend(toPort, destination, wantReply ? replyTo : null)}
         >
-          Taube auflassen · {cost.toLocaleString('de-DE')}
+          {t('pigeon.release', { cost: num(cost) })}
         </button>
       }
     >
       <div className="paper-slip coupon-edge mb-4 px-4 py-4">
         <p className="teletype text-center text-[10px] tracking-[0.25em] text-black/55">
-          Depesche
+          {t('pigeon.dispatch')}
         </p>
         <p className="mt-2 text-center text-[12px] italic">
           {sighting
-            ? `Zuletzt gemeldet: ${
-                ctx.portsById.get(sighting.nodeId)?.name ?? '—'
-              }, Stand ${clockText(sighting.asOf)} Uhr${
-                sighting.bound
-                  ? `, bestimmt nach ${ctx.portsById.get(sighting.bound)?.name ?? ''}`
-                  : ''
-              }.`
-            : 'Von diesem Schiff liegt keine Meldung vor.'}
+            ? t('pigeon.lastReported', {
+                port: ports.find((p) => p.id === sighting.nodeId)?.name ?? '—',
+                time: clockText(sighting.asOf),
+                bound: sighting.bound
+                  ? t('pigeon.bound', {
+                      port: ports.find((p) => p.id === sighting.bound)?.name ?? '',
+                    })
+                  : '',
+              })
+            : t('pigeon.noReport')}
         </p>
       </div>
 
       <PortChoice
-        label="Adressiert an"
-        hint="Wo vermuten Sie das Schiff? Irren Sie sich, liest den Brief niemand."
+        label={t('pigeon.addressedTo')}
+        hint={t('pigeon.addressedTo.hint')}
         ports={ports}
         value={toPort}
         onChange={setToPort}
       />
 
       <PortChoice
-        label="Order: fahre nach"
-        hint={`Was ${master.captainGender === 'w' ? 'sie' : 'er'} tun soll, wenn der Brief ankommt.`}
+        label={t('pigeon.order')}
+        hint={t(master.captainGender === 'w' ? 'pigeon.order.hint.w' : 'pigeon.order.hint.m')}
         ports={ports}
         value={destination}
         onChange={setDestination}
@@ -111,22 +126,22 @@ export function PigeonSheet({
           onChange={(e) => setWantReply(e.target.checked)}
           className="accent-press"
         />
-        Um Antwort wird gebeten
+        {t('pigeon.replyPlease')}
       </label>
 
       {wantReply && (
         <PortChoice
-          label="Antwort nach"
-          hint={`Dorthin schickt ${master.captainGender === 'w' ? 'sie ihre' : 'er seine'} Taube. Sie müssen selbst dort sein, um den Brief zu holen.`}
+          label={t('pigeon.replyTo')}
+          hint={t(
+            master.captainGender === 'w' ? 'pigeon.replyTo.hint.w' : 'pigeon.replyTo.hint.m',
+          )}
           ports={ports}
           value={replyTo}
           onChange={setReplyTo}
         />
       )}
 
-      <p className="text-ink-faint mt-4 text-[11px] italic">
-        Ob die Taube ankommt, erfahren Sie nicht. Manche kommen nie an.
-      </p>
+      <p className="text-ink-faint mt-4 text-[11px] italic">{t('pigeon.noConfirmation')}</p>
     </Sheet>
   )
 }
@@ -144,6 +159,7 @@ function PortChoice({
   value: string
   onChange: (v: string) => void
 }) {
+  const { t } = useT()
   const [filter, setFilter] = useState('')
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase()
@@ -161,7 +177,7 @@ function PortChoice({
       <p className="text-ink-faint mb-1.5 text-[10px] leading-snug italic">{hint}</p>
       <input
         className="focusable paper-card w-full rounded-md px-2.5 py-2 text-sm outline-none"
-        placeholder={chosen ? chosen.name : 'Hafen suchen …'}
+        placeholder={chosen ? chosen.name : t('pigeon.searchPort')}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         aria-label={label}

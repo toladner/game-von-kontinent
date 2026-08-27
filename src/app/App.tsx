@@ -1,4 +1,6 @@
 import { ErrorBoundary } from '@ui/ErrorBoundary'
+import type { Message } from '@i18n'
+import { useT } from '@app/locale'
 import { Setup } from '@ui/Setup'
 import { Lobby } from '@ui/Lobby'
 import { GameScreen } from '@ui/GameScreen'
@@ -67,31 +69,32 @@ function Connecting({
 }: {
   code: string
   status: ConnectionStatus
-  refused: string | null
+  refused: Message | null
   onLeave: () => void
   onWatch: () => void
 }) {
+  const { t, render } = useT()
   // A refusal outranks a dropped line: it is the answer, not the absence of one.
   const lost = !refused && status === 'getrennt'
   return (
     <div className="board-shell grid h-full place-items-center p-6 text-center">
       <div className="paper anim-rise rounded-lg px-8 py-7">
-        <p className="smallcaps text-ink-soft text-[10px]">Partie</p>
+        <p className="smallcaps text-ink-soft text-[10px]">{t('connect.game')}</p>
         <p className="display tnum text-4xl tracking-[0.25em]">{code}</p>
         <p className={`mt-3 text-sm italic ${refused || lost ? 'text-rot' : 'text-ink-soft'}`}>
-          {refused ?? (lost ? 'Die Leitung steht nicht.' : 'Die Leitung wird gelegt …')}
+          {refused ? render(refused) : t(lost ? 'connect.lineDown' : 'connect.laying')}
         </p>
         {refused ? (
           <>
             <p className="text-ink-faint mx-auto mt-1 max-w-[18rem] text-[12px] leading-snug">
-              Zusehen dürfen Sie trotzdem — ein Platz am Tisch wird daraus nicht.
+              {t('connect.watchAnyway')}
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <button className="btn" onClick={onWatch}>
-                Nur zusehen
+                {t('connect.watch')}
               </button>
               <button className="btn" onClick={onLeave}>
-                Zum Titelbild
+                {t('connect.toTitle')}
               </button>
             </div>
           </>

@@ -14,6 +14,9 @@ import { createContext } from '../src/engine/context'
 import { createGame } from '../src/engine/setup'
 import { applyAction } from '../src/engine/reducer'
 import type { GameAction, GameEvent } from '../src/engine/actions'
+import { msg, t, type Message } from '../src/i18n'
+import { isLocale, named, type Locale } from '../src/i18n/locale'
+import type { PortId } from '../src/engine/types'
 import { flagship } from '../src/engine/state'
 import type { GameState, JoinPolicy } from '../src/engine/state'
 import { nextEventAt } from '../src/engine/selectors'
@@ -97,7 +100,7 @@ type ServerMessage =
   | { t: 'view'; state: GameState }
   | { t: 'presence'; online: string[] }
   | { t: 'focus'; playerId: string; step: string }
-  | { t: 'error'; reason: string }
+  | { t: 'error'; reason: Message }
   | { t: 'pong' }
 
 /**
@@ -228,7 +231,14 @@ export class GameRoom {
    * Kept against the seat token rather than the player, because one house may
    * be played from a telephone and a desk at once, and both want telling.
    */
-  private pushes = new Map<string, PushSub>()
+  /**
+   * Where each seat can be reached, and in which language.
+   *
+   * The locale is stored beside the address rather than with the seat because
+   * it belongs to the device: one person may sit at a table on a telephone in
+   * English and open the same table on a laptop in German.
+   */
+  private pushes = new Map<string, PushSub & { locale?: Locale }>()
   private loaded = false
 
   constructor(
@@ -243,7 +253,7 @@ export class GameRoom {
     const seats = (await this.storage.storage.get<Seat[]>('seats')) ?? []
     this.seats = new Map(seats.map((s) => [s.token, s]))
     this.pushes = new Map(
-      (await this.storage.storage.get<[string, PushSub][]>('pushes')) ?? [],
+      (await this.storage.storage.get<[string, PushSub & { locale?: Locale }][]>('pushes')) ?? [],
     )
     this.rebuild()
     this.loaded = true
@@ -335,13 +345,19 @@ export class GameRoom {
       const body = (await request.json().catch(() => ({}))) as {
         token?: string
         sub?: PushSub
+        locale?: string
       }
       const seat = body.token ? this.seats.get(body.token) : undefined
       if (!seat) return json({ error: 'Unbekannter Platz.' }, 403)
       if (!body.sub?.endpoint || !body.sub.keys?.p256dh || !body.sub.keys.auth) {
         return json({ error: 'Unbrauchbare Anschrift.' }, 400)
       }
-      this.pushes.set(seat.token, body.sub)
+      // Older clients send no language at all; they are the ones that were
+      // only ever German, so that is what they keep.
+      this.pushes.set(seat.token, {
+        ...body.sub,
+        locale: isLocale(body.locale) ? body.locale : 'de',
+      })
       await this.persist()
       return json({ ok: true })
     }
@@ -409,10 +425,10 @@ export class GameRoom {
     try {
       message = JSON.parse(String(event.data)) as ClientMessage
     } catch {
-      return this.send(socket, { t: 'error', reason: 'Unlesbare Nachricht.' })
+      return this.send(socket, { t: 'error', reason: msg('reject.unreadable') })
     }
     if (!this.meta || !this.state) {
-      return this.send(socket, { t: 'error', reason: 'Diese Partie gibt es nicht.' })
+      return this.send(socket, { t: 'error', reason: msg('reject.noSuchGame') })
     }
 
     // Whatever the message, the world has moved on since the last one.
@@ -497,7 +513,7 @@ export class GameRoom {
       case 'action': {
         const playerId = this.sockets.get(socket) ?? null
         if (!playerId) {
-          return this.send(socket, { t: 'error', reason: 'Sie sitzen nicht mit am Tisch.' })
+          return this.send(socket, { t: 'error', reason: msg('reject.notSeated') })
         }
         const guard = this.mayAct(playerId, message.action)
         if (guard) return this.send(socket, { t: 'error', reason: guard })
@@ -513,11 +529,11 @@ export class GameRoom {
    * Turn ownership. The reducer already knows the rules; this only answers
    * "is this person allowed to speak right now".
    */
-  private mayAct(playerId: string, action: GameAction): string | null {
+  private mayAct(playerId: string, action: GameAction): Message | null {
     const state = this.state!
-    if (action.type === 'join') return 'Beitritt läuft über die Anmeldung.'
+    if (action.type === 'join') return msg('reject.joinViaLobby')
     if (action.type === 'start') {
-      if (state.hostId !== playerId) return 'Nur wer die Partie eröffnet hat, gibt sie frei.'
+      if (state.hostId !== playerId) return msg('reject.hostStarts')
       return null
     }
 
@@ -526,7 +542,7 @@ export class GameRoom {
     // nothing did, and an action naming somebody else would have been taken
     // at its word.
     const by = 'by' in action ? action.by : undefined
-    if (by && by !== playerId) return 'Sie handeln nur für Ihr eigenes Haus.'
+    if (by && by !== playerId) return msg('reject.ownHouseOnly')
 
     // A telegram is not a move. It goes whenever its sender likes, whosever
     // turn it is — a table where you may only speak when it is your turn is
@@ -544,15 +560,15 @@ export class GameRoom {
     if (state.config.travel === 'echtzeit') return null
 
     const active = state.players[state.activeIndex]
-    if (!active) return 'Es ist niemand am Zug.'
-    if (active.id !== playerId) return `${active.name} ist am Zug.`
+    if (!active) return msg('reject.nobodyToPlay')
+    if (active.id !== playerId) return msg('reject.othersTurn', { name: active.name })
     return null
   }
 
   /** Apply, store, broadcast. The single place the log grows. */
   private async commit(
     action: GameAction,
-  ): Promise<{ ok: true; events: readonly GameEvent[] } | { ok: false; reason: string }> {
+  ): Promise<{ ok: true; events: readonly GameEvent[] } | { ok: false; reason: Message }> {
     const result = applyAction(contextFor(this.meta?.packId), this.state!, action)
     const rejection = result.events.find((e) => e.type === 'rejected')
     if (rejection && rejection.type === 'rejected') {
@@ -604,29 +620,42 @@ export class GameRoom {
     if (!vapid) return
 
     const ctx = contextFor(this.meta?.packId)
-    const arrivals = new Map<string, Notice>()
-    let closing: Notice | null = null
+    /*
+     * Kept as what happened rather than as a sentence, because the sentence
+     * cannot be written until it is known who is going to read it: two houses
+     * at the same table may have the app set to different languages, and the
+     * push is composed here, on a server that has no language of its own.
+     */
+    const arrivals = new Map<string, PortId>()
+    let closed = false
 
     for (const event of events) {
-      if (event.type === 'arrived') {
-        const port = ctx.portsById.get(event.portId)?.name ?? 'Ihrem Ziel'
-        arrivals.set(event.playerId, {
-          title: 'Schiff eingelaufen',
-          body: `Ihr Schiff liegt in ${port}. Es wartet auf Order.`,
-          tag: `ankunft:${event.portId}`,
-        })
-      }
+      if (event.type === 'arrived') arrivals.set(event.playerId, event.portId)
       // The season closing outranks anything else in the same tick: after it
       // there is nothing left to do but read the Schlußabrechnung.
-      if (event.type === 'gameOver') {
-        closing = {
-          title: 'Saison beendet',
-          body: 'Die Schlußabrechnung liegt vor.',
+      if (event.type === 'gameOver') closed = true
+    }
+    if (!closed && arrivals.size === 0) return
+
+    const noticeFor = (playerId: string, locale: Locale): Notice | null => {
+      if (closed) {
+        return {
+          title: t(locale, 'notify.seasonOver.title'),
+          body: t(locale, 'notify.seasonOver.body'),
           tag: 'saison-ende',
         }
       }
+      const portId = arrivals.get(playerId)
+      if (!portId) return null
+      const port = ctx.portsById.get(portId)
+      return {
+        title: t(locale, 'notify.arrived.title'),
+        body: t(locale, 'notify.arrived.body', {
+          port: port ? named(port)[locale] : t(locale, 'notify.arrived.somewhere'),
+        }),
+        tag: `ankunft:${portId}`,
+      }
     }
-    if (!closing && arrivals.size === 0) return
 
     const code = this.code()
     const url = code ? `./#partie=${code}` : './'
@@ -634,7 +663,7 @@ export class GameRoom {
       [...this.pushes].map(async ([token, sub]) => {
         const seat = this.seats.get(token)
         if (!seat) return
-        const notice = closing ?? arrivals.get(seat.playerId)
+        const notice = noticeFor(seat.playerId, sub.locale ?? 'de')
         if (!notice) return
         const result = await sendPush(sub, JSON.stringify({ ...notice, url }), vapid)
         // 404 or 410: the app was uninstalled, or its data cleared. The

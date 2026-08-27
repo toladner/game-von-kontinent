@@ -1,4 +1,5 @@
 import type { ContentPack } from '../engine/types'
+import type { Localized } from '../i18n/locale'
 import { createContext, type EngineContext } from '../engine/context'
 import { CLASSIC_PACK } from './maps/classic'
 import { WELT_PACK } from './maps/welt'
@@ -18,23 +19,28 @@ import { REGIONS, REGION_PACKS } from './maps/regions'
 export interface PackEntry {
   readonly id: string
   /** Short name for the setup screen. */
-  readonly label: string
-  readonly blurb: string
+  readonly label: Localized<string>
+  readonly blurb: Localized<string>
   readonly pack: ContentPack
 }
 
 export const PACK_ENTRIES: readonly PackEntry[] = [
   {
     id: 'classic',
-    label: 'Originalplan',
-    blurb: 'Europa, Afrika, Nord- und Südamerika — der gedruckte Spielplan von 1950.',
+    label: { de: 'Originalplan', en: 'The printed board' },
+    blurb: {
+      de: 'Europa, Afrika, Nord- und Südamerika — der gedruckte Spielplan von 1950.',
+      en: 'Europe, Africa and the Americas — the board as printed in 1950.',
+    },
     pack: CLASSIC_PACK,
   },
   {
     id: 'welt',
-    label: 'Ganze Welt',
-    blurb:
-      'Der Originalplan und dazu Indien, China, Japan, Insulinde und Australien. 90 Warenkarten, zwei Wege nach Osten: Sueskanal oder Kap.',
+    label: { de: 'Ganze Welt', en: 'The whole world' },
+    blurb: {
+      de: 'Der Originalplan und dazu Indien, China, Japan, Insulinde und Australien. 90 Warenkarten, zwei Wege nach Osten: Sueskanal oder Kap.',
+      en: 'The printed board with India, China, Japan, the Indies and Australia added. 90 goods cards, and two ways east: the Suez Canal or the Cape.',
+    },
     pack: WELT_PACK,
   },
   ...REGIONS.map((spec, i) => ({

@@ -21,6 +21,9 @@ import {
   type GameMeta,
 } from './net'
 import { armPush } from './push'
+import { currentLocale, useLocaleStore } from './locale'
+import { msg, t, type Message, type MsgKey, type Vars } from '@i18n'
+import { formatMoney as moneyIn, formatNumber, named } from '@i18n/locale'
 
 const SAVE_KEY = 'vkzk.partie.v1'
 
@@ -153,7 +156,15 @@ interface Store {
   focus: { readonly playerId: string; readonly step: string } | null
   /** Events from the most recent action, for animations and flashes. */
   lastEvents: readonly GameEvent[]
-  notice: string | null
+  /**
+   * What the app has to say to the player right now.
+   *
+   * Held as a key and its variables rather than as a sentence, because the
+   * one that matters most — a refusal — may have been composed by the server
+   * or by another device, and because a notice standing on screen when the
+   * language is changed should change with it.
+   */
+  notice: Message | null
   /** Null for a local game at one device. */
   net: NetState | null
 
@@ -233,7 +244,15 @@ function persist(): void {
   }
 }
 
-const money = (n: number) => `${n.toLocaleString('de-DE')},—`
+/**
+ * Sums as the paper sets them, in whichever language it is being read.
+ *
+ * The journal is composed as events arrive rather than as it is rendered, so
+ * it asks the locale store for the current language rather than taking one as
+ * an argument. Changing language re-folds the whole journal — see
+ * `setLocale` — which is what keeps a game's back pages from being a mixture.
+ */
+const money = (n: number) => moneyIn(currentLocale(), n)
 
 /**
  * Was auch dann noch eine Nachricht ist, wenn alle zugesehen haben.
@@ -286,9 +305,17 @@ function describe(
   event: GameEvent,
   cause?: string,
 ): LogLine | null {
+  const locale = currentLocale()
+  const say = (key: MsgKey, vars?: Vars) => t(locale, key, vars)
   const nameOf = (id: string) => state.players.find((p) => p.id === id)?.name ?? id
-  const goodOf = (id: number) => ctx.goodsById.get(id)?.name ?? `Ware ${id}`
-  const portOf = (id: string) => ctx.portsById.get(id)?.name ?? id
+  const goodOf = (id: number) => {
+    const good = ctx.goodsById.get(id)
+    return good ? named(good)[locale] : say('log.unknownGood', { id })
+  }
+  const portOf = (id: string) => {
+    const port = ctx.portsById.get(id)
+    return port ? named(port)[locale] : id
+  }
   // Almost every entry belongs to whoever the event names; the handful that
   // belong to nobody say so with an empty list.
   const line = (
@@ -318,83 +345,121 @@ function describe(
      */
     case 'playerJoined':
       return event.midGame
-        ? line(`*${event.name}* nimmt in ${portOf(event.portId)} den Handel auf.`, 'wichtig', [])
+        ? line(say('log.playerJoined', { name: event.name, port: portOf(event.portId) }), 'wichtig', [])
         : null
     case 'rolled':
-      return line(`${nameOf(event.playerId)} würfelt ${event.value}.`)
+      return line(say('log.rolled', { name: nameOf(event.playerId), value: event.value }))
     case 'arrived':
-      return line(`${nameOf(event.playerId)} läuft ${portOf(event.portId)} an.`, 'wichtig')
+      return line(
+        say('log.arrived', { name: nameOf(event.playerId), port: portOf(event.portId) }),
+        'wichtig',
+      )
     case 'setSail':
-      return line(`${nameOf(event.playerId)} setzt Segel nach ${portOf(event.to)}.`, 'wichtig')
+      return line(
+        say('log.setSail', { name: nameOf(event.playerId), port: portOf(event.to) }),
+        'wichtig',
+      )
     case 'stoppedAtSea':
-      return line(`${nameOf(event.playerId)} liegt auf freier See.`)
+      return line(say('log.stoppedAtSea', { name: nameOf(event.playerId) }))
     case 'collision':
       return line(
-        `Zusammenstoß! ${nameOf(event.playerId)} zahlt ${nameOf(event.victimId)} ${money(event.damages)} Schadenersatz und setzt eine Runde aus.`,
+        say('log.collision', {
+          name: nameOf(event.playerId),
+          victim: nameOf(event.victimId),
+          amount: money(event.damages),
+        }),
         'schlecht',
         [event.playerId, event.victimId],
       )
     case 'bought':
       return line(
-        `${nameOf(event.playerId)} kauft ${goodOf(event.goodId)} für ${money(event.price)}.`,
+        say('log.bought', {
+          name: nameOf(event.playerId),
+          good: goodOf(event.goodId),
+          price: money(event.price),
+        }),
       )
     case 'sold': {
       const label =
         event.kind === 'ueberfluss'
-          ? ' (Verlustpreis, Ware wird hier selbst geführt)'
+          ? say('log.sold.ueberfluss')
           : event.kind === 'notverkauf'
-            ? ' (Notverkauf an die Exportbank)'
+            ? say('log.sold.notverkauf')
             : event.kind === 'schluss'
-              ? ' (Schlußabrechnung)'
+              ? say('log.sold.schluss')
               : ''
       return line(
-        `${nameOf(event.playerId)} verkauft ${goodOf(event.goodId)} für ${money(event.price)}${label}. ` +
-          `${event.profit >= 0 ? 'Gewinn' : 'Verlust'} ${money(Math.abs(event.profit))}.`,
+        say('log.sold', {
+          name: nameOf(event.playerId),
+          good: goodOf(event.goodId),
+          price: money(event.price),
+          label,
+          result: say(event.profit >= 0 ? 'log.profit' : 'log.loss'),
+          amount: money(Math.abs(event.profit)),
+        }),
         event.profit >= 0 ? 'gut' : 'schlecht',
       )
     }
     case 'cardDrawn': {
       const card = ctx.cardsById.get(event.cardId)
       return line(
-        `${nameOf(event.playerId)} hebt eine Konjunkturkarte ab: ${card?.title ?? ''} — ${card?.lines.join(', ') ?? ''}`,
+        say('log.cardDrawn', {
+          name: nameOf(event.playerId),
+          title: card?.title ?? '',
+          lines: card?.lines[locale].join(', ') ?? '',
+        }),
         'wichtig',
       )
     }
-    case 'paid': {
-      const reasons = {
-        steuer: 'Steuer',
-        versicherung: 'Versicherung',
-        hafengebuehr: 'Hafengebühr',
-        entladegeld: 'Entladegeld',
-        schaden: 'Schadenersatz',
-      } as const
+    case 'paid':
       return line(
-        `${nameOf(event.playerId)} zahlt ${money(event.amount)} ${reasons[event.reason]}.`,
+        say('log.paid', {
+          name: nameOf(event.playerId),
+          amount: money(event.amount),
+          reason: say(`log.paid.${event.reason}`),
+        }),
         'schlecht',
       )
-    }
     case 'received':
       return line(
-        `${nameOf(event.playerId)} erhält ${money(event.amount)}${event.reason === 'telegramm' ? ' per Telegramm' : ' als Schadenersatz'}.`,
+        say('log.received', {
+          name: nameOf(event.playerId),
+          amount: money(event.amount),
+          reason: say(
+            event.reason === 'telegramm' ? 'log.received.telegramm' : 'log.received.schaden',
+          ),
+        }),
         'gut',
       )
     case 'cargoLost':
       return line(
-        `${nameOf(event.playerId)} verliert ${goodOf(event.goodId)} (${money(event.value)}) — ${event.reason}.`,
+        say('log.cargoLost', {
+          name: nameOf(event.playerId),
+          good: goodOf(event.goodId),
+          value: money(event.value),
+          reason: event.reason,
+        }),
         'schlecht',
       )
     case 'cargoDamaged':
       return line(
-        `${goodOf(event.goodId)} von ${nameOf(event.playerId)} hat gelitten — ${event.reason}. Der Posten bleibt an Bord und bringt nur die Hälfte.`,
+        say('log.cargoDamaged', {
+          name: nameOf(event.playerId),
+          good: goodOf(event.goodId),
+          reason: event.reason,
+        }),
         'schlecht',
       )
     case 'heldUp':
       return line(
-        `${nameOf(event.playerId)} wird aufgehalten — ${event.reason}. ${
-          state.config.travel === 'echtzeit'
-            ? `Verlust: ${event.minutes} Minuten.`
-            : 'Eine Runde wird ausgesetzt.'
-        }`,
+        say('log.heldUp', {
+          name: nameOf(event.playerId),
+          reason: event.reason,
+          cost:
+            state.config.travel === 'echtzeit'
+              ? say('log.heldUp.minutes', { minutes: event.minutes })
+              : say('log.heldUp.round'),
+        }),
         'schlecht',
       )
     // Weltnachrichten: sie gehören keinem Haus und bleiben deshalb auch
@@ -402,17 +467,22 @@ function describe(
     // verlöre der Verlauf die Rundenüberschriften, die ihn gliedern.
     case 'portClosed':
       return line(
-        `${event.title}. ${portOf(event.portId)} ist bis auf weiteres für den Handel gesperrt.`,
+        say('log.portClosed', { title: event.title, port: portOf(event.portId) }),
         'wichtig',
         [],
       )
     case 'portReopened':
-      return line(`${portOf(event.portId)} ist wieder offen.`, 'gut', [])
+      return line(say('log.portReopened', { port: portOf(event.portId) }), 'gut', [])
     case 'weatherSet':
       // "dort" only makes sense of a notice that names a place. A Warenbericht
       // names a ware and holds in every harbour there is.
       return line(
-        `${event.title}: Verkaufspreise ${event.continent ? 'dort' : 'dafür'} ${event.percent > 0 ? '+' : '−'} ${Math.abs(event.percent)} %.`,
+        say('log.weatherSet', {
+          title: event.title,
+          where: say(event.continent ? 'log.weatherSet.there' : 'log.weatherSet.forThat'),
+          sign: event.percent > 0 ? '+' : '−',
+          percent: Math.abs(event.percent),
+        }),
         'wichtig',
         [],
       )
@@ -429,12 +499,12 @@ function describe(
       return null
     case 'roundStarted':
       return line(
-        `Runde ${event.round}${event.red ? ' — rotes Feld, die Konjunktur spricht mit.' : '.'}`,
+        say(event.red ? 'log.roundStarted.red' : 'log.roundStarted', { round: event.round }),
         event.red ? 'wichtig' : 'neutral',
         [],
       )
     case 'gameOver':
-      return line('Die letzte Runde ist gefahren. Schlußabrechnung.', 'wichtig', [])
+      return line(say('log.gameOver'), 'wichtig', [])
     default:
       return null
   }
@@ -458,11 +528,24 @@ const MAX_LOG = 500
  *
  * The events were there all along; nobody was catching them.
  */
+/**
+ * The last fold, kept so the journal can be written out again.
+ *
+ * Lines are composed as events arrive rather than as they are rendered — the
+ * paper is a list of finished sentences, which is what lets it be filtered
+ * and searched cheaply. That makes changing language a problem: half a
+ * season's back pages would stay in the one it was written in. Keeping what
+ * the journal was folded from means the whole thing can simply be written
+ * again.
+ */
+let folded: { initial: GameState; actions: GameAction[] } | null = null
+
 function foldWithLog(
   ctx: EngineContext,
   initial: GameState,
   actions: readonly GameAction[],
 ): { state: GameState; log: LogLine[] } {
+  folded = { initial, actions: [...actions] }
   let state = initial
   // Claimed before anything else, so the opening entry takes the lowest id:
   // the journal is read newest-first and `markNewsRead` uses the head's id as
@@ -495,7 +578,9 @@ function foldWithLog(
 function openingLine(startingCapital: number, at: number): LogLine {
   return {
     id: ++logId,
-    text: `Die Exportbank kreditiert jedem Mitspieler ${startingCapital.toLocaleString('de-DE')} Einheiten Betriebskapital.`,
+    text: t(currentLocale(), 'log.opening', {
+      amount: formatNumber(currentLocale(), startingCapital),
+    }),
     tone: 'wichtig',
     who: [],
     // Kein Ereignis stand dahinter — die Bank hat schlicht gebucht.
@@ -699,6 +784,7 @@ export const useGame = create<Store>((set, get) => ({
       onAppend: (actions) => {
         const current = get().state
         if (!current) return
+        folded?.actions.push(...actions)
         let next = current
         const fresh: LogLine[] = []
         for (const action of actions) {
@@ -719,7 +805,7 @@ export const useGame = create<Store>((set, get) => ({
 
       onPresence: (online) => set((s) => ({ net: s.net ? { ...s.net, online } : s.net })),
       onFocus: (playerId, step) => set({ focus: { playerId, step } }),
-      onError: (reason) => {
+      onError: (reason: Message) => {
         // A refusal that arrives before any state is a refusal to seat us at
         // all — a table closed to latecomers, most often. Retrying will not
         // help, and the code was written down before the socket was even
@@ -786,7 +872,7 @@ export const useGame = create<Store>((set, get) => ({
     if (action.type === 'telegramm' && !action.by) {
       const me = get().acting()
       if (!me) {
-        set({ notice: 'Sie sitzen nicht mit am Tisch — Sie sehen nur zu.' })
+        set({ notice: msg('ui.watchingOnly') })
         return
       }
       action = { ...action, by: me.id }
@@ -797,7 +883,7 @@ export const useGame = create<Store>((set, get) => ({
       if (!me) {
         // No seat at this table. Dropping the order in silence is the worst
         // answer: the player cannot tell a refusal from a broken button.
-        set({ notice: 'Sie sitzen nicht mit am Tisch — Sie sehen nur zu.' })
+        set({ notice: msg('ui.watchingOnly') })
         return
       }
       action = { ...action, by: me.id }
@@ -807,7 +893,7 @@ export const useGame = create<Store>((set, get) => ({
       // The server is the referee. We apply nothing until it echoes back,
       // so two devices can never disagree about what happened.
       if (!session?.send(action)) {
-        set({ notice: 'Keine Verbindung zur Partie. Es wird erneut versucht.' })
+        set({ notice: msg('ui.noConnection') })
       }
       return
     }
@@ -826,6 +912,7 @@ export const useGame = create<Store>((set, get) => ({
       saved.actions.push(action)
       persist()
     }
+    folded?.actions.push(action)
 
     const fresh = result.events
       .map((e) => describe(ctx, result.state, e, cause))
@@ -993,16 +1080,16 @@ export function hasSavedGame(): boolean {
  * stands beside it everywhere it appears.
  */
 export const PLAYER_COLORS = [
-  { ink: '#1f4f8f', name: 'Blau' },
-  { ink: '#b03027', name: 'Rot' },
-  { ink: '#2e6b3f', name: 'Grün' },
-  { ink: '#8a6a1f', name: 'Ocker' },
-  { ink: '#5a3570', name: 'Violett' },
-  { ink: '#1b1b1b', name: 'Schwarz' },
-  { ink: '#0e6d72', name: 'Türkis' },
-  { ink: '#a52a5f', name: 'Karmin' },
-  { ink: '#5f6a1e', name: 'Oliv' },
-  { ink: '#55606a', name: 'Schiefer' },
+  { ink: '#1f4f8f', name: { de: 'Blau', en: 'Blue' } },
+  { ink: '#b03027', name: { de: 'Rot', en: 'Red' } },
+  { ink: '#2e6b3f', name: { de: 'Grün', en: 'Green' } },
+  { ink: '#8a6a1f', name: { de: 'Ocker', en: 'Ochre' } },
+  { ink: '#5a3570', name: { de: 'Violett', en: 'Violet' } },
+  { ink: '#1b1b1b', name: { de: 'Schwarz', en: 'Black' } },
+  { ink: '#0e6d72', name: { de: 'Türkis', en: 'Turquoise' } },
+  { ink: '#a52a5f', name: { de: 'Karmin', en: 'Carmine' } },
+  { ink: '#5f6a1e', name: { de: 'Oliv', en: 'Olive' } },
+  { ink: '#55606a', name: { de: 'Schiefer', en: 'Slate' } },
 ] as const
 
 /**
@@ -1012,7 +1099,30 @@ export const PLAYER_COLORS = [
  * always matches the colour beside it.
  */
 export function playerLabel(player: PlayerState): string {
-  return `Spieler ${player.colorIndex + 1}`
+  return t(currentLocale(), 'ui.seatNumber', { n: player.colorIndex + 1 })
 }
 
 export const formatMoney = money
+
+/**
+ * Write the journal out again when the language changes.
+ *
+ * The paper holds finished sentences, not events — that is what makes it
+ * cheap to filter and search — so a season played in German and then read in
+ * English would otherwise be a mixture, with the oldest entries in the
+ * language they happened in. Re-folding is not free, but changing language is
+ * something a person does once.
+ *
+ * Subscribed from here rather than done inside `setLocale` so the dependency
+ * runs one way: the game store knows about the language, and the language
+ * store knows nothing about games.
+ */
+useLocaleStore.subscribe((now, before) => {
+  if (now.locale === before.locale) return
+  if (!folded) return
+  const { log } = foldWithLog(ctx, folded.initial, folded.actions)
+  // The high-water mark moves with it: the same entries are the same entries,
+  // and re-reading them all because the language changed would be a lie.
+  const seen = useGame.getState().newsSeen > 0 ? log[0]?.id ?? 0 : 0
+  useGame.setState({ log, newsSeen: seen })
+})

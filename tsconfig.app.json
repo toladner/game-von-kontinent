@@ -25,7 +25,9 @@
       "@engine/*": ["src/engine/*"],
       "@content/*": ["src/content/*"],
       "@ui/*": ["src/ui/*"],
-      "@app/*": ["src/app/*"]
+      "@app/*": ["src/app/*"],
+      "@i18n": ["src/i18n"],
+      "@i18n/*": ["src/i18n/*"]
     }
   },
   "include": ["src"],

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { useT } from '@app/locale'
 
 export type SheetSnap = 'closed' | 'peek' | 'full'
 
@@ -81,6 +82,7 @@ export function Sheet({
   children: ReactNode
   footer?: ReactNode
 }) {
+  const { t } = useT()
   const asideRef = useRef<HTMLElement | null>(null)
   const drag = useRef<{ y: number; height: number; moved: boolean } | null>(null)
 
@@ -167,7 +169,7 @@ export function Sheet({
       <div
         role="button"
         tabIndex={0}
-        aria-label={snap === 'full' ? 'Verkleinern' : 'Vergrößern'}
+        aria-label={t(snap === 'full' ? 'sheet.shrink' : 'sheet.grow')}
         className="grid shrink-0 cursor-grab touch-none place-items-center px-4 py-3 active:cursor-grabbing lg:hidden"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -195,7 +197,7 @@ export function Sheet({
         <button
           className="btn btn-sm !px-2 !py-0.5 text-xs lg:hidden"
           onClick={() => onSnap(snap === 'full' ? 'peek' : 'full')}
-          aria-label={snap === 'full' ? 'Verkleinern' : 'Vergrößern'}
+          aria-label={t(snap === 'full' ? 'sheet.shrink' : 'sheet.grow')}
         >
           {snap === 'full' ? '▾' : '▴'}
         </button>
@@ -204,7 +206,7 @@ export function Sheet({
         <button
           className="btn btn-sm hidden !px-2 !py-0.5 text-xs lg:block"
           onClick={() => onSnap('closed')}
-          aria-label="Schließen"
+          aria-label={t('ui.close')}
         >
           ✕
         </button>

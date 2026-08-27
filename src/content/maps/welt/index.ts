@@ -25,7 +25,7 @@ import { LEGS_WELT } from './legs'
  */
 export const WELT_MAP = buildMap({
   id: 'welt',
-  name: 'Die ganze Welt',
+  name: { de: 'Die ganze Welt', en: 'The whole world' },
   ports: [...PORTS, ...PORTS_WELT],
   countries: [...COUNTRIES, ...COUNTRIES_WELT],
   legs: [...LEGS, ...LEGS_WELT],
@@ -46,7 +46,10 @@ export const WELT_CONFIG = {
 
 export const WELT_PACK: ContentPack = {
   id: 'welt',
-  name: 'Von Kontinent zu Kontinent — Weltplan',
+  name: {
+    de: 'Von Kontinent zu Kontinent — Weltplan',
+    en: 'Von Kontinent zu Kontinent — the world board',
+  },
   map: WELT_MAP,
   vehicles: CLASSIC_VEHICLES,
   goods: [...GOODS, ...GOODS_WELT],

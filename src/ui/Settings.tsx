@@ -4,6 +4,8 @@ import { NotifyCheck } from './NotifyCheck'
 import { ShareRow } from './Lobby'
 import type { NetState } from '@app/store'
 import type { GameState } from '@engine/state'
+import { useLocaleStore, useT } from '@app/locale'
+import { LOCALES, LOCALE_NAMES } from '@i18n/locale'
 
 /**
  * The one place that is about the app rather than about the game.
@@ -34,73 +36,104 @@ export function SettingsSheet({
   onLeave: () => void
   onAbandon: () => void
 }) {
+  const { t } = useT()
   const [confirming, setConfirming] = useState(false)
   const realtime = state.config.travel === 'echtzeit'
 
   return (
-    <Sheet snap={snap} onSnap={onSnap} title="Einstellungen" subtitle="Meldungen und diese Partie">
-      <Group title="Meldungen">
+    <Sheet snap={snap} onSnap={onSnap} title={t('settings.title')} subtitle={t('settings.subtitle')}>
+      <Group title={t('ui.language')}>
+        <LanguagePicker />
+        <p className="text-ink-faint mt-1.5 text-[12px] leading-snug">{t('ui.language.note')}</p>
+      </Group>
+
+      <Group title={t('settings.notices')}>
         <p className="text-ink-soft text-[12px] leading-snug">
-          {realtime
-            ? 'Die Schiffe fahren weiter, während Sie anderes tun. Eine Meldung sagt Ihnen, wenn eines angelegt hat.'
-            : 'In der Würfelpartie bewegt sich nichts ohne Wurf, es gibt also wenig zu melden. Die Einstellung gilt trotzdem für die nächste Echtzeitpartie.'}
+          {t(realtime ? 'settings.notices.realtime' : 'settings.notices.dice')}
         </p>
         <NotifyCheck />
       </Group>
 
-      <Group title="Diese Partie">
+      <Group title={t('settings.game')}>
         {net ? (
           <>
             <dl className="teletype space-y-1 text-[13px]">
-              <Row label="Tisch" value={net.code} />
+              <Row label={t('settings.table')} value={net.code} />
               <Row
-                label="Leitung"
-                value={
+                label={t('settings.line')}
+                value={t(
                   net.status === 'verbunden'
-                    ? 'steht'
+                    ? 'settings.line.up'
                     : net.status === 'verbindet'
-                      ? 'wird gelegt'
-                      : 'unterbrochen'
-                }
+                      ? 'settings.line.connecting'
+                      : 'settings.line.down',
+                )}
               />
-              <Row label="Am Tisch" value={`${net.online.length} von ${state.players.length}`} />
+              <Row
+                label={t('settings.atTable')}
+                value={`${net.online.length} ${t('ui.of')} ${state.players.length}`}
+              />
             </dl>
             <ShareRow code={net.code} />
           </>
         ) : (
-          <p className="text-ink-soft text-[12px] leading-snug">
-            An einem Gerät gespielt. Der Spielstand liegt hier auf dem Gerät und wird nach jedem
-            Zug fortgeschrieben.
-          </p>
+          <p className="text-ink-soft text-[12px] leading-snug">{t('settings.local')}</p>
         )}
       </Group>
 
-      <Group title="Verlassen">
+      <Group title={t('settings.leaving')}>
         <button className="btn w-full" onClick={onLeave}>
-          Zum Titelbild
+          {t('settings.toTitle')}
         </button>
         <p className="text-ink-faint mt-1.5 text-[12px] leading-snug">
-          {net
-            ? 'Die Partie läuft weiter und Ihr Platz bleibt Ihrer. Beim nächsten Öffnen sind Sie von selbst wieder an Bord.'
-            : 'Der Spielstand bleibt erhalten. Auf der Eingangsseite steht »Angefangene Partie fortsetzen«.'}
+          {t(net ? 'settings.leave.net' : 'settings.leave.local')}
         </p>
 
         {confirming ? (
           <button className="btn btn-danger mt-4 w-full" onClick={onAbandon}>
-            Wirklich aufgeben — alles verwerfen
+            {t('settings.abandon.confirm')}
           </button>
         ) : (
           <button className="btn btn-danger mt-4 w-full" onClick={() => setConfirming(true)}>
-            Partie aufgeben
+            {t('settings.abandon')}
           </button>
         )}
         <p className="text-ink-faint mt-1.5 text-[12px] leading-snug">
-          {net
-            ? 'Gibt Ihren Platz an diesem Tisch auf. Zurück kämen Sie nur als neuer Mitspieler.'
-            : 'Löscht den Spielstand. Das läßt sich nicht rückgängig machen.'}
+          {t(net ? 'settings.abandon.net' : 'settings.abandon.local')}
         </p>
       </Group>
     </Sheet>
+  )
+}
+
+/**
+ * Two languages, side by side, each written in its own.
+ *
+ * A picker that says "German / English" in whichever language is currently
+ * wrong is no use to the person who needs it most — somebody who has opened
+ * the app and cannot read it. "Deutsch" and "English" are legible to their
+ * own speakers whatever the app is currently set to, so neither is ever
+ * looking for a word they do not know.
+ */
+export function LanguagePicker() {
+  const locale = useLocaleStore((s) => s.locale)
+  const setLocale = useLocaleStore((s) => s.setLocale)
+
+  return (
+    <div className="flex gap-2" role="group" aria-label={LOCALE_NAMES[locale]}>
+      {LOCALES.map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={option === locale}
+          onClick={() => setLocale(option)}
+          className={`btn flex-1 text-sm ${option === locale ? 'btn-primary' : ''}`}
+          lang={option}
+        >
+          {LOCALE_NAMES[option]}
+        </button>
+      ))}
+    </div>
   )
 }
 

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useT, type Translate } from '@app/locale'
+import { LanguagePicker } from './Settings'
 import { forgetSeat, hasSeatAt, tableInfo, type TableLookup, type TableSeat } from '@app/net'
 import { makePersona, type Gender } from '@engine/persona'
 import { MAX_PLAYERS } from '@engine/reducer'
@@ -41,6 +43,7 @@ interface Trader {
  * host already decided.
  */
 export function Setup() {
+  const { t } = useT()
   const begin = useGame((s) => s.begin)
   const host = useGame((s) => s.host)
   const join = useGame((s) => s.join)
@@ -90,7 +93,7 @@ export function Setup() {
         })
       } catch (error) {
         setProblem(
-          error instanceof Error ? error.message : 'Die Partie ließ sich nicht eröffnen.',
+          error instanceof Error ? error.message : t('setup.couldNotOpen'),
         )
       } finally {
         setBusy(false)
@@ -123,9 +126,7 @@ export function Setup() {
       >
         <div className="paper anim-rise flex-1 rounded-lg p-5 sm:p-8">
           <header className="text-center">
-            <p className="smallcaps text-ink-soft text-[10px]">
-              Gesellschaftsspiel um den Import- und Exporthandel
-            </p>
+            <p className="smallcaps text-ink-soft text-[10px]">{t('setup.tagline')}</p>
             <h1 className="display letterpress mt-2 text-3xl leading-[1.05] italic sm:text-5xl">
               Von Kontinent
               <br />
@@ -208,7 +209,7 @@ function Choice({
   blurb: string
   selected?: boolean
   disabled?: boolean
-  note?: string
+  note?: string | null
   onClick?: () => void
 }) {
   return (
@@ -221,9 +222,7 @@ function Choice({
     >
       <span className="flex items-baseline justify-between gap-2">
         <span className="display text-lg leading-tight">{title}</span>
-        {disabled && (
-          <span className="smallcaps text-ink-faint shrink-0 text-[9px]">in Vorbereitung</span>
-        )}
+        {disabled && <InPreparation />}
       </span>
       <span className="text-ink-soft mt-0.5 block text-xs leading-snug">{blurb}</span>
       {disabled && note && (
@@ -460,11 +459,7 @@ function Dropdown<T extends string>({
                       {option.label}
                     </span>
                     {/* Ein blasser Eintrag ohne Grund ist nur rätselhaft. */}
-                    {option.disabled && (
-                      <span className="smallcaps text-ink-faint shrink-0 text-[9px]">
-                        in Vorbereitung
-                      </span>
-                    )}
+                    {option.disabled && <InPreparation />}
                     {selected && (
                       <span className="text-press shrink-0 text-[12px]" aria-hidden>
                         ✓
@@ -486,6 +481,16 @@ function Dropdown<T extends string>({
   )
 }
 
+/** Said in two places, and it is the same badge in both. */
+function InPreparation() {
+  const { t } = useT()
+  return (
+    <span className="smallcaps text-ink-faint shrink-0 text-[9px]">
+      {t('setup.inPreparation')}
+    </span>
+  )
+}
+
 /** The note belonging to whichever option is currently chosen. */
 function hintFor<T extends string>(options: readonly DropdownOption<T>[], value: T): string {
   return options.find((o) => o.id === value)?.hint ?? ''
@@ -494,7 +499,7 @@ function hintFor<T extends string>(options: readonly DropdownOption<T>[], value:
 function Nav({
   onBack,
   onNext,
-  nextLabel = 'Weiter',
+  nextLabel,
   nextDisabled,
 }: {
   onBack: () => void
@@ -502,14 +507,15 @@ function Nav({
   nextLabel?: string
   nextDisabled?: boolean
 }) {
+  const { t } = useT()
   return (
     <div className="mt-7 flex items-center justify-between gap-3">
       <button className="btn" onClick={onBack}>
-        Zurück
+        {t('setup.back')}
       </button>
       {onNext && (
         <button className="btn btn-primary" onClick={onNext} disabled={nextDisabled}>
-          {nextLabel}
+          {nextLabel ?? t('setup.next')}
         </button>
       )}
     </div>
@@ -524,83 +530,70 @@ function Nav({
  * line — and so adding a mode is a row here rather than another card.
  */
 
-const TRAVEL_OPTIONS: readonly DropdownOption<Travel>[] = [
+const travelOptions = (T: Translate): readonly DropdownOption<Travel>[] => [
   {
     id: 'wuerfel',
-    label: 'Mit Würfel',
-    hint: 'Ein Wurf, so viele Punkte weit. Wie auf dem Brett.',
+    label: T.t('setup.travel.dice'),
+    hint: T.t('setup.travel.dice.hint'),
   },
   {
     id: 'echtzeit',
-    label: 'In Echtzeit',
-    hint: 'Schiffe brauchen echte Zeit von Hafen zu Hafen. Kurs setzen, weggehen, später nachsehen — auch wenn niemand zuschaut, fahren die Schiffe weiter.',
+    label: T.t('setup.travel.realtime'),
+    hint: T.t('setup.travel.realtime.hint'),
   },
 ]
 
-const SICHT_OPTIONS: readonly DropdownOption<Sicht>[] = [
+const sichtOptions = (T: Translate): readonly DropdownOption<Sicht>[] => [
   {
     id: 'normal',
-    label: 'Normal',
-    hint: 'Sie sehen jederzeit, wo jedes Fahrzeug steht, und Befehle wirken sofort.',
+    label: T.t('setup.sight.normal'),
+    hint: T.t('setup.sight.normal.hint'),
   },
   {
     id: 'realistisch',
-    label: 'Realistisch',
+    label: T.t('setup.sight.realistic'),
     hint: isReady('sicht:realistisch')
-      ? 'Sie wissen nur, wo Sie selbst sind. Befehle an entfernte Kapitäne gehen per Brieftaube — ob sie ankommt, erfahren Sie nie. Schaltet die Echtzeitfahrt mit ein.'
-      : CAPABILITIES['sicht:realistisch']!.note,
+      ? T.t('setup.sight.realistic.hint')
+      : (CAPABILITIES['sicht:realistisch']!.note?.[T.locale] ?? ''),
     // Fertig genug, um im Verzeichnis zu stehen, nicht fertig genug, um
     // gespielt zu werden — siehe den Eintrag in options.ts.
     disabled: !isReady('sicht:realistisch'),
   },
 ]
 
-const ANGEBOT_OPTIONS: readonly DropdownOption<Angebot>[] = [
-  {
-    id: 'fest',
-    label: 'Fest',
-    hint: 'Jeder Hafen führt aus, was im Warenverzeichnis steht. So ist der Plan gedruckt.',
-  },
-  {
-    id: 'zufaellig',
-    label: 'Zufällig',
-    hint: 'Die Handelswege werden zu Spielbeginn neu ausgelost. Jeder Hafen behält seine Größe, aber niemand weiß mehr auswendig, wo der Kaffee liegt.',
-  },
+const angebotOptions = (T: Translate): readonly DropdownOption<Angebot>[] => [
+  { id: 'fest', label: T.t('setup.supply.fixed'), hint: T.t('setup.supply.fixed.hint') },
+  { id: 'zufaellig', label: T.t('setup.supply.random'), hint: T.t('setup.supply.random.hint') },
 ]
 
-const PREISE_OPTIONS: readonly DropdownOption<Preise>[] = [
-  {
-    id: 'fest',
-    label: 'Fest',
-    hint: 'Ein Verkaufspreis je Ware, überall auf der Welt derselbe.',
-  },
+const preiseOptions = (T: Translate): readonly DropdownOption<Preise>[] => [
+  { id: 'fest', label: T.t('setup.prices.fixed'), hint: T.t('setup.prices.fixed.hint') },
   {
     id: 'entfernung',
-    label: 'Nach Entfernung',
-    hint: 'Je weiter eine Ware vom nächsten Hafen entfernt ist, der sie selbst ausführt, desto mehr bringt sie. Kurze Wege lohnen dann nicht mehr — die weite Fahrt zahlt sich aus.',
+    label: T.t('setup.prices.distance'),
+    hint: T.t('setup.prices.distance.hint'),
   },
 ]
 
-const KONJUNKTUR_OPTIONS: readonly DropdownOption<Konjunktur>[] = [
+const konjunkturOptions = (T: Translate): readonly DropdownOption<Konjunktur>[] => [
   {
     id: 'klassisch',
-    label: 'Klassisch',
-    hint: 'Die 27 gedruckten Karten. Hausse, Baisse, Steuer, Telegramm.',
+    label: T.t('setup.konjunktur.classic'),
+    hint: T.t('setup.konjunktur.classic.hint'),
   },
   {
     id: 'erweitert',
-    label: 'Erweitert',
-    hint: 'Dazu Stürme, die Ladung über Bord gehen lassen, Hausse und Baisse über einzelnen Erdteilen, Seeräuber und örtliche Gebühren. Wo Sie stehen, zählt dann mit.',
+    label: T.t('setup.konjunktur.extended'),
+    hint: T.t('setup.konjunktur.extended.hint'),
   },
 ]
 
 /** Turns a pace in minutes into something a person can picture. */
-function paceHint(minutesPerPip: number): string {
+function paceHint(T: Translate, minutesPerPip: number): string {
   // The Atlantic runs to roughly a dozen pips on the classic plan.
   const crossing = minutesPerPip * 12
-  if (crossing < 60) return `Atlantik in ${crossing} Min`
-  const hours = Math.round((crossing / 60) * 10) / 10
-  return `Atlantik in ${hours} Std`
+  if (crossing < 60) return T.t('setup.pace.minutes', { n: crossing })
+  return T.t('setup.pace.hours', { n: Math.round((crossing / 60) * 10) / 10 })
 }
 
 function Legend({ children }: { children: React.ReactNode }) {
@@ -622,25 +615,21 @@ function StepModus({
   onFull: () => void
   onJoin: () => void
 }) {
+  const { t } = useT()
   return (
     <div className="anim-fade">
       <p className="text-ink-soft mx-auto mt-5 max-w-md text-center text-sm leading-relaxed">
-        Sie führen ein Handelshaus. Kaufen Sie Waren dort, wo sie wachsen, und setzen Sie sie ab,
-        wo sie fehlen.
+        {t('setup.premise')}
       </p>
 
-      <Legend>Wie möchten Sie spielen?</Legend>
+      <Legend>{t('setup.howToPlay')}</Legend>
       <div className="stagger space-y-2.5">
         <Choice
-          title="Klassisch"
-          blurb="Nach den Originalregeln: gedruckter Spielplan, Würfel, 50 Runden, an einem Gerät."
+          title={t('setup.classic')}
+          blurb={t('setup.classic.blurb')}
           onClick={onClassic}
         />
-        <Choice
-          title="Erweitert"
-          blurb="Spielplan, Fahrtweise, Dauer, Kapital und Mitspieler selbst bestimmen — auch über mehrere Geräte."
-          onClick={onFull}
-        />
+        <Choice title={t('setup.full')} blurb={t('setup.full.blurb')} onClick={onFull} />
 
         {/* Die beiden darüber eröffnen eine Partie, die darunter tritt einer
             fremden bei. Ein Strich sagt das schneller als ein Satz — und
@@ -650,18 +639,22 @@ function StepModus({
           <hr className="mx-auto w-2/3 border-t border-black/15" />
         </div>
 
-        <Choice
-          title="Partie beitreten"
-          blurb="Sie haben einen Code — die Partie ist eingerichtet, Sie tragen nur Ihren Namen ein."
-          onClick={onJoin}
-        />
+        <Choice title={t('setup.join')} blurb={t('setup.join.blurb')} onClick={onJoin} />
       </div>
 
       {canResume && (
         <button className="btn mt-6 w-full" onClick={onResume}>
-          Angefangene Partie fortsetzen
+          {t('setup.resume')}
         </button>
       )}
+
+      {/* Here as well as under Einstellungen, because somebody who opens the
+          app in a language they cannot read needs it before there is a game
+          to open the settings from. */}
+      <div className="mt-8">
+        <Legend>{t('ui.language')}</Legend>
+        <LanguagePicker />
+      </div>
     </div>
   )
 }
@@ -679,31 +672,39 @@ function StepOptionen({
   onBack: () => void
   onNext: () => void
 }) {
+  const T = useT()
+  const { t, num, locale } = T
   return (
     <div className="anim-fade">
-      <Section title="Der Spielplan" hint="Welche Küsten befahren werden.">
-        <Field label="Plan" hint={PACKS.find((p) => p.id === options.packId)?.blurb}>
+      <Section title={t('setup.section.board')} hint={t('setup.section.board.hint')}>
+        <Field
+          label={t('setup.field.plan')}
+          hint={PACKS.find((p) => p.id === options.packId)?.blurb[locale]}
+        >
           <Dropdown
-            label="Spielplan"
+            label={t('setup.field.plan.label')}
             value={options.packId}
             // The blurb rides inside the list too, so the plans can be
             // compared without choosing one to find out what it is.
             options={PACKS.filter((p) => p.ready).map((p) => ({
               id: p.id,
-              label: p.name,
-              hint: p.blurb,
+              label: p.name[locale],
+              hint: p.blurb[locale],
             }))}
             onChange={(id) => set('packId', id)}
           />
         </Field>
       </Section>
 
-      <Section title="Die Fahrt" hint="Wie die Schiffe von Hafen zu Hafen kommen.">
-        <Field label="Fahrtweise" hint={hintFor(TRAVEL_OPTIONS, options.travel)}>
+      <Section title={t('setup.section.travel')} hint={t('setup.section.travel.hint')}>
+        <Field
+          label={t('setup.field.travel')}
+          hint={hintFor(travelOptions(T), options.travel)}
+        >
           <Dropdown
-            label="Fahrtweise"
+            label={t('setup.field.travel')}
             value={options.travel}
-            options={TRAVEL_OPTIONS}
+            options={travelOptions(T)}
             onChange={(travel) =>
               // Fog only means anything once ships take real time to arrive,
               // so going back to dice has to take it with them.
@@ -716,11 +717,11 @@ function StepOptionen({
           />
         </Field>
 
-        <Field label="Sicht" hint={hintFor(SICHT_OPTIONS, options.sicht)}>
+        <Field label={t('setup.field.sight')} hint={hintFor(sichtOptions(T), options.sicht)}>
           <Dropdown
-            label="Sicht"
+            label={t('setup.field.sight')}
             value={options.sicht}
-            options={SICHT_OPTIONS}
+            options={sichtOptions(T)}
             onChange={(sicht) =>
               setOptions((o) =>
                 sicht === 'realistisch'
@@ -736,95 +737,94 @@ function StepOptionen({
         {options.travel === 'echtzeit' ? (
           <>
             <Slider
-              label="Fahrzeit je Punkt"
+              label={t('setup.field.pace')}
               value={options.minutesPerPip}
               min={1}
               max={60}
               step={1}
-              hint={paceHint(options.minutesPerPip)}
-              format={(v) => `${v} Min`}
+              hint={paceHint(T, options.minutesPerPip)}
+              format={(v) => t('setup.minutes', { n: v })}
               onChange={(v) => set('minutesPerPip', v)}
             />
             <Slider
-              label="Länge der Saison"
+              label={t('setup.field.season')}
               value={options.durationHours}
               min={1}
               max={168}
               step={1}
               hint={
                 options.durationHours >= 168
-                  ? 'eine Woche'
+                  ? t('setup.aWeek')
                   : options.durationHours >= 24
-                    ? `${Math.round(options.durationHours / 24)} Tage`
+                    ? t('setup.days', { n: Math.round(options.durationHours / 24) })
                     : undefined
               }
-              format={(v) => `${v} Std`}
+              format={(v) => t('setup.hours', { n: v })}
               onChange={(v) => set('durationHours', v)}
             />
           </>
         ) : (
           <Slider
-            label="Runden"
+            label={t('setup.field.rounds')}
             value={options.totalRounds}
             min={10}
             max={80}
             step={5}
-            hint={options.totalRounds === 50 ? 'wie im Original' : undefined}
+            hint={options.totalRounds === 50 ? t('setup.asPrinted') : undefined}
             format={(v) => String(v)}
             onChange={(v) => set('totalRounds', v)}
           />
         )}
       </Section>
 
-      <Section title="Der Markt" hint="Wo die Waren liegen und was sie einbringen.">
-        <Field label="Angebot" hint={hintFor(ANGEBOT_OPTIONS, options.angebot)}>
+      <Section title={t('setup.section.market')} hint={t('setup.section.market.hint')}>
+        <Field label={t('setup.field.supply')} hint={hintFor(angebotOptions(T), options.angebot)}>
           <Dropdown
-            label="Angebot"
+            label={t('setup.field.supply')}
             value={options.angebot}
-            options={ANGEBOT_OPTIONS}
+            options={angebotOptions(T)}
             onChange={(v) => set('angebot', v)}
           />
         </Field>
-        <Field label="Preise" hint={hintFor(PREISE_OPTIONS, options.preise)}>
+        <Field label={t('setup.field.prices')} hint={hintFor(preiseOptions(T), options.preise)}>
           <Dropdown
-            label="Preise"
+            label={t('setup.field.prices')}
             value={options.preise}
-            options={PREISE_OPTIONS}
+            options={preiseOptions(T)}
             onChange={(v) => set('preise', v)}
           />
         </Field>
-        <Field label="Konjunktur" hint={hintFor(KONJUNKTUR_OPTIONS, options.konjunktur)}>
+        <Field
+          label={t('setup.field.market')}
+          hint={hintFor(konjunkturOptions(T), options.konjunktur)}
+        >
           <Dropdown
-            label="Konjunktur"
+            label={t('setup.field.market')}
             value={options.konjunktur}
-            options={KONJUNKTUR_OPTIONS}
+            options={konjunkturOptions(T)}
             onChange={(v) => set('konjunktur', v)}
           />
         </Field>
       </Section>
 
-      <Section title="Das Handelshaus" hint="Womit jeder Mitspieler anfängt.">
+      <Section title={t('setup.section.house')} hint={t('setup.section.house.hint')}>
         <Slider
-          label="Betriebskapital"
+          label={t('setup.field.capital')}
           value={options.startingCapital}
           min={100_000}
           max={2_000_000}
           step={50_000}
-          hint={options.startingCapital === 500_000 ? 'wie im Original' : undefined}
-          format={(v) => v.toLocaleString('de-DE')}
+          hint={options.startingCapital === 500_000 ? t('setup.asPrinted') : undefined}
+          format={(v) => num(v)}
           onChange={(v) => set('startingCapital', v)}
         />
         <Slider
-          label="Schiffe je Haus"
+          label={t('setup.field.ships')}
           value={options.fleetLimit}
           min={1}
           max={4}
           step={1}
-          hint={
-            options.fleetLimit === 1
-              ? 'wie im Original — keine Werft'
-              : 'Werften verkaufen; ein zweites Schiff kostet ein halbes Vermögen'
-          }
+          hint={t(options.fleetLimit === 1 ? 'setup.ships.single' : 'setup.ships.fleet')}
           format={(v) => String(v)}
           onChange={(v) => set('fleetLimit', v)}
         />
@@ -846,43 +846,41 @@ function StepTisch({
   onBack: () => void
   onNext: () => void
 }) {
+  const { t, locale } = useT()
   return (
     <div className="anim-fade">
-      <Legend>Wo wird gespielt?</Legend>
+      <Legend>{t('setup.whereToPlay')}</Legend>
       <div className="space-y-2">
         <Choice
-          title="An einem Gerät"
-          blurb="Reihum, das Gerät wandert. Braucht keine Verbindung."
+          title={t('setup.oneDevice')}
+          blurb={t('setup.oneDevice.blurb')}
           selected={options.table === 'lokal'}
           onClick={() => set('table', 'lokal' as Table)}
         />
         <Choice
-          title="Partie eröffnen"
-          blurb="Jeder spielt auf seinem eigenen Gerät. Sie bekommen einen Code zum Weitergeben."
+          title={t('setup.openTable')}
+          blurb={t('setup.openTable.blurb')}
           selected={options.table === 'online-eroeffnen'}
           disabled={!CAPABILITIES['table:online-eroeffnen']!.ready}
-          note={CAPABILITIES['table:online-eroeffnen']!.note}
+          note={CAPABILITIES['table:online-eroeffnen']!.note?.[locale] ?? null}
           onClick={() => set('table', 'online-eroeffnen' as Table)}
         />
       </div>
-      <p className="text-ink-faint mt-2 text-[11px] italic">
-        Einer Partie beitreten können Sie gleich auf der Eingangsseite — dort ist nichts
-        einzurichten.
-      </p>
+      <p className="text-ink-faint mt-2 text-[11px] italic">{t('setup.joinNote')}</p>
 
       {options.table === 'online-eroeffnen' && (
         <>
-          <Legend>Wer darf mitfahren?</Legend>
+          <Legend>{t('setup.whoMaySail')}</Legend>
           <div className="space-y-2">
             <Choice
-              title="Nur zu Beginn"
-              blurb="Die Mitspieler stehen fest, bevor das erste Schiff ausläuft."
+              title={t('setup.atStartOnly')}
+              blurb={t('setup.atStartOnly.blurb')}
               selected={options.joinPolicy === 'nur-zu-beginn'}
               onClick={() => set('joinPolicy', 'nur-zu-beginn' as JoinPolicy)}
             />
             <Choice
-              title="Jederzeit"
-              blurb="Späte Ankömmlinge steigen mit eigenem Schiff und vollem Kapital ein."
+              title={t('setup.anyTime')}
+              blurb={t('setup.anyTime.blurb')}
               selected={options.joinPolicy === 'jederzeit'}
               onClick={() => set('joinPolicy', 'jederzeit' as JoinPolicy)}
             />
@@ -912,6 +910,7 @@ function StepNamen({
   onBack: () => void
   onStart: () => void
 }) {
+  const { t, num } = useT()
   const online = options.table === 'online-eroeffnen'
   const setTrader = (i: number, value: Trader) =>
     setNames((prev) => prev.map((t, j) => (j === i ? value : t)))
@@ -920,7 +919,7 @@ function StepNamen({
 
   return (
     <div className="anim-fade">
-      <Legend>{online ? 'Ihr Name' : 'Die Mitspieler'}</Legend>
+      <Legend>{t(online ? 'setup.yourName' : 'setup.players')}</Legend>
       <div className="stagger grid gap-2.5 sm:grid-cols-2">
         {slots.map((trader, i) => (
           <TraderSlot
@@ -939,13 +938,13 @@ function StepNamen({
 
       {!online && names.length < MAX_PLAYERS && (
         <button className="btn mt-3 w-full" onClick={() => setNames((p) => [...p, { name: '' }])}>
-          Noch jemanden eintragen
+          {t('setup.addAnother')}
         </button>
       )}
 
       {online && (
         <p className="text-ink-soft mt-3 text-center text-xs">
-          Die anderen tragen sich selbst ein, sobald sie den Code haben.
+          {t('setup.othersEnterThemselves')}
         </p>
       )}
 
@@ -953,13 +952,16 @@ function StepNamen({
 
       <p className="text-ink-faint mt-5 text-center text-[11px]">
         {options.mode === 'klassisch'
-          ? 'Originalregeln · 50 Runden · an einem Gerät'
+          ? t('setup.summary.classic')
           : [
               options.travel === 'echtzeit'
-                ? `Echtzeit · ${options.minutesPerPip} Min je Punkt · ${options.durationHours} Std Saison`
-                : `${options.totalRounds} Runden`,
-              `${options.startingCapital.toLocaleString('de-DE')} Kapital`,
-              online ? 'eigene Geräte' : 'ein Gerät',
+                ? t('setup.summary.realtime', {
+                    pace: options.minutesPerPip,
+                    hours: options.durationHours,
+                  })
+                : t('setup.summary.rounds', { n: options.totalRounds }),
+              t('setup.summary.capital', { amount: num(options.startingCapital) }),
+              t(online ? 'setup.summary.ownDevices' : 'setup.summary.oneDevice'),
             ].join(' · ')}
       </p>
 
@@ -968,7 +970,9 @@ function StepNamen({
       <Nav
         onBack={onBack}
         onNext={onStart}
-        nextLabel={busy ? 'Einen Augenblick …' : online ? 'Partie eröffnen' : 'An Bord gehen'}
+        nextLabel={t(
+          busy ? 'setup.oneMoment' : online ? 'setup.openTable' : 'setup.goAboard',
+        )}
         nextDisabled={!ready || busy}
       />
     </div>
@@ -984,6 +988,7 @@ function StepBeitreten({
   onBack: () => void
   onJoin: (code: string, trader: Trader) => void
 }) {
+  const { t } = useT()
   const [code, setCode] = useState(initialCode)
   const [trader, setTrader] = useState<Trader>({ name: '' })
   /** Bumped when a seat is given up, so the check below runs again. */
@@ -1001,12 +1006,12 @@ function StepBeitreten({
   const shut =
     look === null || !look.ok
       ? look?.reason === 'unbekannt'
-        ? 'Unter diesem Zeichen ist keine Partie zu finden.'
+        ? t('setup.noSuchTable')
         : null
       : look.info.players.length >= MAX_PLAYERS
-        ? `Der Tisch ist besetzt — mehr als ${MAX_PLAYERS} Schiffe fahren nicht.`
+        ? t('setup.tableFull', { n: MAX_PLAYERS })
         : look.info.phase !== 'lobby' && look.info.meta.joinPolicy !== 'jederzeit'
-          ? 'Diese Partie ist unterwegs und nimmt keine Nachzügler auf.'
+          ? t('setup.tableUnderWay')
           : null
 
   /*
@@ -1023,7 +1028,7 @@ function StepBeitreten({
 
   return (
     <div className="anim-fade">
-      <Legend>Code der Partie</Legend>
+      <Legend>{t('setup.tableCode')}</Legend>
       <input
         className="focusable paper-card tnum display w-full rounded-md px-3 py-3 text-center text-3xl tracking-[0.3em] uppercase outline-none"
         value={code}
@@ -1033,19 +1038,16 @@ function StepBeitreten({
         spellCheck={false}
         placeholder="ABCD"
         onChange={(e) => setCode(e.target.value.toUpperCase())}
-        aria-label="Code der Partie"
+        aria-label={t('setup.tableCode')}
       />
 
       {seats && <TableAhead seats={seats} />}
 
       {known ? (
         <div className="paper-card mt-4 rounded-md px-3.5 py-3">
-          <p className="text-[13px] leading-tight font-semibold">
-            Sie haben an diesem Tisch bereits einen Platz.
-          </p>
+          <p className="text-[13px] leading-tight font-semibold">{t('setup.haveSeat')}</p>
           <p className="text-ink-faint mt-0.5 text-[12px] leading-snug">
-            Ihr Handelshaus wartet dort mit Namen, Kasse und Ladung. Ein Name ist nicht mehr
-            einzutragen.
+            {t('setup.haveSeat.note')}
           </p>
           <button
             className="btn btn-sm mt-2.5"
@@ -1054,12 +1056,12 @@ function StepBeitreten({
               setGiven((n) => n + 1)
             }}
           >
-            Platz aufgeben und neu eintragen
+            {t('setup.giveUpSeat')}
           </button>
         </div>
       ) : (
         <>
-          <Legend>Ihr Name</Legend>
+          <Legend>{t('setup.yourName')}</Legend>
           {/* Der Platz, den der Server wirklich vergeben wird: die Farben gehen
               in der Reihenfolge des Beitritts hinaus, der nächste freie ist
               also genau der hinter den schon angemeldeten. Ohne das saß jeder
@@ -1074,7 +1076,7 @@ function StepBeitreten({
       <Nav
         onBack={onBack}
         onNext={() => onJoin(clean, { ...trader, name: trader.name.trim() })}
-        nextLabel={known ? 'Zurück an Bord' : 'Beitreten'}
+        nextLabel={t(known ? 'setup.backAboard' : 'setup.joinIt')}
         nextDisabled={!ready}
       />
     </div>
@@ -1124,16 +1126,17 @@ function useTableAhead(code: string): TableLookup | null {
 
 /** Wer schon am Kai steht, in der Reihenfolge, in der er gekommen ist. */
 function TableAhead({ seats }: { seats: readonly TableSeat[] }) {
+  const { t } = useT()
   if (seats.length === 0) {
     return (
       <p className="text-ink-faint anim-fade mt-3 text-center text-[12px] italic">
-        Der Tisch ist gedeckt, es sitzt noch niemand daran.
+        {t('setup.tableEmpty')}
       </p>
     )
   }
   return (
     <div className="anim-fade mt-4">
-      <Legend>Schon am Kai ({seats.length})</Legend>
+      <Legend>{t('setup.alreadyOnQuay', { n: seats.length })}</Legend>
       <ul className="space-y-1.5">
         {seats.map((seat) => {
           const color = PLAYER_COLORS[seat.colorIndex % PLAYER_COLORS.length]!
@@ -1146,7 +1149,7 @@ function TableAhead({ seats }: { seats: readonly TableSeat[] }) {
               <Portrait traits={seat.portrait} size={30} />
               <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{seat.name}</span>
               <span className="smallcaps text-ink-faint shrink-0 text-[10px]">
-                Spieler {seat.colorIndex + 1}
+                {t('ui.seatNumber', { n: seat.colorIndex + 1 })}
               </span>
             </li>
           )
@@ -1167,6 +1170,7 @@ function TraderSlot({
   onChange: (v: Trader) => void
   onRemove?: () => void
 }) {
+  const { t, locale } = useT()
   const trimmed = trader.name.trim()
   const persona = useMemo(
     () => (trimmed ? makePersona(trimmed, 'classic', trader.gender) : null),
@@ -1195,26 +1199,28 @@ function TraderSlot({
         <span
           className="border-paper absolute right-0 bottom-0 block h-3.5 w-3.5 rounded-full border-2 shadow-[0_0_0_1px_rgb(0_0_0/0.25)]"
           style={{ background: color.ink }}
-          title={color.name}
+          title={color.name[locale]}
         />
       </div>
 
       <div className="min-w-0 flex-1">
         <input
           className="focusable placeholder:text-ink-faint border-ink-soft/50 w-full border-0 border-b border-dashed bg-transparent py-1 pr-6 pl-0 text-base outline-none"
-          placeholder={`${index + 1}. Name`}
+          placeholder={t('setup.nthName', { n: index + 1 })}
           value={trader.name}
           maxLength={22}
           onChange={(e) => onChange({ ...trader, name: e.target.value })}
-          aria-label={`Name der ${index + 1}. Person`}
+          aria-label={t('setup.nthNameLabel', { n: index + 1 })}
         />
 
         <div className="mt-1.5 flex items-center gap-2">
           <p className="min-w-0 flex-1 truncate text-[11px] leading-tight">
             {persona ? (
-              <span className="smallcaps text-ink-soft">Spieler {index + 1}</span>
+              <span className="smallcaps text-ink-soft">
+                {t('ui.seatNumber', { n: index + 1 })}
+              </span>
             ) : (
-              <span className="text-ink-faint italic">Tragen Sie sich ein.</span>
+              <span className="text-ink-faint italic">{t('setup.enterYourself')}</span>
             )}
           </p>
 
@@ -1225,7 +1231,7 @@ function TraderSlot({
               persona ? 'opacity-100' : 'opacity-40'
             }`}
             role="group"
-            aria-label="Kauffrau oder Kaufmann"
+            aria-label={t('setup.merchantEither')}
           >
             {(['w', 'm'] as const).map((g) => (
               <button
@@ -1236,7 +1242,7 @@ function TraderSlot({
                     : 'text-ink-soft hover:bg-black/5'
                 }`}
                 aria-pressed={chosen === g}
-                aria-label={g === 'w' ? 'Kauffrau' : 'Kaufmann'}
+                aria-label={t(g === 'w' ? 'setup.merchantWoman' : 'setup.merchantMan')}
                 onClick={() => onChange({ ...trader, gender: g })}
               >
                 {g === 'w' ? '♀' : '♂'}
@@ -1250,7 +1256,7 @@ function TraderSlot({
         <button
           className="text-ink-faint hover:text-rot btn-sm absolute top-1.5 right-1.5 px-1 text-xs leading-none"
           onClick={onRemove}
-          aria-label="Streichen"
+          aria-label={t('setup.strike')}
         >
           ✕
         </button>

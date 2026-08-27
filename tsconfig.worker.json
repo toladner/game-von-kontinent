@@ -15,6 +15,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["server", "src/engine", "src/content"],
+  "include": ["server", "src/engine", "src/content", "src/i18n"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

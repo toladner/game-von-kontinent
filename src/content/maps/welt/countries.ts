@@ -1,4 +1,5 @@
 import type { Country } from '../../../engine/types'
+import { withEnglishCountry } from '../../naming'
 
 /**
  * The export countries east of Suez.
@@ -12,7 +13,7 @@ import type { Country } from '../../../engine/types'
  * also what makes them worth sailing to: Malayan tin and rubber, Chinese silk
  * and porcelain, Australian wool and ores, New Zealand butter and mutton.
  */
-export const COUNTRIES_WELT: readonly Country[] = [
+const EAST_OF_SUEZ: readonly Country[] = [
   // --- Vorderasien und Indien ---------------------------------------------
   { id: 'arabien', name: 'Arabien und Aden', continent: 'asien', exports: [15, 26, 59, 76] },
   { id: 'irak', name: 'Irak', continent: 'asien', exports: [15, 22, 59] },
@@ -73,3 +74,5 @@ export const COUNTRIES_WELT: readonly Country[] = [
     exports: [42, 71, 80, 81],
   },
 ]
+
+export const COUNTRIES_WELT: readonly Country[] = EAST_OF_SUEZ.map(withEnglishCountry)

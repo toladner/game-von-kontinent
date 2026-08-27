@@ -1,4 +1,5 @@
 import type { Port } from '../../../engine/types'
+import { withEnglishPort } from '../../naming'
 
 /**
  * The Ausfuhrhäfen east of Suez.
@@ -15,7 +16,7 @@ const p = (
   lat: number,
   lon: number,
   extra: Partial<Port> = {},
-): Port => ({ kind: 'port', id, name, country, lat, lon, ...extra })
+): Port => withEnglishPort({ kind: 'port', id, name, country, lat, lon, ...extra })
 
 export const PORTS_WELT: readonly Port[] = [
   // --- Rotes Meer, Persischer Golf ----------------------------------------

@@ -56,11 +56,14 @@ export default defineConfig({
       '@content': r('./src/content'),
       '@ui': r('./src/ui'),
       '@app': r('./src/app'),
+      '@i18n': r('./src/i18n'),
     },
   },
   test: {
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'server/**/*.test.ts'],
+    // Pins the language, so copy assertions do not depend on the machine.
+    setupFiles: ['./src/test-setup.ts'],
   },
 })

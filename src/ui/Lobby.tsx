@@ -1,5 +1,6 @@
 import { Portrait } from './Portrait'
 import { PLAYER_COLORS, playerLabel, useGame } from '@app/store'
+import { useT } from '@app/locale'
 
 /**
  * The quayside before departure: who has arrived, and the code that brings
@@ -11,6 +12,7 @@ export function Lobby() {
   const dispatch = useGame((s) => s.dispatch)
   const abandon = useGame((s) => s.abandon)
   const notice = useGame((s) => s.notice)
+  const { t, render, num } = useT()
 
   const isHost = net === null || state.hostId === net.playerId
   const online = new Set(net?.online ?? [])
@@ -26,18 +28,16 @@ export function Lobby() {
       >
         <div className="paper anim-rise flex-1 rounded-lg p-5 sm:p-8">
           <header className="text-center">
-            <p className="smallcaps text-ink-soft text-[10px]">Vor der Ausfahrt</p>
-            <h1 className="display letterpress mt-1 text-3xl italic">Am Kai</h1>
+            <p className="smallcaps text-ink-soft text-[10px]">{t('lobby.beforeSailing')}</p>
+            <h1 className="display letterpress mt-1 text-3xl italic">{t('lobby.title')}</h1>
             <hr className="rule-double mx-auto mt-4 w-2/3" />
           </header>
 
           {net && (
             <section className="mt-5 text-center">
-              <p className="smallcaps text-ink-soft text-[10px]">Code der Partie</p>
+              <p className="smallcaps text-ink-soft text-[10px]">{t('lobby.code')}</p>
               <p className="display tnum mt-1 text-5xl tracking-[0.25em]">{net.code}</p>
-              <p className="text-ink-soft mt-2 text-xs">
-                Andere geben diesen Code auf der Eingangsseite ein.
-              </p>
+              <p className="text-ink-soft mt-2 text-xs">{t('lobby.codeNote')}</p>
               <ShareRow code={net.code} />
               <p
                 className={`mt-3 text-[11px] ${
@@ -45,20 +45,20 @@ export function Lobby() {
                 }`}
               >
                 {net.status === 'verbunden'
-                  ? 'Mit der Partie verbunden.'
+                  ? t('lobby.connected')
                   : net.status === 'verbindet'
-                    ? 'Verbindung wird aufgebaut …'
-                    : 'Verbindung unterbrochen — es wird erneut versucht.'}
+                    ? t('lobby.connecting')
+                    : t('lobby.disconnected')}
               </p>
             </section>
           )}
 
           <h2 className="smallcaps text-ink-soft mt-6 mb-2 text-[11px]">
-            Angemeldete Kaufleute ({state.players.length})
+            {t('lobby.registered', { n: state.players.length })}
           </h2>
 
           {state.players.length === 0 ? (
-            <p className="text-ink-faint text-sm italic">Noch niemand am Kai.</p>
+            <p className="text-ink-faint text-sm italic">{t('lobby.nobodyYet')}</p>
           ) : (
             <ul className="stagger space-y-2">
               {state.players.map((p) => {
@@ -76,7 +76,7 @@ export function Lobby() {
                         {p.name}
                         {p.id === state.hostId && (
                           <span className="smallcaps text-ink-faint ml-2 text-[9px]">
-                            eröffnet
+                            {t('lobby.opened')}
                           </span>
                         )}
                       </p>
@@ -87,7 +87,7 @@ export function Lobby() {
                         className={`h-2.5 w-2.5 shrink-0 rounded-full ${
                           here ? 'bg-press' : 'bg-ink-faint'
                         }`}
-                        title={here ? 'anwesend' : 'abwesend'}
+                        title={t(here ? 'lobby.present' : 'lobby.absent')}
                       />
                     )}
                   </li>
@@ -97,19 +97,23 @@ export function Lobby() {
           )}
 
           <p className="text-ink-faint mt-4 text-[11px]">
-            {state.joinPolicy === 'jederzeit'
-              ? 'Nachzügler dürfen auch nach der Ausfahrt noch ein Schiff nehmen.'
-              : 'Wer jetzt nicht am Kai steht, fährt nicht mit.'}
+            {t(
+              state.joinPolicy === 'jederzeit'
+                ? 'lobby.latecomersWelcome'
+                : 'lobby.latecomersBarred',
+            )}
             {' · '}
-            {state.config.totalRounds} Runden ·{' '}
-            {state.config.startingCapital.toLocaleString('de-DE')} Kapital
+            {t('lobby.terms', {
+              rounds: state.config.totalRounds,
+              capital: num(state.config.startingCapital),
+            })}
           </p>
 
-          {notice && <p className="text-rot mt-3 text-center text-sm">{notice}</p>}
+          {notice && <p className="text-rot mt-3 text-center text-sm">{render(notice)}</p>}
 
           <div className="mt-7 flex items-center justify-between gap-3">
             <button className="btn" onClick={abandon}>
-              Verlassen
+              {t('lobby.leave')}
             </button>
             {isHost ? (
               <button
@@ -117,12 +121,10 @@ export function Lobby() {
                 disabled={state.players.length < 1}
                 onClick={() => dispatch({ type: 'start' })}
               >
-                Ausfahrt freigeben
+                {t('lobby.castOff')}
               </button>
             ) : (
-              <p className="text-ink-soft text-xs italic">
-                Warten auf die Freigabe durch den Eröffner …
-              </p>
+              <p className="text-ink-soft text-xs italic">{t('lobby.waitingForHost')}</p>
             )}
           </div>
         </div>
@@ -132,6 +134,7 @@ export function Lobby() {
 }
 
 export function ShareRow({ code }: { code: string }) {
+  const { t } = useT()
   const url = `${location.origin}${location.pathname}#partie=${code}`
   const share = async () => {
     try {
@@ -143,7 +146,7 @@ export function ShareRow({ code }: { code: string }) {
   }
   return (
     <button className="btn btn-sm mt-3 text-xs" onClick={share}>
-      Einladung teilen
+      {t('lobby.share')}
     </button>
   )
 }

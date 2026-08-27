@@ -1,4 +1,7 @@
 import { useEffect, useRef } from 'react'
+import { currentLocale } from '@app/locale'
+import { t } from '@i18n'
+import { named } from '@i18n/locale'
 import { lookingAway, notify, notifyState } from '@app/notify'
 import { voyageEndsAt } from '@engine/selectors'
 import { flagship, type GameState, type PlayerState } from '@engine/state'
@@ -45,11 +48,13 @@ export function useArrivalNotice(
 
     const timer = setTimeout(() => {
       if (!lookingAway()) return
-      const name =
-        latest.current.ctx.portsById.get(latest.current.destination ?? '')?.name ?? 'Ihrem Ziel'
+      const locale = currentLocale()
+      const port = latest.current.ctx.portsById.get(latest.current.destination ?? '')
       void notify(
-        'Schiff eingelaufen',
-        `Ihr Schiff liegt in ${name}. Es wartet auf Order.`,
+        t(locale, 'notify.arrived.title'),
+        t(locale, 'notify.arrived.body', {
+          port: port ? named(port)[locale] : t(locale, 'notify.arrived.somewhere'),
+        }),
         `ankunft:${latest.current.destination}`,
       )
     }, wait)
@@ -67,7 +72,12 @@ export function useArrivalNotice(
     if (wait <= 0) return
     const timer = setTimeout(() => {
       if (!lookingAway()) return
-      void notify('Saison beendet', 'Die Schlußabrechnung liegt vor.', 'saison-ende')
+      const locale = currentLocale()
+      void notify(
+        t(locale, 'notify.seasonOver.title'),
+        t(locale, 'notify.seasonOver.body'),
+        'saison-ende',
+      )
     }, wait)
     return () => clearTimeout(timer)
   }, [enabled, realtime, endsAt])

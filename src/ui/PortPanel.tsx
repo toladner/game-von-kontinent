@@ -30,6 +30,9 @@ import { Emph } from './Emph'
 import { Portrait } from './Portrait'
 import { Sheet, Tabs, type SheetSnap } from './Sheet'
 import { PLAYER_COLORS } from '@app/store'
+import { useT, type Translate } from '@app/locale'
+import { named, type Localized } from '@i18n/locale'
+import type { MsgKey } from '@i18n'
 
 /**
  * The tabs are the Makler's round, and nothing else.
@@ -55,28 +58,32 @@ type Tab = HarbourStep
  * and it deliberately does not stop anyone: the quarantine may be lifted
  * before the ship arrives, and betting on that is the interesting part.
  */
-function SperrBand({ closure }: { closure: { title: string } | null }) {
+function SperrBand({ closure }: { closure: { title: Localized<string> } | null }) {
+  const { t, locale } = useT()
   if (!closure) return null
   return (
     <div className="border-rot/40 bg-rot/10 mb-3 rounded-sm border px-2.5 py-2">
-      <p className="smallcaps text-rot text-[11px] tracking-[0.18em]">Hafensperre</p>
-      <p className="mt-0.5 text-[13px] leading-snug font-semibold">{closure.title}</p>
-      <p className="text-ink-soft mt-0.5 text-[12px] leading-snug">
-        Das Kontor ist geschlossen — hier wird weder gekauft noch verkauft, bis die Sperre
-        aufgehoben ist.
-      </p>
+      <p className="smallcaps text-rot text-[11px] tracking-[0.18em]">{t('port.closure')}</p>
+      <p className="mt-0.5 text-[13px] leading-snug font-semibold">{closure.title[locale]}</p>
+      <p className="text-ink-soft mt-0.5 text-[12px] leading-snug">{t('port.closure.note')}</p>
     </div>
   )
 }
 
-const BLOCK_TEXT: Record<string, string> = {
-  gesperrt: 'Der Hafen ist gesperrt',
-  'nicht-im-angebot': 'wird hier nicht geführt',
-  ausverkauft: 'Exportbank ausverkauft — beide Karten im Umlauf',
-  'kein-geld': 'Barmittel reichen nicht',
-  'schon-geladen': 'in diesem Hafen bereits gekauft',
-  ladeschluss: 'Ladeschluß — zwei Waren je Hafen',
-  'laderaum-voll': 'Laderaum voll',
+/** Why a card cannot be taken, keyed by the reason the engine gives. */
+const BLOCK_TEXT: Record<string, MsgKey> = {
+  gesperrt: 'port.block.gesperrt',
+  'nicht-im-angebot': 'port.block.nicht-im-angebot',
+  ausverkauft: 'port.block.ausverkauft',
+  'kein-geld': 'port.block.kein-geld',
+  'schon-geladen': 'port.block.schon-geladen',
+  ladeschluss: 'port.block.ladeschluss',
+  'laderaum-voll': 'port.block.laderaum-voll',
+}
+
+/** A signed figure, as the sheet sets them: −  rather than a hyphen. */
+function signed(t: Translate, value: number): string {
+  return `${value >= 0 ? '+' : '−'}${t.num(Math.abs(value))}`
 }
 
 export function PortSheet({
@@ -131,6 +138,8 @@ export function PortSheet({
   /** Called when we move ourselves, so the other seats can follow along. */
   onTabChange?: (tab: Tab) => void
 }) {
+  const T = useT()
+  const { t, num, locale } = T
   const port = portOf(ctx, portId)
   const country = ctx.pack.map.countries.find((c) => c.id === port.country)
   const offers = buyOffers(ctx, state, player, portId)
@@ -138,7 +147,7 @@ export function PortSheet({
   const zwang = verkaufszwangOpen(ctx, state, player, portId)
   const color = PLAYER_COLORS[player.colorIndex % PLAYER_COLORS.length]!
 
-  const plan = harbourPlan(ctx, state, player, portId)
+  const plan = harbourPlan(ctx, state, player, portId, locale)
   const guide = useMemo(() => harbourGuide(portId, ctx.pack.id), [portId, ctx.pack.id])
 
   // Every call at a harbour starts with the hold: what am I carrying, and
@@ -201,12 +210,12 @@ export function PortSheet({
       <Sheet
         snap={snap}
         onSnap={onSnap}
-        title={port.name}
-        subtitle={country?.name}
+        title={named(port)[locale]}
+        subtitle={country && named(country)[locale]}
         accent={color.ink}
         footer={
           <button className="btn btn-primary w-full text-base" onClick={onEnter}>
-            Hafen betreten
+            {t('port.enter')}
           </button>
         }
       >
@@ -219,13 +228,13 @@ export function PortSheet({
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title={port.name}
-      subtitle={country?.name}
+      title={named(port)[locale]}
+      subtitle={country && named(country)[locale]}
       accent={color.ink}
       footer={
         following ? (
           <p className="text-ink-soft py-1 text-center text-[13px]">
-            {player.name} ist am Zug — Sie sehen mit.
+            {t('port.watching', { name: player.name })}
           </p>
         ) : (
         <button
@@ -258,16 +267,16 @@ export function PortSheet({
           disabled={zwang && !next}
         >
           {next
-            ? `Weiter zu ${next.label}`
+            ? t('port.next', { step: next.label })
             : onShowMap
-              ? 'Hafen auf der Karte wählen'
+              ? t('port.chooseOnMap')
               : zwang
-                ? 'Erst absetzen — Verkaufszwang'
+                ? t('port.mustSellFirst')
                 : confirmEmpty
-                  ? 'Wirklich ohne Ladung ablegen?'
+                  ? t('port.sailEmpty.confirm')
                   : empty
-                    ? 'Ohne Ladung ablegen'
-                    : 'Ablegen'}
+                    ? t('port.sailEmpty')
+                    : t('port.sail')}
         </button>
         )
       }
@@ -277,17 +286,17 @@ export function PortSheet({
       {/* Was zählt, in einer Zeile */}
       <div className="teletype mb-3 flex items-center justify-between gap-2 rounded-sm border border-black/15 bg-black/5 px-2.5 py-2 text-[13px]">
         <span>
-          <span className="smallcaps text-ink-soft text-[11px]">Kasse</span>{' '}
-          <span className="tnum font-bold">{player.cash.toLocaleString('de-DE')}</span>
+          <span className="smallcaps text-ink-soft text-[11px]">{t('port.cash')}</span>{' '}
+          <span className="tnum font-bold">{num(player.cash)}</span>
         </span>
         <span className={left > 0 ? '' : 'text-rot'}>
-          <span className="smallcaps text-ink-soft text-[11px]">Einkauf</span>{' '}
+          <span className="smallcaps text-ink-soft text-[11px]">{t('port.purchases')}</span>{' '}
           <span className="tnum font-bold">
             {left}/{state.config.maxPurchasesPerPort}
           </span>
         </span>
         <span>
-          <span className="smallcaps text-ink-soft text-[11px]">Ladung</span>{' '}
+          <span className="smallcaps text-ink-soft text-[11px]">{t('port.cargo')}</span>{' '}
           <span className="tnum font-bold">{flagship(player).cargo.length}</span>
         </span>
       </div>
@@ -298,8 +307,10 @@ export function PortSheet({
             state.saleModifierPercent > 0 ? 'text-press' : 'text-rot'
           }`}
         >
-          Weltmarkt: Verkaufspreise {state.saleModifierPercent > 0 ? '+' : '−'}{' '}
-          {Math.abs(state.saleModifierPercent)} %
+          {t('port.worldMarket', {
+            sign: state.saleModifierPercent > 0 ? '+' : '−',
+            percent: Math.abs(state.saleModifierPercent),
+          })}
         </p>
       )}
 
@@ -327,7 +338,7 @@ export function PortSheet({
             </div>
           )}
           {quotes.length === 0 ? (
-            <Empty>Der Laderaum ist leer. Kaufen Sie, was hier wächst.</Empty>
+            <Empty>{t('port.sell.holdEmpty')}</Empty>
           ) : (
             <div className="stagger space-y-2">
               {quotes.map((q) => {
@@ -339,31 +350,39 @@ export function PortSheet({
                         good={goodOf(ctx, q.item.goodId)}
                         price={q.price}
                         tone={q.profit >= 0 ? 'gut' : 'schlecht'}
-                        action="verkaufen"
+                        action={t('port.sell.action')}
                         sublabel={
                           // Havarie first: it halves whatever the sale would
                           // otherwise have been, so it is the fact that
                           // decides whether to place the posten here at all.
                           q.item.damaged
-                            ? `Havariert — Erlös zur Hälfte${q.kind === 'ueberfluss' ? ', und hier selbst geführt' : ''}`
+                            ? t(
+                                q.kind === 'ueberfluss'
+                                  ? 'port.sell.damagedAndGlut'
+                                  : 'port.sell.damaged',
+                              )
                             : q.kind === 'ueberfluss'
-                              ? 'Hier selbst geführt — nur Verlustpreis'
-                              : `${q.profit >= 0 ? '+' : '−'}${Math.abs(q.profit).toLocaleString('de-DE')} gegenüber Einkauf`
+                              ? t('port.sell.glut')
+                              : t('port.sell.margin', {
+                                  sign: q.profit >= 0 ? '+' : '−',
+                                  amount: num(Math.abs(q.profit)),
+                                })
                         }
                         onClick={() => onSell(q.item.uid)}
                       />
                       {q.kind === 'ueberfluss' && elsewhere.length > 0 && (
                         <p className="text-ink-soft mt-1 text-[12px] leading-snug">
-                          Besser anderswo:{' '}
+                          {t('port.sell.betterElsewhere')}{' '}
                           {elsewhere.map((d, i) => (
                             <span key={d.portId}>
                               {i > 0 && ' · '}
-                              <span className="font-semibold">{d.name}</span>{' '}
+                              <span className="font-semibold">{d.name[locale]}</span>{' '}
                               <span className={d.profit >= 0 ? 'text-press' : 'text-rot'}>
-                                {d.profit >= 0 ? '+' : '−'}
-                                {Math.abs(d.profit).toLocaleString('de-DE')}
+                                {signed(T, d.profit)}
                               </span>{' '}
-                              <span className="text-ink-faint">({d.distance} Pkt.)</span>
+                              <span className="text-ink-faint">
+                                {t('port.sell.pips', { n: d.distance })}
+                              </span>
                             </span>
                           ))}
                         </p>
@@ -388,13 +407,15 @@ export function PortSheet({
                   key={offer.goodId}
                   good={good}
                   disabled={offer.status !== 'ok'}
-                  action={offer.status === 'ok' ? 'kaufen' : undefined}
+                  action={offer.status === 'ok' ? t('port.buy.action') : undefined}
                   sublabel={
                     offer.status === 'ok'
                       ? undefined
                       : offer.status === 'kein-geld'
-                        ? `Barmittel reichen nicht — es fehlen ${short.toLocaleString('de-DE')}`
-                        : (BLOCK_TEXT[offer.status] ?? offer.status)
+                        ? t('port.buy.short', { amount: num(short) })
+                        : BLOCK_TEXT[offer.status]
+                          ? t(BLOCK_TEXT[offer.status]!)
+                          : offer.status
                   }
                   onClick={offer.status === 'ok' ? () => onBuy(offer.goodId) : undefined}
                 />
@@ -440,7 +461,8 @@ function Landfall({
   portId: string
   guide: HarbourCharacter
 }) {
-  const { headline, body } = harbourGreeting(ctx, state, player, portId)
+  const { t, locale } = useT()
+  const { headline, body } = harbourGreeting(ctx, state, player, portId, locale)
   // One voice overheard on the quay, so a harbour is somewhere and not just
   // a name. The Makler does the talking; this is the room behind them.
   const passerby = harbourCharacters(portId, state.round, 1, ctx.pack.id)[0]
@@ -448,7 +470,7 @@ function Landfall({
   return (
     <div className="anim-fade flex h-full flex-col items-center justify-center px-2 text-center">
       <Portrait traits={guide.portrait} size={104} />
-      <p className="smallcaps text-ink-soft mt-3 text-[11px]">{guide.role}</p>
+      <p className="smallcaps text-ink-soft mt-3 text-[11px]">{guide.role[locale]}</p>
       <p className="display text-xl leading-tight">{guide.name}</p>
       <h3 className="display letterpress mt-3 text-2xl leading-tight">{headline}</h3>
 
@@ -461,7 +483,11 @@ function Landfall({
 
       {passerby && (
         <p className="text-ink-faint mx-auto mt-4 max-w-sm text-[12px] leading-snug italic">
-          {passerby.role} {passerby.name}, im Vorbeigehen: „{passerby.line}“
+          {t('landfall.passerby', {
+            role: passerby.role,
+            name: passerby.name,
+            line: passerby.line,
+          })}
         </p>
       )}
     </div>
@@ -485,6 +511,7 @@ function Landfall({
  * voice you stop reading when it does not.
  */
 function GuideNote({ guide, stage }: { guide: HarbourCharacter; stage: Stage }) {
+  const { locale } = useT()
   return (
     <div
       className={`paper-slip anim-fade mb-3 flex items-start gap-2.5 rounded-sm px-2.5 py-2.5 ${
@@ -494,7 +521,7 @@ function GuideNote({ guide, stage }: { guide: HarbourCharacter; stage: Stage }) 
       <Portrait traits={guide.portrait} size={44} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[11px] leading-tight">
-          <span className="smallcaps text-black/55">{guide.role}</span>{' '}
+          <span className="smallcaps text-black/55">{guide.role[locale]}</span>{' '}
           <span className="font-semibold text-black/75">{guide.name}</span>
         </p>
         <p className="text-press mt-1 text-[15px] leading-snug font-semibold">
@@ -528,29 +555,23 @@ export function MarketReport({
   /** Show the harbour's own card, as tapping it on the plan would. */
   onOpenPort?: (portId: string) => void
 }) {
+  const T = useT()
+  const { t, tn, locale } = T
   if (cargo === 0) {
     return (
       <div className="anim-fade">
-        <Empty>
-          Ihr Laderaum ist leer. Kaufen Sie zuerst unter „Angebot“ — danach steht hier, wer
-          Ihre Ware nimmt und was sie einbringt.
-        </Empty>
+        <Empty>{t('report.holdEmpty')}</Empty>
       </div>
     )
   }
   if (report.length === 0) {
-    return <Empty>Von hier aus ist nichts abzusetzen. Fahren Sie weiter.</Empty>
+    return <Empty>{t('report.nothingReachable')}</Empty>
   }
   return (
     <div className="anim-fade">
       <p className="text-ink-soft mb-2 text-[12px] leading-snug italic">
-        Diese Häfen führen Ihre Ware <em>nicht</em> selbst und zahlen daher den vollen Preis.
-        Der Betrag ist der Gewinn gegenüber Ihrem Einkauf, die Punkte sind die Entfernung.
-        {onSetCourse
-          ? ' Antippen zeigt den Hafen auf dem Plan; „Kurs setzen“ schickt das Schiff hin.'
-          : onLookAt
-            ? ' Antippen zeigt den Hafen auf dem Plan.'
-            : ''}
+        <Emph text={t('report.note')} strong="italic font-normal" />
+        {onSetCourse ? t('report.note.course') : onLookAt ? t('report.note.look') : ''}
       </p>
       <ol className="stagger space-y-1">
         {report.map((d) => (
@@ -565,27 +586,32 @@ export function MarketReport({
               } ${d.portId === markedPort ? 'ring-gold ring-2' : ''}`}
             >
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-bold">{d.name}</span>
+              <span className="block truncate text-[14px] font-bold">{d.name[locale]}</span>
               <span className="text-ink-soft block text-[12px] leading-snug">
                 {/* Points are the rule; hours are what a player is actually
                     deciding about once ships sail on a clock, so the clock
                     takes the word "Fahrt" when there is one to take it. */}
-                {d.distance} {d.distance === 1 ? 'Punkt' : 'Punkte'}
+                {tn('ui.pip', d.distance)}
                 {d.travelMs === undefined
-                  ? ' Fahrt · nimmt '
-                  : ` · ${durationText(d.travelMs)} Fahrt · nimmt `}
+                  ? t('report.takes')
+                  : t('report.takesWithClock', { duration: durationText(d.travelMs) })}
                 {ctx
                   ? d.sells
-                      .map((x) => ctx.goodsById.get(x.goodId)?.name ?? '')
+                      .map((x) => {
+                        const good = ctx.goodsById.get(x.goodId)
+                        return good ? named(good)[locale] : ''
+                      })
                       .filter(Boolean)
                       .join(', ')
-                  : `${d.sellable} Posten`}
+                  : t('report.lots', { n: d.sellable })}
                 {/* A harbour that takes part of the hold is a different kind
                     of choice, not a worse version of the same one — so it
                     says so rather than leaving it to be inferred from a list
                     of names the reader would have to count. */}
                 {cargo > d.sellable && (
-                  <span className="text-rot"> · {cargo - d.sellable} bleibt an Bord</span>
+                  <span className="text-rot">
+                    {t('report.staysAboard', { n: cargo - d.sellable })}
+                  </span>
                 )}
               </span>
             </span>
@@ -595,8 +621,7 @@ export function MarketReport({
                   d.profit >= 0 ? 'text-press' : 'text-rot'
                 }`}
               >
-                {d.profit >= 0 ? '+' : '−'}
-                {Math.abs(d.profit).toLocaleString('de-DE')}
+                {signed(T, d.profit)}
               </span>
             )}
             </button>
@@ -610,7 +635,7 @@ export function MarketReport({
                     className="btn btn-sm shrink-0 text-[13px]"
                     onClick={() => onOpenPort(d.portId)}
                   >
-                    Öffnen
+                    {t('report.open')}
                   </button>
                 )}
                 <button
@@ -618,7 +643,7 @@ export function MarketReport({
                   className="btn btn-sm btn-primary flex-1 text-[13px]"
                   onClick={() => onSetCourse(d.portId)}
                 >
-                  Kurs auf {d.name} setzen
+                  {t('report.setCourse', { port: d.name })}
                 </button>
               </div>
             )}
@@ -662,6 +687,8 @@ export function PortPreviewSheet({
   /** Absent when the ship cannot be given a course right now. */
   onSetCourse?: (portId: string) => void
 }) {
+  const T = useT()
+  const { t, tn, num, locale } = T
   const port = portOf(ctx, portId)
   const country = ctx.pack.map.countries.find((c) => c.id === port.country)
   const ship = flagship(player)
@@ -702,22 +729,20 @@ export function PortPreviewSheet({
     <Sheet
       snap={snap}
       onSnap={onSnap}
-      title={port.name}
-      subtitle={country?.name}
+      title={named(port)[locale]}
+      subtitle={country && named(country)[locale]}
       footer={
         here ? (
-          <p className="text-ink-soft py-1 text-center text-[13px]">Sie liegen bereits hier.</p>
+          <p className="text-ink-soft py-1 text-center text-[13px]">{t('preview.alreadyHere')}</p>
         ) : bound ? (
-          <p className="text-ink-soft py-1 text-center text-[13px]">
-            Dorthin ist Ihr Schiff bereits unterwegs.
-          </p>
+          <p className="text-ink-soft py-1 text-center text-[13px]">{t('preview.alreadyBound')}</p>
         ) : onSetCourse && route.length > 0 ? (
           <button className="btn btn-primary w-full text-base" onClick={() => onSetCourse(portId)}>
-            {sailing ? `Kurs ändern auf ${port.name}` : `Kurs auf ${port.name} setzen`}
+            {t(sailing ? 'preview.changeCourse' : 'preview.setCourse', { port: named(port) })}
           </button>
         ) : (
           <p className="text-ink-soft py-1 text-center text-[13px]">
-            {route.length === 0 ? 'Dorthin führt keine Linie.' : 'Das Schiff ist unterwegs.'}
+            {t(route.length === 0 ? 'preview.noLine' : 'preview.underWay')}
           </p>
         )
       }
@@ -728,14 +753,14 @@ export function PortPreviewSheet({
         <div className="mb-3">
           <div className="teletype flex items-center justify-between gap-2 rounded-sm border border-black/15 bg-black/5 px-2.5 py-2 text-[13px]">
             <span>
-              <span className="smallcaps text-ink-soft text-[11px]">Entfernung</span>{' '}
-              <span className="tnum font-bold">
-                {route.length} {route.length === 1 ? 'Punkt' : 'Punkte'}
-              </span>
+              <span className="smallcaps text-ink-soft text-[11px]">
+                {t('preview.distance')}
+              </span>{' '}
+              <span className="tnum font-bold">{tn('ui.pip', route.length)}</span>
             </span>
             {eta !== null && (
               <span>
-                <span className="smallcaps text-ink-soft text-[11px]">Fahrt</span>{' '}
+                <span className="smallcaps text-ink-soft text-[11px]">{t('preview.passage')}</span>{' '}
                 <span className="tnum font-bold">{durationText(eta)}</span>
               </span>
             )}
@@ -744,59 +769,53 @@ export function PortPreviewSheet({
               Schiff noch anlaufen muß, ehe der neue Kurs überhaupt gilt. */}
           {sailing && !bound && route.length > 0 && (
             <p className="text-ink-soft mt-1 text-[12px] leading-snug italic">
-              Auf hoher See dreht kein Schiff bei. Sie läuft erst den nächsten Punkt an; von dort
-              gilt der neue Kurs.
+              {t('preview.noTurningBack')}
             </p>
           )}
         </div>
       )}
 
       <h3 className="smallcaps text-ink-soft mb-1.5 text-[11px]">
-        {earners.length > 0 ? 'Nimmt Ihnen ab' : 'Ihre Ladung'}
+        {t(earners.length > 0 ? 'preview.willTake' : 'preview.yourCargo')}
       </h3>
       {ship.cargo.length === 0 ? (
-        <p className="text-ink-faint mb-3 text-[13px] italic">
-          Ihr Laderaum ist leer — hier wäre nichts abzusetzen.
-        </p>
+        <p className="text-ink-faint mb-3 text-[13px] italic">{t('preview.holdEmpty')}</p>
       ) : earners.length === 0 ? (
-        <p className="text-ink-faint mb-3 text-[13px] italic">
-          Dieser Hafen führt Ihre Waren selbst. Er zahlte nur den Verlustpreis.
-        </p>
+        <p className="text-ink-faint mb-3 text-[13px] italic">{t('preview.shipsItItself')}</p>
       ) : (
         <ul className="mb-3 space-y-0.5 text-[13px]">
           {earners.map((q) => (
             <li key={q.item.uid} className="flex items-baseline justify-between gap-2">
               <span className="min-w-0 flex-1 truncate font-semibold">
-                {goodOf(ctx, q.item.goodId).name}
+                {named(goodOf(ctx, q.item.goodId))[locale]}
               </span>
-              <span className="tnum">{q.price.toLocaleString('de-DE')}</span>
+              <span className="tnum">{num(q.price)}</span>
               <span
                 className={`tnum w-20 text-right font-bold ${q.profit >= 0 ? 'text-press' : 'text-rot'}`}
               >
-                {q.profit >= 0 ? '+' : '−'}
-                {Math.abs(q.profit).toLocaleString('de-DE')}
+                {signed(T, q.profit)}
               </span>
             </li>
           ))}
           <li className="flex items-baseline justify-between gap-2 border-t border-black/10 pt-1 font-bold">
-            <span className="smallcaps text-[11px]">Erlös</span>
-            <span className="tnum">{takings.toLocaleString('de-DE')}</span>
+            <span className="smallcaps text-[11px]">{t('port.sell.proceeds')}</span>
+            <span className="tnum">{num(takings)}</span>
             <span className="w-20" />
           </li>
         </ul>
       )}
 
-      <h3 className="smallcaps text-ink-soft mb-1.5 text-[11px]">Führt aus</h3>
+      <h3 className="smallcaps text-ink-soft mb-1.5 text-[11px]">{t('preview.exports')}</h3>
       {exports.length === 0 ? (
-        <p className="text-ink-faint text-[13px] italic">Von hier geht nichts hinaus.</p>
+        <p className="text-ink-faint text-[13px] italic">{t('preview.exportsNone')}</p>
       ) : (
         <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[13px]">
           {exports.map((goodId) => {
             const good = goodOf(ctx, goodId)
             return (
               <li key={goodId} className="flex items-baseline justify-between gap-1.5">
-                <span className="min-w-0 flex-1 truncate">{good.name}</span>
-                <span className="tnum text-ink-soft">{good.buy.toLocaleString('de-DE')}</span>
+                <span className="min-w-0 flex-1 truncate">{named(good)[locale]}</span>
+                <span className="tnum text-ink-soft">{num(good.buy)}</span>
               </li>
             )
           })}

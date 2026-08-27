@@ -18,6 +18,7 @@
  * to hand it the present one every time we sit down.
  */
 import { storedToken } from './net'
+import { currentLocale } from './locale'
 
 export type PushArm =
   | 'gestellt'
@@ -74,7 +75,10 @@ export async function armPush(code: string): Promise<PushArm> {
     const res = await fetch(`/api/games/${encodeURIComponent(code)}/push`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token, sub: subscription.toJSON() }),
+      // The language travels with the address. A push is composed on the
+      // server and read on this telephone, and at a table where two people
+      // have chosen differently there is no one right answer to compose in.
+      body: JSON.stringify({ token, sub: subscription.toJSON(), locale: currentLocale() }),
     })
     return res.ok ? 'gestellt' : 'fehler'
   } catch {

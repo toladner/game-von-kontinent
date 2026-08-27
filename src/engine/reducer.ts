@@ -1,4 +1,6 @@
 import type { ActionResult, GameAction, GameEvent } from './actions'
+import { msg, type MsgKey, type Vars } from '../i18n'
+import { named, type Localized } from '../i18n/locale'
 import type {
   CargoItem,
   GameState,
@@ -78,9 +80,16 @@ function patchShip(draft: Draft, index: number, patch: Partial<VehicleInstance>)
   patchVehicle(draft, index, flagship(player).id, patch)
 }
 
-const reject = (state: GameState, reason: string): ActionResult => ({
+/**
+ * Refuse an order, naming the reason by key rather than by sentence.
+ *
+ * The words are chosen where the refusal is read, not where it is decided —
+ * see `GameEvent['rejected']`. Passing a `MsgKey` rather than a string means
+ * a typo here is a compile error rather than a key rendered at a player.
+ */
+const reject = (state: GameState, key: MsgKey, vars?: Vars): ActionResult => ({
   state,
-  events: [{ type: 'rejected', reason }],
+  events: [{ type: 'rejected', reason: msg(key, vars) }],
 })
 
 // ---------------------------------------------------------------------------
@@ -191,7 +200,7 @@ function jettison(
   index: number,
   vehicleId: string,
   count: number,
-  reason: string,
+  reason: Localized<string>,
   events: GameEvent[],
 ): void {
   const player = draft.players[index]!
@@ -229,7 +238,7 @@ function spoil(
   index: number,
   vehicleId: string,
   count: number,
-  reason: string,
+  reason: Localized<string>,
   events: GameEvent[],
 ): void {
   const player = draft.players[index]!
@@ -265,7 +274,7 @@ function holdUp(
   index: number,
   vehicleId: string,
   minutes: number,
-  reason: string,
+  reason: Localized<string>,
   events: GameEvent[],
 ): void {
   const player = draft.players[index]!
@@ -463,14 +472,23 @@ function applyEffect(
       const [choice, rng] = nextInt(draft.rng, open.length)
       draft.rng = rng
       const portId = open[choice]!
-      const name = ctx.portsById.get(portId)?.name ?? portId
+      const port = ctx.portsById.get(portId)
+      // "Yellow fever in Rio" has to be sayable in both languages, and the
+      // harbour's own name may differ between them — Genua and Genoa are the
+      // same quay. So the headline is composed twice rather than once.
+      const headline: Localized<string> = port
+        ? {
+            de: `${effect.title.de} in ${named(port).de}`,
+            en: `${effect.title.en} in ${named(port).en}`,
+          }
+        : { de: `${effect.title.de} in ${portId}`, en: `${effect.title.en} in ${portId}` }
       const realtime = draft.config.travel === 'echtzeit'
 
       draft.closures = [
         ...draft.closures,
         {
           id: `q${draft.seq}:${portId}`,
-          title: `${effect.title} in ${name}`,
+          title: headline,
           portId,
           untilRound: realtime ? null : draft.round + effect.rounds,
           untilTime: realtime
@@ -478,7 +496,7 @@ function applyEffect(
             : null,
         },
       ]
-      events.push({ type: 'portClosed', portId, title: `${effect.title} in ${name}` })
+      events.push({ type: 'portClosed', portId, title: headline })
       return
     }
 
@@ -849,7 +867,7 @@ export function applyAction(
   // real-time game has a starting instant to reckon from.
   if (action.type === 'tick') return applyTick(ctx, state, action.at)
 
-  if (state.phase === 'over') return reject(state, 'Das Spiel ist beendet.')
+  if (state.phase === 'over') return reject(state, 'reject.gameOver')
 
   // Joining and starting stand apart: they are the only actions that do not
   // belong to whoever is currently at the table.
@@ -860,29 +878,29 @@ export function applyAction(
   if (action.type === 'telegramm') return applyTelegramm(state, action)
 
   if (state.phase === 'lobby') {
-    return reject(state, 'Die Partie hat noch nicht begonnen.')
+    return reject(state, 'reject.notStarted')
   }
 
   const realtime = state.config.travel === 'echtzeit'
 
   if (realtime) {
     if (action.type === 'roll' || action.type === 'step' || action.type === 'endTurn') {
-      return reject(state, 'In der Echtzeitfahrt wird nicht gewürfelt.')
+      return reject(state, 'reject.noDiceInRealtime')
     }
     if (action.type === 'drawKonjunktur') {
-      return reject(state, 'Der Weltmarkt dreht die Karten von selbst.')
+      return reject(state, 'reject.marketTurnsItself')
     }
   } else if (action.type === 'setCourse') {
-    return reject(state, 'Kurse werden nur in der Echtzeitfahrt gesetzt.')
+    return reject(state, 'reject.courseRealtimeOnly')
   }
 
   // In real-time play there is no "whose turn"; every action names its actor.
   const by = 'by' in action ? action.by : undefined
   const index = by ? state.players.findIndex((p) => p.id === by) : state.activeIndex
-  if (index < 0) return reject(state, 'Unbekannter Kaufmann.')
-  if (realtime && !by) return reject(state, 'Es fehlt die Angabe, wer handelt.')
+  if (index < 0) return reject(state, 'reject.unknownMerchant')
+  if (realtime && !by) return reject(state, 'reject.actorMissing')
   if (!realtime && by && index !== state.activeIndex) {
-    return reject(state, 'Sie sind nicht am Zug.')
+    return reject(state, 'reject.notYourTurn')
   }
 
   const draft = draftOf(state)
@@ -891,7 +909,7 @@ export function applyAction(
 
   switch (action.type) {
     case 'roll': {
-      if (draft.phase !== 'roll') return reject(state, 'Jetzt ist nicht gewürfelt.')
+      if (draft.phase !== 'roll') return reject(state, 'reject.notRollPhase')
       const [value, rng] = rollDie(draft.rng, draft.config.diceSides)
       draft.rng = rng
       draft.movement = { rolled: value, remaining: value, path: [flagship(player).nodeId] }
@@ -902,10 +920,10 @@ export function applyAction(
 
     case 'step': {
       if (draft.phase !== 'move' || !draft.movement) {
-        return reject(state, 'Es ist keine Fahrt im Gange.')
+        return reject(state, 'reject.noVoyage')
       }
       if (!legalSteps(ctx, player).includes(action.to)) {
-        return reject(state, 'Dorthin führt keine Linie — oder es wäre ein Pendeln.')
+        return reject(state, 'reject.noLineOrShuttle')
       }
       patchShip(draft, index, {
         nodeId: action.to,
@@ -922,14 +940,14 @@ export function applyAction(
     }
 
     case 'drawKonjunktur': {
-      if (draft.phase !== 'konjunktur') return reject(state, 'Keine Karte fällig.')
+      if (draft.phase !== 'konjunktur') return reject(state, 'reject.noCardDue')
       const cardId = draft.deck[0]
-      if (!cardId) return reject(state, 'Das Päckchen ist leer.')
+      if (!cardId) return reject(state, 'reject.deckEmpty')
       // "Die abgehobene Karte wird sodann wieder mit dem Rücken nach oben
       // unter das Kartenpäckchen geschoben."
       draft.deck = [...draft.deck.slice(1), cardId]
       const card = ctx.cardsById.get(cardId)
-      if (!card) return reject(state, `Unbekannte Karte ${cardId}`)
+      if (!card) return reject(state, 'reject.unknownCard', { id: cardId })
 
       draft.pendingCard = { cardId, drawerId: player.id }
       events.push({ type: 'cardDrawn', playerId: player.id, cardId })
@@ -942,33 +960,33 @@ export function applyAction(
       const buyer = flagship(player)
       if (realtime) {
         if (atSea(draft as GameState, buyer)) {
-          return reject(state, 'Auf See wird nicht gehandelt.')
+          return reject(state, 'reject.noTradeAtSea')
         }
       } else if (draft.phase !== 'port') {
-        return reject(state, 'Das Kontor ist geschlossen.')
+        return reject(state, 'reject.kontorClosed')
       }
       const portId = portAt(ctx, buyer.nodeId)
-      if (!portId) return reject(state, 'Ihr Schiff liegt nicht im Hafen.')
+      if (!portId) return reject(state, 'reject.yourShipNotInPort')
       const barred = closureAt(draft as GameState, portId)
-      if (barred) return reject(state, `${barred.title} — der Hafen ist gesperrt.`)
+      if (barred) return reject(state, 'reject.portBarred', { title: barred.title })
       if (!exportsAt(ctx, draft as GameState, portId).includes(action.goodId)) {
-        return reject(state, 'Diese Ware führt der Hafen nicht aus.')
+        return reject(state, 'reject.notExportedHere')
       }
       if (buyer.purchasesThisVisit.length >= draft.config.maxPurchasesPerPort) {
-        return reject(state, 'In einem Hafen dürfen nur zwei Waren gekauft werden.')
+        return reject(state, 'reject.twoGoodsPerPort')
       }
       if (buyer.purchasesThisVisit.includes(action.goodId)) {
-        return reject(state, 'Von einer Warengattung nur eine Karte.')
+        return reject(state, 'reject.oneOfEachKind')
       }
       const capacity = buyer.kind.capacity
       if (capacity !== null && buyer.cargo.length >= capacity) {
-        return reject(state, `Der Laderaum faßt nur ${capacity} Posten.`)
+        return reject(state, 'reject.holdFull', { n: capacity })
       }
       if ((draft.bankStock[action.goodId] ?? 0) <= 0) {
-        return reject(state, 'Die Exportbank hat keine Karte mehr davon.')
+        return reject(state, 'reject.bankOutOfCards')
       }
       const g = goodOf(ctx, action.goodId)
-      if (player.cash < g.buy) return reject(state, 'Die Barmittel reichen nicht.')
+      if (player.cash < g.buy) return reject(state, 'reject.insufficientFunds')
 
       const item: CargoItem = {
         uid: `c${draft.seq}-${action.goodId}`,
@@ -991,17 +1009,17 @@ export function applyAction(
       const seller = flagship(player)
       if (realtime) {
         if (atSea(draft as GameState, seller)) {
-          return reject(state, 'Auf See wird nicht gehandelt.')
+          return reject(state, 'reject.noTradeAtSea')
         }
       } else if (draft.phase !== 'port') {
-        return reject(state, 'Das Kontor ist geschlossen.')
+        return reject(state, 'reject.kontorClosed')
       }
       const portId = portAt(ctx, seller.nodeId)
-      if (!portId) return reject(state, 'Ihr Schiff liegt nicht im Hafen.')
+      if (!portId) return reject(state, 'reject.yourShipNotInPort')
       const shut = closureAt(draft as GameState, portId)
-      if (shut) return reject(state, `${shut.title} — der Hafen ist gesperrt.`)
+      if (shut) return reject(state, 'reject.portBarred', { title: shut.title })
       const item = seller.cargo.find((c) => c.uid === action.uid)
-      if (!item) return reject(state, 'Diese Ware ist nicht an Bord.')
+      if (!item) return reject(state, 'reject.notAboard')
 
       const quote = quoteSale(ctx, state, item, portId)
       draft.bankStock[item.goodId] = (draft.bankStock[item.goodId] ?? 0) + 1
@@ -1028,15 +1046,15 @@ export function applyAction(
     }
 
     case 'setCourse': {
-      if (draft.phase !== 'laufend') return reject(state, 'Die Partie fährt nicht.')
+      if (draft.phase !== 'laufend') return reject(state, 'reject.gameNotRunning')
       const ship = action.vehicleId
         ? (player.fleet.find((v) => v.id === action.vehicleId) ?? null)
         : flagship(player)
-      if (!ship) return reject(state, 'Dieses Schiff gehört nicht zu Ihrem Haus.')
+      if (!ship) return reject(state, 'reject.notYourShip')
       if (draft.config.sicht === 'realistisch' && ship.id !== flagship(player).id) {
         // You can only give an order to a captain you can actually speak to.
         if (flagship(player).voyage || ship.nodeId !== flagship(player).nodeId) {
-          return reject(state, 'Zu diesem Kapitän müssen Sie eine Taube schicken.')
+          return reject(state, 'reject.needPigeon')
         }
       }
       /*
@@ -1053,10 +1071,10 @@ export function applyAction(
       const sailing = atSea(draft as GameState, ship)
       if (!sailing) {
         const here = portAt(ctx, ship.nodeId)
-        if (!here) return reject(state, 'Das Schiff liegt nicht im Hafen.')
-        if (action.to === here) return reject(state, 'Es liegt bereits dort.')
+        if (!here) return reject(state, 'reject.shipNotInPort')
+        if (action.to === here) return reject(state, 'reject.alreadyThere')
       } else if (action.to === ship.voyage!.destination) {
-        return reject(state, 'Diesen Kurs hält sie bereits.')
+        return reject(state, 'reject.alreadyOnThatCourse')
       }
 
       const origin = courseOrigin(draft as GameState, ship)
@@ -1065,7 +1083,7 @@ export function applyAction(
       // or the mark she is already running to is the harbour now wanted — in
       // which case the new course is simply a very short one.
       if (onward.length === 0 && origin.node !== action.to) {
-        return reject(state, 'Dorthin führt keine Linie.')
+        return reject(state, 'reject.noLine')
       }
 
       if (!sailing) {
@@ -1120,20 +1138,20 @@ export function applyAction(
       // Checked before anything else: a table playing the printed rules has no
       // yard at all, and the reason differs from a house that is simply full.
       if (draft.config.maxFleetSize <= 1) {
-        return reject(state, fleetLimitNote(draft.config.maxFleetSize))
+        return reject(state, ...fleetLimitNote(draft.config.maxFleetSize))
       }
       const buyerShip = flagship(player)
       if (atSea(draft as GameState, buyerShip)) {
-        return reject(state, 'Auf See kauft man kein Schiff.')
+        return reject(state, 'reject.noYardAtSea')
       }
       const yard = portAt(ctx, buyerShip.nodeId)
-      if (!yard) return reject(state, 'Werften gibt es nur im Hafen.')
+      if (!yard) return reject(state, 'reject.yardsInPortOnly')
 
       const kind = ctx.pack.vehicles.find((v) => v.id === action.kindId)
-      if (!kind) return reject(state, 'Dieses Schiff führt die Werft nicht.')
-      if (player.cash < kind.price) return reject(state, 'Die Barmittel reichen nicht.')
+      if (!kind) return reject(state, 'reject.yardDoesNotStock')
+      if (player.cash < kind.price) return reject(state, 'reject.insufficientFunds')
       if (player.fleet.length >= draft.config.maxFleetSize) {
-        return reject(state, fleetLimitNote(draft.config.maxFleetSize))
+        return reject(state, ...fleetLimitNote(draft.config.maxFleetSize))
       }
 
       const identity = makeShipIdentity(`${player.id}:${player.fleet.length}:${ctx.pack.id}`)
@@ -1180,27 +1198,27 @@ export function applyAction(
 
     case 'sendPigeon': {
       if (draft.config.sicht !== 'realistisch') {
-        return reject(state, 'Befehle wirken hier ohne Umweg über eine Taube.')
+        return reject(state, 'reject.noPigeonNeeded')
       }
       const sender = flagship(player)
-      if (sender.voyage) return reject(state, 'Tauben steigen nur an Land auf.')
+      if (sender.voyage) return reject(state, 'reject.pigeonsAshoreOnly')
       const loft = portAt(ctx, sender.nodeId)
-      if (!loft) return reject(state, 'Hier gibt es keinen Taubenschlag.')
+      if (!loft) return reject(state, 'reject.noLoft')
 
       const target = player.fleet.find((v) => v.id === action.vehicleId)
-      if (!target) return reject(state, 'Dieses Schiff gehört nicht zu Ihrem Haus.')
+      if (!target) return reject(state, 'reject.notYourShip')
       if (target.id === sender.id) {
-        return reject(state, 'Sie stehen an Bord — sagen Sie es dem Kapitän selbst.')
+        return reject(state, 'reject.tellCaptainYourself')
       }
       if (player.cash < draft.config.pigeon.price) {
-        return reject(state, 'Der Taubenschlag will bezahlt werden.')
+        return reject(state, 'reject.loftUnpaid')
       }
 
       // The bird flies where you address it. Whether she is there is your
       // problem, and you will not be told either way.
       const toNode = action.toPort
       if (!portAt(ctx, toNode)) {
-        return reject(state, 'Dorthin fliegt keine Taube.')
+        return reject(state, 'reject.noPigeonRoute')
       }
 
       patchPlayer(draft, index, { cash: player.cash - draft.config.pigeon.price })
@@ -1220,12 +1238,12 @@ export function applyAction(
 
     case 'collectMail': {
       const reader = flagship(player)
-      if (reader.voyage) return reject(state, 'Post gibt es nur an Land.')
+      if (reader.voyage) return reject(state, 'reject.mailAshoreOnly')
       const here = portAt(ctx, reader.nodeId)
-      if (!here) return reject(state, 'Post gibt es nur im Hafen.')
+      if (!here) return reject(state, 'reject.mailInPortOnly')
 
       const waiting = player.knowledge.waiting[reader.nodeId] ?? []
-      if (waiting.length === 0) return reject(state, 'Es liegt nichts für Sie bereit.')
+      if (waiting.length === 0) return reject(state, 'reject.noMail')
 
       // A letter is news of a date, not of now: it updates the belief only if
       // it is fresher than what is already known.
@@ -1265,13 +1283,13 @@ export function applyAction(
     case 'boardVehicle': {
       const current = flagship(player)
       const target = player.fleet.find((v) => v.id === action.vehicleId)
-      if (!target) return reject(state, 'Dieses Schiff gehört nicht zu Ihrem Haus.')
+      if (!target) return reject(state, 'reject.notYourShip')
       if (target.id === current.id) break
       if (current.voyage || target.voyage) {
-        return reject(state, 'Man wechselt das Schiff nur im Hafen.')
+        return reject(state, 'reject.switchInPortOnly')
       }
       if (current.nodeId !== target.nodeId) {
-        return reject(state, 'Dieses Schiff liegt in einem anderen Hafen.')
+        return reject(state, 'reject.shipElsewhere')
       }
       patchPlayer(draft, index, { aboard: target.id })
       events.push({ type: 'boarded', playerId: player.id, vehicleId: target.id })
@@ -1280,13 +1298,13 @@ export function applyAction(
 
     case 'endTurn': {
       if (draft.phase !== 'port' && draft.phase !== 'endOfTurn') {
-        return reject(state, 'Der Zug ist noch nicht zu Ende.')
+        return reject(state, 'reject.turnNotOver')
       }
       const portId = portAt(ctx, flagship(player).nodeId)
       if (portId && verkaufszwangOpen(ctx, state, player, portId)) {
         return reject(
           state,
-          'Verkaufszwang: mindestens eine Warengattung, die dieser Hafen nicht führt, muß abgesetzt werden.',
+          'reject.verkaufszwang',
         )
       }
       advanceTurn(ctx, draft, events)
@@ -1632,13 +1650,13 @@ function applyJoin(
   action: Extract<GameAction, { type: 'join' }>,
 ): ActionResult {
   if (state.players.some((p) => p.id === action.playerId)) {
-    return reject(state, 'Dieser Kaufmann ist bereits eingetragen.')
+    return reject(state, 'reject.nameTaken')
   }
   if (state.players.length >= MAX_PLAYERS) {
-    return reject(state, `Mehr als ${MAX_PLAYERS} Schiffe fahren nicht.`)
+    return reject(state, 'reject.tableFull', { n: MAX_PLAYERS })
   }
   if (state.phase !== 'lobby' && state.joinPolicy !== 'jederzeit') {
-    return reject(state, 'Diese Partie nimmt keine Nachzügler auf.')
+    return reject(state, 'reject.noLatecomers')
   }
 
   const draft = draftOf(state)
@@ -1731,24 +1749,24 @@ function applyTelegramm(
   action: Extract<GameAction, { type: 'telegramm' }>,
 ): ActionResult {
   const sender = state.players.find((p) => p.id === action.by)
-  if (!sender) return reject(state, 'Nur wer mit am Tisch sitzt, kann telegrafieren.')
+  if (!sender) return reject(state, 'reject.onlyAtTableMayWire')
 
   // One line, as a telegram is. Newlines and runs of space collapse, so no
   // message can rearrange the page it lands on.
   const text = action.text.replace(/\s+/g, ' ').trim().slice(0, TELEGRAM_LIMIT)
-  if (!text) return reject(state, 'Ein leeres Telegramm nimmt die Post nicht an.')
+  if (!text) return reject(state, 'reject.emptyTelegram')
 
   // The state is untouched: this is the one action that only says something.
   return { state, events: [{ type: 'telegramm', playerId: sender.id, text }] }
 }
 
 function applyStart(state: GameState): ActionResult {
-  if (state.phase !== 'lobby') return reject(state, 'Die Partie läuft bereits.')
-  if (state.players.length < 1) return reject(state, 'Es braucht mindestens einen Kaufmann.')
+  if (state.phase !== 'lobby') return reject(state, 'reject.alreadyRunning')
+  if (state.players.length < 1) return reject(state, 'reject.needOneMerchant')
 
   const realtime = state.config.travel === 'echtzeit'
   if (realtime && state.now === 0) {
-    return reject(state, 'Der Weltuhr fehlt der Anschlag.')
+    return reject(state, 'reject.clockNotSet')
   }
 
   const draft = draftOf(state)

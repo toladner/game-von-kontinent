@@ -1,5 +1,6 @@
 import { PACK_ENTRIES, packById as packFromRegistry } from '@content/packs'
 import type { ContentPack } from '@engine/types'
+import type { Localized } from '@i18n/locale'
 
 /**
  * What the player chooses before the first die is thrown.
@@ -100,8 +101,8 @@ export const DEFAULT_OPTIONS: GameOptions = {
  */
 export interface PackEntry {
   readonly id: string
-  readonly name: string
-  readonly blurb: string
+  readonly name: Localized<string>
+  readonly blurb: Localized<string>
   readonly ready: boolean
   readonly pack?: ContentPack
 }
@@ -120,14 +121,14 @@ export function packById(id: string): ContentPack {
 
 export interface Capability {
   readonly ready: boolean
-  readonly note: string
+  readonly note: Localized<string> | null
 }
 
 /** What is actually built today. The setup screen reads this, not a guess. */
 export const CAPABILITIES: Record<string, Capability> = {
-  'travel:wuerfel': { ready: true, note: '' },
-  'travel:echtzeit': { ready: true, note: '' },
-  'sicht:normal': { ready: true, note: '' },
+  'travel:wuerfel': { ready: true, note: null },
+  'travel:echtzeit': { ready: true, note: null },
+  'sicht:normal': { ready: true, note: null },
   /*
    * Sicht "realistisch" is switched off at the door rather than removed.
    *
@@ -141,17 +142,20 @@ export const CAPABILITIES: Record<string, Capability> = {
    */
   'sicht:realistisch': {
     ready: false,
-    note: 'Nebel, Sichtungen und Brieftauben stehen, aber der Nachrichtenverlauf übersteht kein Neuladen. Kommt zurück, sobald das rund ist.',
+    note: {
+      de: 'Nebel, Sichtungen und Brieftauben stehen, aber der Nachrichtenverlauf übersteht kein Neuladen. Kommt zurück, sobald das rund ist.',
+      en: 'Fog, sightings and carrier pigeons all work, but the news log does not survive a reload. It comes back once that is sound.',
+    },
   },
-  'table:lokal': { ready: true, note: '' },
-  'table:online-eroeffnen': { ready: true, note: '' },
-  'table:online-beitreten': { ready: true, note: '' },
-  'angebot:fest': { ready: true, note: '' },
-  'angebot:zufaellig': { ready: true, note: '' },
-  'preise:fest': { ready: true, note: '' },
-  'preise:entfernung': { ready: true, note: '' },
-  'konjunktur:klassisch': { ready: true, note: '' },
-  'konjunktur:erweitert': { ready: true, note: '' },
+  'table:lokal': { ready: true, note: null },
+  'table:online-eroeffnen': { ready: true, note: null },
+  'table:online-beitreten': { ready: true, note: null },
+  'angebot:fest': { ready: true, note: null },
+  'angebot:zufaellig': { ready: true, note: null },
+  'preise:fest': { ready: true, note: null },
+  'preise:entfernung': { ready: true, note: null },
+  'konjunktur:klassisch': { ready: true, note: null },
+  'konjunktur:erweitert': { ready: true, note: null },
 }
 
 export function isReady(key: string): boolean {

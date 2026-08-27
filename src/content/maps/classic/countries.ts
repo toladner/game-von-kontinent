@@ -1,4 +1,5 @@
 import type { Country } from '../../../engine/types'
+import { withEnglishCountry } from '../../naming'
 
 /**
  * Export countries exactly as printed in the Warenverzeichnis (liste.pdf).
@@ -7,7 +8,7 @@ import type { Country } from '../../../engine/types'
  * The United States are the one country whose list is broken down per city.
  * Those live as per-port overrides in `./ports`.
  */
-export const COUNTRIES: readonly Country[] = [
+const PRINTED: readonly Country[] = [
   // --- Europa -------------------------------------------------------------
   { id: 'belgien', name: 'Belgien', continent: 'europa', exports: [21, 34, 41, 42, 43] },
   { id: 'daenemark', name: 'Dänemark', continent: 'europa', exports: [13, 20, 42] },
@@ -81,6 +82,8 @@ export const COUNTRIES: readonly Country[] = [
   },
   { id: 'kongo', name: 'Volksrep. Kongo', continent: 'afrika', exports: [27, 17, 47, 64] },
 ]
+
+export const COUNTRIES: readonly Country[] = PRINTED.map(withEnglishCountry)
 
 export const COUNTRIES_BY_ID: ReadonlyMap<string, Country> = new Map(
   COUNTRIES.map((c) => [c.id, c]),

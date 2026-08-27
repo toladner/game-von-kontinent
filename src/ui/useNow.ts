@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { currentLocale } from '@app/locale'
+import { t } from '@i18n'
+import { bcp47 } from '@i18n/locale'
 
 /**
  * The wall clock, for countdowns and for sliding ships between pips.
@@ -20,21 +23,38 @@ export function useNow(intervalMs = 1000, active = true): number {
   return now
 }
 
+/*
+ * The four below read the chosen language rather than taking it as an
+ * argument. They are called from a couple of dozen places, most of them deep
+ * inside a sheet that has no other reason to know what language it is in, and
+ * threading a locale through all of them to render "in 2 hrs" would be a great
+ * deal of plumbing for a string with one variable in it. Changing language
+ * re-renders the tree, so the values follow.
+ */
+
 /** "in 2 Std 14 Min", "in 47 Min", "in 30 Sek", "jetzt". */
 export function untilText(target: number, now: number): string {
+  const locale = currentLocale()
   const ms = target - now
-  if (ms <= 0) return 'jetzt'
+  if (ms <= 0) return t(locale, 'time.now')
   const totalMinutes = Math.floor(ms / 60_000)
-  if (totalMinutes < 1) return `in ${Math.max(1, Math.round(ms / 1000))} Sek`
-  if (totalMinutes < 60) return `in ${totalMinutes} Min`
+  if (totalMinutes < 1) {
+    return t(locale, 'time.in.seconds', { n: Math.max(1, Math.round(ms / 1000)) })
+  }
+  if (totalMinutes < 60) return t(locale, 'time.in.minutes', { n: totalMinutes })
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
-  return minutes === 0 ? `in ${hours} Std` : `in ${hours} Std ${minutes} Min`
+  return minutes === 0
+    ? t(locale, 'time.in.hours', { n: hours })
+    : t(locale, 'time.in.hoursMinutes', { h: hours, m: minutes })
 }
 
 /** A wall-clock time of day, as a ship's officer would write it. */
 export function clockText(at: number): string {
-  return new Date(at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  return new Date(at).toLocaleTimeString(bcp47(currentLocale()), {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 /**
@@ -47,21 +67,24 @@ export function clockText(at: number): string {
  * costs nothing.
  */
 export function roughDuration(ms: number): string {
-  if (ms <= 0) return 'abgelaufen'
+  const locale = currentLocale()
+  if (ms <= 0) return t(locale, 'time.elapsed')
   const minutes = Math.floor(ms / 60_000)
-  if (minutes < 60) return `${minutes} Min`
+  if (minutes < 60) return t(locale, 'time.minutes', { n: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 48) return `${hours} Std`
-  const days = Math.floor(hours / 24)
-  return `${days} Tage`
+  if (hours < 48) return t(locale, 'time.hours', { n: hours })
+  return t(locale, 'time.days', { n: Math.floor(hours / 24) })
 }
 
 /** "3 Std 20 Min" — a plain duration, no preposition. */
 export function durationText(ms: number): string {
-  if (ms <= 0) return 'abgelaufen'
+  const locale = currentLocale()
+  if (ms <= 0) return t(locale, 'time.elapsed')
   const totalMinutes = Math.floor(ms / 60_000)
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
-  if (hours === 0) return `${minutes} Min`
-  return minutes === 0 ? `${hours} Std` : `${hours} Std ${minutes} Min`
+  if (hours === 0) return t(locale, 'time.minutes', { n: minutes })
+  return minutes === 0
+    ? t(locale, 'time.hours', { n: hours })
+    : t(locale, 'time.hoursMinutes', { h: hours, m: minutes })
 }

@@ -40,10 +40,10 @@ describe('trader personas', () => {
     const women = NAMES.map((n) => makePersona(n, '', 'w'))
     const men = NAMES.map((n) => makePersona(n, '', 'm'))
     // Superkargo is the one title that does not inflect.
-    expect(women.some((p) => p.rank === 'Reederin')).toBe(true)
-    expect(women.some((p) => p.rank === 'Reeder')).toBe(false)
-    expect(men.some((p) => p.rank === 'Reeder')).toBe(true)
-    expect(men.some((p) => p.rank === 'Reederin')).toBe(false)
+    expect(women.some((p) => p.rank.de === 'Reederin')).toBe(true)
+    expect(women.some((p) => p.rank.de === 'Reeder')).toBe(false)
+    expect(men.some((p) => p.rank.de === 'Reeder')).toBe(true)
+    expect(men.some((p) => p.rank.de === 'Reederin')).toBe(false)
   })
 
   it('still gives the quay both women and men, whatever the players chose', () => {
@@ -66,10 +66,10 @@ describe('trader personas', () => {
 
   it('reserves "& Töchter" for a house a woman signs for', () => {
     const men = NAMES.map((n) => makePersona(n, '', 'm').house)
-    expect(men.some((h) => h.includes('Töchter'))).toBe(false)
-    expect(NAMES.map((n) => makePersona(n, '', 'w').house).some((h) => h.includes('Töchter'))).toBe(
-      true,
-    )
+    expect(men.some((h) => h.de.includes('Töchter'))).toBe(false)
+    expect(
+      NAMES.map((n) => makePersona(n, '', 'w').house).some((h) => h.de.includes('Töchter')),
+    ).toBe(true)
   })
 
   it('draws on a wide enough wardrobe to feel like a crowd', () => {
@@ -77,7 +77,11 @@ describe('trader personas', () => {
       NAMES.map((n) => {
         const p = makePersona(n)
         const t = p.portrait
-        return [p.rank, p.house, t.face, t.hair, t.beard, t.headwear, t.accessory, t.age].join('|')
+        // .de on both: joining the pair objects themselves would stringify
+        // every trader as [object Object] and quietly pass on nothing.
+        return [p.rank.de, p.house.de, t.face, t.hair, t.beard, t.headwear, t.accessory, t.age].join(
+          '|',
+        )
       }),
     )
     // 400 traders, essentially no repeats.
@@ -109,7 +113,7 @@ describe('the people on the quay', () => {
     ])
     for (let i = 0; i < 200; i++) {
       for (const person of harbourCharacters(`hafen-${i}`, 1, 2)) {
-        seen.get(person.gender)!.add(person.role)
+        seen.get(person.gender)!.add(person.role.de)
       }
     }
     // Both show up, and no role appears under both spellings.
@@ -122,15 +126,18 @@ describe('the people on the quay', () => {
     const first = harbourGuide('hamburg', 'classic')
     expect(harbourGuide('hamburg', 'classic')).toEqual(first)
     expect(harbourGuide('lissabon', 'classic').name).not.toBe(first.name)
-    expect(['Kontormakler', 'Kontormaklerin']).toContain(first.role)
+    expect(['Kontormakler', 'Kontormaklerin']).toContain(first.role.de)
   })
 
   it('gives ships masters of both kinds', () => {
     const masters = Array.from({ length: 200 }, (_, i) => makeShipIdentity(`v${i}`))
-    expect(masters.some((m) => m.captain.startsWith('Kapitänin '))).toBe(true)
-    expect(masters.some((m) => m.captain.startsWith('Kapitän '))).toBe(true)
+    expect(masters.some((m) => m.captain.de.startsWith('Kapitänin '))).toBe(true)
+    expect(masters.some((m) => m.captain.de.startsWith('Kapitän '))).toBe(true)
     for (const m of masters) {
-      expect(m.captain.startsWith(m.captainGender === 'w' ? 'Kapitänin' : 'Kapitän')).toBe(true)
+      expect(m.captain.de.startsWith(m.captainGender === 'w' ? 'Kapitänin' : 'Kapitän')).toBe(true)
     }
+    // English has one word for both, so the same master reads as "Master"
+    // either way — and it is still the same master.
+    for (const m of masters) expect(m.captain.en.startsWith('Master ')).toBe(true)
   })
 })

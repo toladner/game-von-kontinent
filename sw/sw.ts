@@ -97,6 +97,8 @@ async function announce(notice: Notice | null): Promise<void> {
   // A push whose payload did not survive still gets a notice: the browser
   // demands one, and "something happened" beats a silent lie.
   await self.registration.showNotification(notice?.title ?? 'Von Kontinent zu Kontinent', {
+    // A push whose payload did not survive has no language either, so this
+    // one line stays German — the app's own name is German too.
     body: notice?.body ?? 'Es gibt Neues von Ihrer Partie.',
     tag: notice?.tag ?? 'meldung',
     icon: './icon-192.png',

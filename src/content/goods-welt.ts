@@ -1,4 +1,5 @@
 import type { Good } from '../engine/types'
+import { withEnglishGood } from './naming'
 
 /**
  * The Warenkarten the printed game never needed.
@@ -13,7 +14,7 @@ import type { Good } from '../engine/types'
  * thousands, Verkauf a plausible margin above it, and the rare and difficult
  * goods dearer than the bulk ones.
  */
-export const GOODS_WELT: readonly Good[] = [
+const ADDED: readonly Good[] = [
   { id: 73, name: 'Rohseide', buy: 200_000, sell: 260_000, category: 'textil' },
   { id: 74, name: 'Zinn', buy: 180_000, sell: 240_000, category: 'bergbau' },
   { id: 75, name: 'Sojabohnen', buy: 60_000, sell: 90_000, category: 'agrar' },
@@ -33,3 +34,6 @@ export const GOODS_WELT: readonly Good[] = [
   { id: 89, name: 'Bambus', buy: 30_000, sell: 45_000, category: 'agrar' },
   { id: 90, name: 'Ingwer', buy: 50_000, sell: 70_000, category: 'genuss' },
 ]
+
+/** The additions, with their English names folded on. See `@content/goods`. */
+export const GOODS_WELT: readonly Good[] = ADDED.map(withEnglishGood)

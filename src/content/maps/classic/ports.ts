@@ -1,4 +1,5 @@
 import type { Port } from '../../../engine/types'
+import { withEnglishPort } from '../../naming'
 
 /**
  * Every Ausfuhrhafen printed on the classic board, at its real position.
@@ -14,7 +15,7 @@ const p = (
   lat: number,
   lon: number,
   extra: Partial<Port> = {},
-): Port => ({ kind: 'port', id, name, country, lat, lon, ...extra })
+): Port => withEnglishPort({ kind: 'port', id, name, country, lat, lon, ...extra })
 
 export const PORTS: readonly Port[] = [
   // --- Europa -------------------------------------------------------------

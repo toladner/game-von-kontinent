@@ -677,7 +677,7 @@ describe('the world market in real time', () => {
     const offer = buyOffers(ctx, s, s.players[0]!, here).find((o) => o.status === 'ok')!
     s = applyAction(ctx, s, { type: 'buy', goodId: offer.goodId, by: 'a' }).state
 
-    const levy = CLASSIC_PACK.konjunktur.find((c) => c.title === 'Steuer')!
+    const levy = CLASSIC_PACK.konjunktur.find((c) => c.title.de === 'Steuer')!
     const first = turn(s, levy.id)
     expect(first.events.some((e) => e.type === 'paid' && e.reason === 'steuer')).toBe(true)
 
@@ -698,7 +698,7 @@ describe('the world market in real time', () => {
   it('still moves prices for everyone the moment it turns', () => {
     // The part that always worked, and has to go on working: a Hausse needs
     // no ship to be anywhere in particular.
-    const hausse = CLASSIC_PACK.konjunktur.find((c) => c.title === 'Hausse')!
+    const hausse = CLASSIC_PACK.konjunktur.find((c) => c.title.de === 'Hausse')!
     const turned = turn(afloat(), hausse.id)
     expect(turned.state.saleModifierPercent).toBeGreaterThan(0)
   })
@@ -707,7 +707,7 @@ describe('the world market in real time', () => {
     const s = turn(afloat(), cardWith('portFeeAllInPort').id).state
     expect(s.marketSettled.length).toBeGreaterThan(0)
 
-    const next = turn(s, CLASSIC_PACK.konjunktur.find((c) => c.title === 'Hausse')!.id)
+    const next = turn(s, CLASSIC_PACK.konjunktur.find((c) => c.title.de === 'Hausse')!.id)
     expect(next.state.marketSettled).toHaveLength(0)
   })
 })
@@ -768,7 +768,7 @@ describe('a market that does not always speak', () => {
   })
 
   it('lets the standing notice lapse when it goes quiet', () => {
-    const hausse = CLASSIC_PACK.konjunktur.find((c) => c.title === 'Hausse')!
+    const hausse = CLASSIC_PACK.konjunktur.find((c) => c.title.de === 'Hausse')!
     const loud = session({
       ...odds(afloat(), 100),
       deck: [hausse.id, ...afloat().deck.filter((d) => d !== hausse.id)],
@@ -1542,7 +1542,7 @@ describe('a harbour shut to trade', () => {
     expect(shut.events.some((e) => e.type === 'portClosed' && e.portId === closure.portId)).toBe(
       true,
     )
-    expect(closure.title).toContain(ctx.portsById.get(closure.portId)!.name)
+    expect(closure.title.de).toContain(ctx.portsById.get(closure.portId)!.name)
   })
 
   it('refuses both sides of the counter while it stands', () => {
@@ -1729,7 +1729,7 @@ describe('reading the temper of a Konjunkturkarte', () => {
   const printed = CLASSIC_PACK.konjunktur
   const erweitert = CLASSIC_PACK.konjunkturErweitert ?? []
   const titled = (title: string): KonjunkturCard =>
-    [...printed, ...erweitert].find((c) => c.title === title)!
+    [...printed, ...erweitert].find((c) => c.title.de === title)!
 
   it('calls a Hausse good and a Baisse bad', () => {
     expect(konjunkturTenor(titled('Hausse'))).toBe('gut')
@@ -1761,7 +1761,7 @@ describe('reading the temper of a Konjunkturkarte', () => {
   })
 
   it('weighs a money order against what it does to prices', () => {
-    const orders = printed.filter((c) => c.title === 'Telegramm')
+    const orders = printed.filter((c) => c.title.de === 'Telegramm')
     // 10.000 and prices up; 15.000 and prices level; 20.000 and prices down.
     expect(orders.map(konjunkturTenor)).toEqual(['gut', 'gut', 'gemischt'])
   })

@@ -1,4 +1,6 @@
 import type { Gender, PortraitTraits } from '@engine/persona'
+import { t, type Message } from '@i18n'
+import { currentLocale } from './locale'
 import type { GameAction } from '@engine/actions'
 import type { GameState, JoinPolicy } from '@engine/state'
 
@@ -35,7 +37,7 @@ type ServerMessage =
   | { t: 'view'; state: GameState }
   | { t: 'presence'; online: string[] }
   | { t: 'focus'; playerId: string; step: string }
-  | { t: 'error'; reason: string }
+  | { t: 'error'; reason: Message }
   | { t: 'pong' }
 
 export interface SessionHandlers {
@@ -46,7 +48,7 @@ export interface SessionHandlers {
   onPresence: (online: string[]) => void
   /** Which harbour panel another seat is looking at. Presence, not state. */
   onFocus: (playerId: string, step: string) => void
-  onError: (reason: string) => void
+  onError: (reason: Message) => void
   onStatus: (status: ConnectionStatus) => void
 }
 
@@ -150,7 +152,9 @@ export async function createOnlineGame(options: {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(options),
   })
-  if (!res.ok) throw new Error('Die Exportbank meldet: Partie konnte nicht eröffnet werden.')
+  // Thrown rather than returned because the caller shows it as-is; the
+  // language is this device's, since this device is the one that asked.
+  if (!res.ok) throw new Error(t(currentLocale(), 'net.couldNotOpen'))
   return (await res.json()) as { code: string; meta: GameMeta }
 }
 

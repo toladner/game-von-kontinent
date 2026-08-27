@@ -3,6 +3,8 @@ import { flagship, type GameState, type PlayerState } from './state'
 import { buyOffers, marketReport, portAt, saleQuotes, verkaufszwangOpen } from './selectors'
 import type { KonjunkturCard, PortId } from './types'
 import { exportsAt } from './market'
+import { t, tn } from '../i18n'
+import { formatNumber, named, type Locale } from '../i18n/locale'
 
 /**
  * The round the Kontormakler walks you through a harbour.
@@ -22,6 +24,11 @@ import { exportsAt } from './market'
  * Kept out of the UI because it is exactly the kind of thing worth testing:
  * "an empty hold in a port that exports something must be walked past the
  * Angebot" is a rule about the game, not about React.
+ *
+ * He speaks whichever language the reader has chosen, which is why `locale`
+ * runs through every function here. The `id` of each stage does not: it is
+ * what the tests and the tabs key on, and it stays German because it names a
+ * situation rather than saying anything to anybody.
  */
 
 /** The three panels the walk can visit, in the order it visits them. */
@@ -42,27 +49,32 @@ export interface Stage {
   readonly urgency: 'ruhig' | 'hinweis' | 'dringend'
 }
 
-const money = (n: number) => n.toLocaleString('de-DE')
-
-/**
- * Marks a word for emphasis. The UI renders *...* in bold — see Emph — so the
- * port, the good and the sum can be picked out of a full sentence at a glance
- * without the copy turning into a table.
+/*
+ * A word wrapped in *...* is set in bold by `Emph`, so the port, the good and
+ * the sum can be picked out of a full sentence at a glance without the copy
+ * turning into a table. Those asterisks now live in the phrase table rather
+ * than here, because which word is worth picking out of a sentence is rarely
+ * in the same place in two languages.
  */
-const key = (text: string | number) => `*${text}*`
 
 export function harbourPlan(
   ctx: EngineContext,
   state: GameState,
   player: PlayerState,
   portId: PortId,
+  locale: Locale = 'de',
 ): readonly Stage[] {
+  const money = (n: number) => formatNumber(locale, n)
   const ship = flagship(player)
   const cargo = ship.cargo
   const offers = buyOffers(ctx, state, player, portId)
   const affordable = offers.filter((o) => o.status === 'ok')
   const left = state.config.maxPurchasesPerPort - ship.purchasesThisVisit.length
   const zwang = verkaufszwangOpen(ctx, state, player, portId)
+
+  const LADUNG = t(locale, 'advice.tab.verkaufen')
+  const ANGEBOT = t(locale, 'advice.tab.kaufen')
+  const WOHIN = t(locale, 'advice.tab.wohin')
 
   // --- 1. The hold. Always first: it is the question every port opens with.
   const best = saleQuotes(ctx, state, player, portId)
@@ -72,32 +84,36 @@ export function harbourPlan(
   const laden: Stage = zwang
     ? {
         step: 'verkaufen',
-        label: 'Ladung',
+        label: LADUNG,
         id: 'verkaufszwang',
-        text: `Die Börse verlangt einen Abschluß: Sie müssen hier ${key('eine Ware absetzen')}, die dieser Hafen nicht selbst führt. Vorher kommen Sie nicht hinaus.`,
+        text: t(locale, 'advice.verkaufszwang'),
         urgency: 'dringend',
       }
     : best
       ? {
           step: 'verkaufen',
-          label: 'Ladung',
+          label: LADUNG,
           id: 'hier-verkaufen',
-          text: `${key(goodOf(ctx, best.item.goodId).name)} nimmt man Ihnen hier ab — ${key(money(best.price))}, das sind ${key(money(best.profit))} über Ihrem Einkauf.`,
+          text: t(locale, 'advice.hierVerkaufen', {
+            good: named(goodOf(ctx, best.item.goodId)),
+            price: money(best.price),
+            profit: money(best.profit),
+          }),
           urgency: 'hinweis',
         }
       : cargo.length > 0
         ? {
             step: 'verkaufen',
-            label: 'Ladung',
+            label: LADUNG,
             id: 'nichts-abzusetzen',
-            text: `Für Ihre ${key(`${cargo.length} ${cargo.length === 1 ? 'Ware' : 'Posten'}`)} zahlt hier niemand den vollen Preis. Heben Sie sie auf.`,
+            text: tn(locale, 'advice.nichtsAbzusetzen', cargo.length),
             urgency: 'ruhig',
           }
         : {
             step: 'verkaufen',
-            label: 'Ladung',
+            label: LADUNG,
             id: 'nichts-an-bord',
-            text: `Ihr ${key('Laderaum ist leer')} — abzusetzen gibt es hier also nichts.`,
+            text: t(locale, 'advice.nichtsAnBord'),
             urgency: 'ruhig',
           }
 
@@ -109,47 +125,49 @@ export function harbourPlan(
     const cheapest = [...affordable].sort(
       (a, b) => goodOf(ctx, a.goodId).buy - goodOf(ctx, b.goodId).buy,
     )[0]!
-    const name = goodOf(ctx, cheapest.goodId).name
-    const ab = money(goodOf(ctx, cheapest.goodId).buy)
+    const good = named(goodOf(ctx, cheapest.goodId))
+    const price = money(goodOf(ctx, cheapest.goodId).buy)
     angebot =
       cargo.length === 0
         ? {
             step: 'kaufen',
-            label: 'Angebot',
+            label: ANGEBOT,
             id: 'leer-nachladen',
-            text: `Und ${key('leer verdient kein Schiff')}. Hier wird ${key(name)} verladen, ab ${key(ab)}. Nehmen Sie ${left === 1 ? key('noch einen Posten') : `bis zu ${key(`${left} Posten`)}`} mit.`,
+            text: tn(locale, 'advice.leerNachladen', left, { good, price }),
             urgency: 'dringend',
           }
         : {
             step: 'kaufen',
-            label: 'Angebot',
+            label: ANGEBOT,
             id: 'nachladen',
-            text: `Hier dürfen Sie noch ${key(left === 1 ? 'eine Ware' : `${left} Waren`)} laden — der Laderaum selbst hat keine Grenze.`,
+            text: tn(locale, 'advice.nachladen', left),
             urgency: 'ruhig',
           }
   } else if (offers.length === 0) {
     angebot = {
       step: 'kaufen',
-      label: 'Angebot',
+      label: ANGEBOT,
       id: 'kein-angebot',
-      text: `Dieser Hafen führt ${key('nichts aus')}. Zu laden gibt es hier nichts — anderswo schon.`,
+      text: t(locale, 'advice.keinAngebot'),
       urgency: 'ruhig',
     }
   } else if (left <= 0) {
     angebot = {
       step: 'kaufen',
-      label: 'Angebot',
+      label: ANGEBOT,
       id: 'ladeschluss',
-      text: `${key('Ladeschluß')} — zwei Waren je Hafen, und die haben Sie. Mehr geht hier nicht an Bord.`,
+      text: t(locale, 'advice.ladeschluss'),
       urgency: 'ruhig',
     }
   } else {
-    const billigste = money(Math.min(...offers.map((o) => goodOf(ctx, o.goodId).buy)))
     angebot = {
       step: 'kaufen',
-      label: 'Angebot',
+      label: ANGEBOT,
       id: 'zu-teuer',
-      text: `Was hier verladen wird, ist Ihnen heute zu teuer — das Billigste kostet ${key(billigste)}, Ihre Kasse hält ${key(money(player.cash))}.`,
+      text: t(locale, 'advice.zuTeuer', {
+        cheapest: money(Math.min(...offers.map((o) => goodOf(ctx, o.goodId).buy))),
+        cash: money(player.cash),
+      }),
       urgency: 'hinweis',
     }
   }
@@ -160,24 +178,27 @@ export function harbourPlan(
     cargo.length === 0
       ? {
           step: 'wohin',
-          label: 'Wohin?',
+          label: WOHIN,
           id: 'nichts-zu-planen',
-          text: `Ohne Ladung ist ${key('jeder Hafen gleich weit')}. Kaufen Sie erst etwas, dann lohnt der Blick auf die Karte.`,
+          text: t(locale, 'advice.nichtsZuPlanen'),
           urgency: 'ruhig',
         }
       : target
         ? {
             step: 'wohin',
-            label: 'Wohin?',
+            label: WOHIN,
             id: 'weiterfahren',
-            text: `${key(target.name)} führt Ihre Ware nicht selbst und zahlt voll — ${key(money(target.profit))} bei ${key(`${target.distance} ${target.distance === 1 ? 'Punkt' : 'Punkten'}`)} Fahrt.`,
+            text: tn(locale, 'advice.weiterfahren', target.distance, {
+              port: target.name,
+              profit: money(target.profit),
+            }),
             urgency: 'hinweis',
           }
         : {
             step: 'wohin',
-            label: 'Wohin?',
+            label: WOHIN,
             id: 'kein-markt',
-            text: 'Für diese Ladung findet sich von hier aus kein Markt. Fahren Sie trotzdem — anderswo sieht es anders aus.',
+            text: t(locale, 'advice.keinMarkt'),
             urgency: 'hinweis',
           }
 
@@ -190,8 +211,9 @@ export function harbourAdvice(
   state: GameState,
   player: PlayerState,
   portId: PortId,
+  locale: Locale = 'de',
 ): Stage {
-  return harbourPlan(ctx, state, player, portId)[0]!
+  return harbourPlan(ctx, state, player, portId, locale)[0]!
 }
 
 /**
@@ -228,11 +250,11 @@ export interface Greeting {
  * phrased differently in each port rather than repeating one line 105 times.
  */
 const OFFERS = [
-  'Ich führe hier die Bücher — wenn Sie nicht weiterwissen, fragen Sie mich.',
-  'Solange Ihr Schiff hier liegt, stehe ich für Sie am Kai.',
-  'Ich kenne jeden Kontrakt in diesem Hafen. Fragen kostet nichts.',
-  'Wenn Sie nicht wissen, was zu tun ist: ich bin gleich hier.',
-  'Man schickt mich zu jedem fremden Schiff. Heute also zu Ihnen.',
+  'advice.offer.0',
+  'advice.offer.1',
+  'advice.offer.2',
+  'advice.offer.3',
+  'advice.offer.4',
 ] as const
 
 // ---------------------------------------------------------------------------
@@ -262,7 +284,9 @@ export function konjunkturOutcome(
   ctx: EngineContext,
   player: PlayerState,
   card: KonjunkturCard,
+  locale: Locale = 'de',
 ): CardOutcome {
+  const money = (n: number) => formatNumber(locale, n)
   const held = flagship(player).cargo.reduce((sum, item) => sum + item.pricePaid, 0)
   const inPort = portAt(ctx, flagship(player).nodeId) !== null
 
@@ -270,36 +294,46 @@ export function konjunkturOutcome(
     switch (effect.kind) {
       case 'payoutToDrawer':
         return {
-          headline: `Sie erhalten ${money(effect.amount)}.`,
-          detail: 'Eine telegrafische Überweisung an Ihr Kontor. Sonst ändert sich nichts.',
+          headline: t(locale, 'advice.card.payout', { amount: money(effect.amount) }),
+          detail: t(locale, 'advice.card.payout.detail'),
           tone: 'gut',
         }
 
       case 'feeForDrawer':
         return {
-          headline: `Sie zahlen ${money(effect.amount)}.`,
-          detail: 'Entladegeld, nur für Ihr Schiff. Die Mitspieler bleiben verschont.',
+          headline: t(locale, 'advice.card.fee', { amount: money(effect.amount) }),
+          detail: t(locale, 'advice.card.fee.detail'),
           tone: 'schlecht',
         }
 
       case 'portFeeAllInPort':
         return {
-          headline: inPort ? `Sie zahlen ${money(effect.amount)}.` : 'Sie zahlen nichts.',
-          detail: inPort
-            ? 'Hafengebühr — fällig für jedes Schiff, das gerade in einem Hafen liegt.'
-            : 'Hafengebühr trifft nur Schiffe, die in einem Hafen liegen. Ihres liegt auf See.',
+          headline: inPort
+            ? t(locale, 'advice.card.fee', { amount: money(effect.amount) })
+            : t(locale, 'advice.card.payNothing'),
+          detail: t(locale, inPort ? 'advice.card.portFee.detail' : 'advice.card.portFee.atSea'),
           tone: inPort ? 'schlecht' : 'neutral',
         }
 
       case 'leviedOnAllShips': {
         const due = Math.round((held * effect.percentOfCargoValue) / 100)
-        const label = effect.levy === 'steuer' ? 'Steuer' : 'Versicherung'
+        const levy = t(
+          locale,
+          effect.levy === 'steuer' ? 'advice.card.levy.steuer' : 'advice.card.levy.versicherung',
+        )
         return {
-          headline: due > 0 ? `Sie zahlen ${money(due)}.` : 'Sie zahlen nichts.',
+          headline:
+            due > 0
+              ? t(locale, 'advice.card.fee', { amount: money(due) })
+              : t(locale, 'advice.card.payNothing'),
           detail:
             due > 0
-              ? `${label}: ${effect.percentOfCargoValue} % vom Warenwert Ihrer Ladung (${money(held)}). Gilt für alle Mitspieler.`
-              : `${label} bemißt sich am Warenwert an Bord — Ihr Laderaum ist leer, also bleibt es bei null.`,
+              ? t(locale, 'advice.card.levy.detail', {
+                  levy,
+                  percent: effect.percentOfCargoValue,
+                  held: money(held),
+                })
+              : t(locale, 'advice.card.levy.empty', { levy }),
           tone: due > 0 ? 'schlecht' : 'neutral',
         }
       }
@@ -307,43 +341,52 @@ export function konjunkturOutcome(
       case 'regionalPriceDelta': {
         const up = effect.percent > 0
         return {
-          headline: `${effect.title}: ${up ? '+' : '−'}${Math.abs(effect.percent)} %.`,
-          detail: `Gilt ${effect.rounds} Runden lang für jeden Verkauf in diesem Erdteil — für Sie wie für die Mitspieler. Anderswo ändert sich nichts.`,
+          headline: t(locale, 'advice.card.regional', {
+            title: effect.title,
+            sign: up ? '+' : '−',
+            percent: Math.abs(effect.percent),
+          }),
+          detail: t(locale, 'advice.card.regional.detail', { rounds: effect.rounds }),
           tone: up ? 'gut' : 'schlecht',
         }
       }
 
       case 'stormInRegion':
         return {
-          headline: effect.title,
-          detail: `Jedes Schiff in diesem Seegebiet verliert ${effect.lose === 1 ? 'einen Posten' : `${effect.lose} Posten`} — den teuersten zuerst. Wer anderswo fährt, kommt davon.`,
+          headline: effect.title[locale],
+          detail: tn(locale, 'advice.card.storm', effect.lose),
           tone: 'schlecht',
         }
 
       case 'cargoLostByDrawer':
         return {
-          headline: effect.title,
+          headline: effect.title[locale],
           detail:
             held > 0
-              ? `Sie verlieren ${effect.lose === 1 ? 'einen Posten' : `${effect.lose} Posten`} Ihrer Ladung, den teuersten zuerst.`
-              : 'Ihr Laderaum ist leer — diesmal gibt es nichts zu verlieren.',
+              ? tn(locale, 'advice.card.cargoLost', effect.lose)
+              : t(locale, 'advice.card.cargoLost.empty'),
           tone: held > 0 ? 'schlecht' : 'neutral',
         }
 
       case 'regionalLevy':
         return {
-          headline: `${effect.sign > 0 ? 'Sie erhalten' : 'Sie zahlen'} ${money(effect.amount)}.`,
-          detail: `${effect.title} — fällig für jedes Schiff, das gerade in einem Hafen dieses Erdteils liegt. Liegen Sie anderswo, betrifft es Sie nicht.`,
+          headline: t(
+            locale,
+            effect.sign > 0 ? 'advice.card.regionalLevy.receive' : 'advice.card.regionalLevy.pay',
+            { amount: money(effect.amount) },
+          ),
+          detail: t(locale, 'advice.card.regionalLevy.detail', { title: effect.title }),
           tone: effect.sign > 0 ? 'gut' : 'schlecht',
         }
 
       case 'salePriceDelta': {
         const up = effect.percent > 0
         return {
-          headline: `Verkaufspreise ${up ? '+' : '−'}${Math.abs(effect.percent)} %.`,
-          detail: up
-            ? 'Hausse: alles, was Sie in diesem Hafen absetzen, bringt entsprechend mehr.'
-            : 'Baisse: was Sie in diesem Hafen absetzen, bringt entsprechend weniger. Aufheben ist erlaubt.',
+          headline: t(locale, 'advice.card.prices', {
+            sign: up ? '+' : '−',
+            percent: Math.abs(effect.percent),
+          }),
+          detail: t(locale, up ? 'advice.card.prices.up' : 'advice.card.prices.down'),
           tone: up ? 'gut' : 'schlecht',
         }
       }
@@ -351,8 +394,8 @@ export function konjunkturOutcome(
   }
 
   return {
-    headline: 'Die Börse schweigt.',
-    detail: 'Diese Karte kostet Sie nichts und bringt Ihnen nichts.',
+    headline: t(locale, 'advice.card.silent'),
+    detail: t(locale, 'advice.card.silent.detail'),
     tone: 'neutral',
   }
 }
@@ -362,35 +405,43 @@ export function harbourGreeting(
   state: GameState,
   player: PlayerState,
   portId: PortId,
+  locale: Locale = 'de',
 ): Greeting {
   const port = portOf(ctx, portId)
   const ship = flagship(player)
   const daheim = player.homePort === portId
 
   // Deterministic per harbour, so the same Makler always opens the same way.
-  const offer = OFFERS[[...portId].reduce((n, c) => n + c.charCodeAt(0), 0) % OFFERS.length]!
+  const offer = t(
+    locale,
+    OFFERS[[...portId].reduce((n, c) => n + c.charCodeAt(0), 0) % OFFERS.length]!,
+  )
 
-  const exports = exportsAt(ctx, state, portId).map((id) => goodOf(ctx, id).name)
-  const named = exports.slice(0, 3).join(', ')
+  const exports = exportsAt(ctx, state, portId).map((id) => named(goodOf(ctx, id))[locale])
+  const listed = exports.slice(0, 3).join(', ')
   const ware =
     exports.length === 0
-      ? 'Ausgeführt wird von hier nichts.'
-      : exports.length > 3
-        ? `Von hier gehen ${key(named)} und anderes in alle Welt.`
-        : `Von hier gehen ${key(named)} in alle Welt.`
+      ? t(locale, 'advice.greeting.exportsNone')
+      : t(locale, exports.length > 3 ? 'advice.greeting.exportsMany' : 'advice.greeting.exportsSome', {
+          goods: listed,
+        })
 
   const sellsHere = saleQuotes(ctx, state, player, portId).find(
     (q) => q.kind === 'markt' && q.profit > 0,
   )
   const laderaum =
     ship.cargo.length === 0
-      ? `Ihr ${key('Laderaum ist leer')}.`
+      ? t(locale, 'advice.greeting.holdEmpty')
       : sellsHere
-        ? `Und Ihre ${key(goodOf(ctx, sellsHere.item.goodId).name)} ${key('findet hier einen Abnehmer')}.`
-        : `Ihre ${key(`${ship.cargo.length} Posten`)} nimmt hier allerdings niemand.`
+        ? t(locale, 'advice.greeting.buyerHere', {
+            good: named(goodOf(ctx, sellsHere.item.goodId)),
+          })
+        : tn(locale, 'advice.greeting.noBuyer', ship.cargo.length)
 
   return {
-    headline: daheim ? `Wieder daheim in ${port.name}.` : `Willkommen in ${port.name}!`,
+    headline: t(locale, daheim ? 'advice.greeting.home' : 'advice.greeting.welcome', {
+      port: named(port),
+    }),
     body: `${offer} ${ware} ${laderaum}`,
   }
 }

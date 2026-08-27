@@ -1,4 +1,5 @@
 import type { Good } from '../engine/types'
+import { withEnglishGood } from './naming'
 
 /**
  * The 72 Warenkarten.
@@ -12,7 +13,7 @@ import type { Good } from '../engine/types'
  * with NOTE so they can be checked against the physical cards. Nothing in the
  * engine hardcodes these numbers - fixing one is a one-line edit here.
  */
-export const GOODS: readonly Good[] = [
+const PRINTED: readonly Good[] = [
   { id: 1, name: 'Aluminium', buy: 100_000, sell: 130_000, category: 'bergbau' },
   { id: 2, name: 'Ananas', buy: 40_000, sell: 50_000, category: 'agrar' },
   { id: 3, name: 'Asbest', buy: 60_000, sell: 80_000, category: 'bergbau' },
@@ -89,6 +90,13 @@ export const GOODS: readonly Good[] = [
   { id: 71, name: 'Wolle', buy: 180_000, sell: 240_000, category: 'textil' },
   { id: 72, name: 'Zucker', buy: 110_000, sell: 140_000, category: 'agrar' },
 ]
+
+/**
+ * The deck as the rest of the game sees it: the printed cards above with the
+ * English names folded on. Nothing else changes — the numbers, the prices and
+ * the categories are the transcription, untouched.
+ */
+export const GOODS: readonly Good[] = PRINTED.map(withEnglishGood)
 
 export const GOODS_BY_ID: ReadonlyMap<number, Good> = new Map(GOODS.map((g) => [g.id, g]))
 

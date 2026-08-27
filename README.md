@@ -1,119 +1,140 @@
 # Von Kontinent zu Kontinent
 
-Eine digitale Fassung des Gesellschaftsspiels um den Import- und Exporthandel
-(Stomo Spiele). Läuft im Browser, auf dem Telefon wie am Schreibtisch,
-installierbar als PWA, offline spielbar.
+A digital edition of the German board game of the import and export trade
+(Stomo Spiele). Runs in the browser, on a phone as at a desk, installable as a
+PWA, playable offline.
 
-Die Spielsprache ist Deutsch. Regeln, Warenverzeichnis und Kartensätze sind
-den Originalen entnommen; die Regeln stehen zusammengefaßt in
-[`rules.md`](rules.md).
+The game keeps its German title because it never had an English one — it was
+published in German and only in German. Everything else can be read in either
+language: pick **Deutsch** or **English** on the title page or under Settings,
+and the whole thing follows, cards and reports and notifications included. The
+rules, the register of goods and the card decks are taken from the originals;
+they are summarised in [`rules.md`](rules.md) (in German).
 
-**Spielen:** <https://von-kontinent-zu-kontinent.toladner.workers.dev>
+**Play:** <https://von-kontinent-zu-kontinent.toladner.workers.dev>
 
-Dieselbe Adresse trägt das Spiel und den Partieserver — ein Cloudflare Worker
-mit je einem Durable Object pro Partie, der denselben Reducer fährt wie der
-Browser.
+The same address serves both the game and the table server — a Cloudflare
+Worker with one Durable Object per game, running the same reducer the browser
+does.
 
-## Loslegen
+## Getting started
 
 ```bash
 npm install
 npm run dev            # http://localhost:5173
-npm run dev -- --host  # zusätzlich im WLAN, zum Testen am Telefon
+npm run dev -- --host  # also on the local network, for testing on a phone
 ```
 
-| Befehl | Tut |
+| Command | Does |
 | --- | --- |
-| `npm run dev` | Entwicklungsserver |
-| `npm test` | Regelwerk- und Oberflächentests |
-| `npm run typecheck` | TypeScript prüfen |
-| `npm run build` | Statische Dateien nach `dist/` |
-| `npm run preview` | Gebaute Dateien lokal ansehen |
-| `npm run server` | Partieserver für Netzpartien |
-| `npm run test:server` | Mehrspieler-Durchlauf gegen den laufenden Server |
-| `npm run deploy` | Bauen und veröffentlichen |
-| `node scripts/build-land.mjs` | Kontinentumrisse neu erzeugen |
+| `npm run dev` | Development server |
+| `npm test` | Rules and interface tests |
+| `npm run typecheck` | Check TypeScript |
+| `npm run build` | Static files into `dist/` |
+| `npm run preview` | Look at the built files locally |
+| `npm run server` | Table server for networked games |
+| `npm run test:server` | Multiplayer run against the running server |
+| `npm run deploy` | Build and publish |
+| `node scripts/build-land.mjs` | Regenerate the continent outlines |
 
-## Zu mehreren spielen
+## Playing with others
 
-Eine Partie kann an einem Gerät reihum gespielt werden oder über mehrere
-Geräte hinweg. Für den zweiten Fall läuft ein kleiner Partieserver mit —
-ein Cloudflare Worker mit je einem Durable Object pro Partie.
-
-```bash
-npm run server   # Partieserver auf :8787
-npm run dev      # Spiel auf :5173, /api wird durchgereicht
-npm run test:server   # Zwei Spieler, eine Partie, ohne Browser
-```
-
-Wer eröffnet, bekommt einen vierstelligen Code; die anderen geben ihn auf der
-Eingangsseite ein oder folgen dem Einladungslink. Der Server hält nur die
-Zugliste — er entscheidet, wer am Zug ist, und verteilt die Züge weiter. Die
-Regeln laufen dabei im selben Reducer wie im Browser, es gibt keine zweite
-Umsetzung des Regelwerks.
-
-Eine Partie bleibt liegen: wer das Fenster schließt und später zurückkommt,
-sitzt wieder auf demselben Platz. Wird beim Eröffnen „jederzeit" gewählt,
-dürfen auch Nachzügler noch ein Schiff nehmen.
-
-## Echtzeitfahrt
-
-Statt zu würfeln kann man Kurs setzen und das Schiff fahren lassen. Eine
-Überfahrt dauert echte Zeit — wie lange, bestimmt der Regler „Fahrzeit je
-Punkt" beim Einrichten. Man setzt Kurs, geht weg, und sieht später nach.
-
-Die Schiffe fahren auch dann weiter, wenn niemand zusieht: der Partieserver
-weckt sich selbst zum nächsten Ereignis. Es gibt keine Reihenfolge mehr, jeder
-handelt, wann er mag. Der Weltmarkt dreht in festem Takt eine Konjunkturkarte,
-die für alle gilt, bis die nächste fällt.
-
-## Spielen
-
-Name eintragen, „An Bord gehen“ — mehr nicht. Aus dem Namen entsteht ein
-Handelshaus samt Rang, Heimatkontor und gestochenem Porträt; derselbe Name
-ergibt immer denselben Kaufmann.
-
-Auf der Eingangsseite stehen drei Wege: **Klassisch** (Originalregeln, sofort
-los), **Vollständig** (Plan, Dauer, Kapital, ein Gerät oder mehrere) und
-**Partie beitreten** (nur Code und Name).
-
-Der Spielstand einer örtlichen Partie liegt im Browser und wird beim nächsten
-Aufruf angeboten; Netzpartien liegen beim Partieserver.
-
-## Veröffentlichen
-
-Ein Befehl veröffentlicht Spiel und Partieserver gemeinsam.
+A game can be played round one device or across several. For the second case a
+small table server runs alongside — a Cloudflare Worker with one Durable
+Object per game.
 
 ```bash
-npm run deploy   # baut und veröffentlicht Spiel + Partieserver zusammen
+npm run server        # table server on :8787
+npm run dev           # game on :5173, /api is proxied through
+npm run test:server   # two players, one game, no browser
 ```
 
-`wrangler deploy` stellt die statischen Dateien und den Partieserver unter
-einer Adresse bereit; dafür ist einmalig `npx wrangler login` nötig.
+Whoever opens the table gets a four-character code; the others type it on the
+entrance page or follow the invitation link. The server holds only the list of
+moves — it decides whose turn it is and passes the moves on. The rules run in
+the same reducer as in the browser; there is no second implementation of the
+rulebook.
 
-Ohne Mehrspielerbetrieb genügt auch eine rein statische Ablage
-(`npm run build`, dann `dist/` hochladen — Netlify, Vercel, GitHub Pages,
-beliebiger Webspace). Dann fehlt allerdings der Partieserver, und es kann nur
-an einem Gerät gespielt werden.
+A game keeps: close the window, come back later, and you are in the same seat.
+If “at any time” was chosen when the table was opened, latecomers may still
+take a ship.
 
-## Aufbau
+## Sailing in real time
 
-Kurz: das Regelwerk ist ein reiner Reducer über einem gesäten Zufallsgenerator,
-Karten und Waren sind Daten, die Oberfläche weiß nichts von Regeln.
+Instead of throwing dice you can set a course and let the ship sail. A passage
+takes real time — how much is set by the “sailing time per mark” slider when
+the game is arranged. Set a course, go away, look again later.
 
-Ausführlich in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — dort steht
-auch, wo man ansetzt für zeitbasierte Seefahrt statt Würfel, weitere Karten
-und zusätzliche Waren.
+The ships sail on whether or not anyone is watching: the table server wakes
+itself for the next thing due to happen. There is no turn order any more;
+everyone trades when they like. The world market turns a card at a fixed
+interval, and it holds for everyone until the next one falls.
+
+## The language
+
+German is the original and English is the translation, which shows in small
+places. Goods keep their card numbers from the printed Warenverzeichnis and
+gain an English name beside the German one; harbours keep the board's own
+spelling except where English trade had a settled name of its own, so Genua is
+Genoa and Kopenhagen is Copenhagen, but Spalato, Batavia and Vera Cruz stand as
+printed.
+
+The phrases live in [`src/i18n/strings/`](src/i18n/strings/) as `{ de, en }`
+pairs, so a line cannot be added in one language without the other — the type
+checker refuses it. A test additionally checks that both halves fill the same
+`{holes}`, which is the mistake that otherwise reaches a player.
+
+At a table played across several devices each seat reads in its own language:
+refusals and notifications travel as keys and become words at the edge, in the
+language of whoever is looking.
+
+## Playing
+
+Type a name, press “Go aboard” — that is all. The name becomes a merchant
+house with a rank, a home counting house and an engraved portrait; the same
+name always yields the same merchant.
+
+The entrance page offers three ways in: **Classic** (original rules, straight
+off), **Full** (board, length, capital, one device or several) and **Join a
+table** (a code and a name).
+
+A local game is saved in the browser and offered again next time; networked
+games live on the table server.
+
+## Publishing
+
+One command publishes the game and the table server together.
+
+```bash
+npm run deploy   # builds and publishes game + table server as one
+```
+
+`wrangler deploy` serves the static files and the table server from a single
+address; it needs `npx wrangler login` once.
+
+Without multiplayer a purely static host will do (`npm run build`, then upload
+`dist/` — Netlify, Vercel, GitHub Pages, any web space). That leaves out the
+table server, so only one device can play.
+
+## How it is put together
+
+In short: the rulebook is a pure reducer over a seeded random number
+generator, cards and goods are data, and the interface knows nothing of rules.
+
+At length in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — which also says
+where to start for time-based sailing instead of dice, further cards and
+additional goods.
 
 ```
-src/engine/    Regeln, rein, ohne DOM
-src/content/   Waren, Konjunkturkarten, Spielpläne
-src/ui/        Darstellung
-src/app/       Store, Speicherstand, Verbindung
-server/        Partieserver (Cloudflare Worker + Durable Object)
-rules.md       Die Regeln des Originals, zusammengefaßt
+src/engine/    Rules, pure, no DOM
+src/content/   Goods, market cards, boards
+src/i18n/      The phrase table, in German and English
+src/ui/        Presentation
+src/app/       Store, saved games, connection
+server/        Table server (Cloudflare Worker + Durable Object)
+rules.md       The original rules, summarised (German)
 ```
 
-## Quellen
+## Sources
 
-Kontinentumrisse: Natural Earth 1:110m über `world-atlas`, gemeinfrei.
+Continent outlines: Natural Earth 1:110m via `world-atlas`, public domain.

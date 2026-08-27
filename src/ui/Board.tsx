@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useT } from '@app/locale'
 import { AnchorGlyph } from './Glyphs'
 import type { GameState, PlayerState } from '@engine/state'
 import type { EngineContext } from '@engine/context'
@@ -83,6 +84,7 @@ export function Board({
   markedPort = null,
   markNonce = 0,
 }: BoardProps) {
+  const { t } = useT()
   const map = ctx.pack.map
   const { bounds } = map
 
@@ -568,7 +570,7 @@ export function Board({
         onPointerCancel={onPointerUp}
         onWheel={onWheel}
         role="img"
-        aria-label="Spielplan mit Schiffahrtslinien"
+        aria-label={t('board.chart')}
       >
         <defs>
           <radialGradient id="vignette" cx="50%" cy="45%" r="75%">
@@ -792,7 +794,7 @@ export function Board({
         <button
           className="pointer-events-auto px-2.5 py-1.5 text-lg leading-none transition-colors hover:bg-black/5"
           onClick={() => zoomAt(1.4, midX(), midY())}
-          aria-label="Näher heran"
+          aria-label={t('board.zoomIn')}
         >
           +
         </button>

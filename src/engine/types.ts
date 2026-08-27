@@ -7,6 +7,8 @@
  * than a code change.
  */
 
+import type { Localized } from '../i18n/locale'
+
 export type GoodId = number
 export type PortId = string
 export type NodeId = string
@@ -26,6 +28,13 @@ export interface Good {
   readonly id: GoodId
   /** German name as printed on the card. */
   readonly name: string
+  /**
+   * The English name, where one was chosen. Folded on from
+   * `@content/naming` as the deck is assembled, so the transcription above
+   * stays a faithful copy of the card and nothing in the engine has to know
+   * a dictionary exists. Absent means the two languages agree.
+   */
+  readonly en?: string
   /** EINKAUF - what the Exportbank charges in an exporting port. */
   readonly buy: Money
   /** VERKAUF - base price the Exportbank pays, before Konjunktur modifiers. */
@@ -60,6 +69,8 @@ export interface Country {
   readonly id: CountryId
   /** As printed in the Warenverzeichnis, e.g. "ENGLAND und SCHOTTLAND". */
   readonly name: string
+  /** The English name, where one was chosen. See `Good.en`. */
+  readonly en?: string
   readonly continent: Continent
   /** Goods this country exports; only these can be bought in its ports. */
   readonly exports: readonly GoodId[]
@@ -76,6 +87,12 @@ export interface MapNode {
 export interface Port extends MapNode {
   readonly kind: 'port'
   readonly name: string
+  /**
+   * The English name, where the trade had one of its own — Genoa for Genua,
+   * Copenhagen for Kopenhagen. Most harbours have none and read the same in
+   * both languages. See `Good.en`.
+   */
+  readonly en?: string
   readonly country: CountryId
   /**
    * Overrides the country's export list for this port alone. The United
@@ -122,7 +139,7 @@ export interface Lane {
  */
 export interface Vehicle {
   readonly id: string
-  readonly name: string
+  readonly name: Localized<string>
   /** null = no limit, as in the original rules. */
   readonly capacity: number | null
   readonly modes: readonly TransportMode[]
@@ -133,12 +150,12 @@ export interface Vehicle {
    */
   readonly speedFactor: number
   /** One line of sales patter for the shipyard. */
-  readonly blurb?: string
+  readonly blurb?: Localized<string>
 }
 
 export interface GameMap {
   readonly id: MapId
-  readonly name: string
+  readonly name: Localized<string>
   readonly nodes: readonly AnyNode[]
   readonly lanes: readonly Lane[]
   readonly countries: readonly Country[]
@@ -185,7 +202,7 @@ export type KonjunkturEffect =
       /** Rounds it stays in force; in real-time play, hours. */
       readonly rounds: number
       /** Headline for the news, e.g. "Hausse in Ostasien". */
-      readonly title: string
+      readonly title: Localized<string>
     }
   /** Heavy weather in one region: every ship caught in it loses cargo. */
   | {
@@ -193,7 +210,7 @@ export type KonjunkturEffect =
       readonly continent: Continent
       /** Pieces of cargo lost per ship, dearest first. */
       readonly lose: number
-      readonly title: string
+      readonly title: Localized<string>
     }
   /**
    * Heavy weather that spoils rather than sinks: the cargo stays in the hold
@@ -207,7 +224,7 @@ export type KonjunkturEffect =
       readonly continent: Continent
       /** Pieces spoiled per ship, dearest first. */
       readonly count: number
-      readonly title: string
+      readonly title: Localized<string>
     }
   /**
    * Weather that costs time instead of goods. In real-time play, where the
@@ -220,7 +237,7 @@ export type KonjunkturEffect =
       readonly continent: Continent
       /** Minutes added to a voyage already at sea in that part of the world. */
       readonly minutes: number
-      readonly title: string
+      readonly title: Localized<string>
     }
   /**
    * A price movement that follows a ware rather than a place.
@@ -240,7 +257,7 @@ export type KonjunkturEffect =
       readonly percent: number
       /** Turns of the market it stays in force, as for regionalPriceDelta. */
       readonly rounds: number
-      readonly title: string
+      readonly title: Localized<string>
     }
   /**
    * Quarantine, a dock strike, a harbour silted up: one port shuts its Kontor.
@@ -255,10 +272,14 @@ export type KonjunkturEffect =
       readonly continent: Continent
       /** Turns of the market it stays shut, as for the price notices. */
       readonly rounds: number
-      readonly title: string
+      readonly title: Localized<string>
     }
   /** Pirates, ice, a fire in the hold: the drawing player alone loses cargo. */
-  | { readonly kind: 'cargoLostByDrawer'; readonly lose: number; readonly title: string }
+  | {
+      readonly kind: 'cargoLostByDrawer'
+      readonly lose: number
+      readonly title: Localized<string>
+    }
   /** A windfall or demand for every ship lying in one continent's harbours. */
   | {
       readonly kind: 'regionalLevy'
@@ -266,15 +287,21 @@ export type KonjunkturEffect =
       readonly amount: Money
       /** Positive pays the houses, negative charges them. */
       readonly sign: 1 | -1
-      readonly title: string
+      readonly title: Localized<string>
     }
 
 export interface KonjunkturCard {
   readonly id: string
   /** Headline as printed: "Hausse", "Baisse", "Steuer", "Telegramm", ... */
-  readonly title: string
-  /** The printed body lines, shown verbatim on the card in the UI. */
-  readonly lines: readonly string[]
+  readonly title: Localized<string>
+  /**
+   * The printed body lines, shown on the card face in the UI.
+   *
+   * Localized as a whole list rather than line by line because the two
+   * languages do not always break a card's text in the same places — an
+   * English notice that reads well in two lines may want three in German.
+   */
+  readonly lines: Localized<readonly string[]>
   readonly effects: readonly KonjunkturEffect[]
 }
 
@@ -413,7 +440,7 @@ export interface RuleConfig {
 
 export interface ContentPack {
   readonly id: string
-  readonly name: string
+  readonly name: Localized<string>
   readonly map: GameMap
   /** Vessels the shipyards offer, beyond the one every house starts with. */
   readonly vehicles: readonly Vehicle[]

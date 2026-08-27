@@ -10,7 +10,7 @@ export interface LegSpec {
 
 export interface BuildMapInput {
   readonly id: string
-  readonly name: string
+  readonly name: import('../i18n/locale').Localized<string>
   readonly ports: readonly Port[]
   readonly countries: readonly Country[]
   readonly legs: readonly LegSpec[]

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useT } from '@app/locale'
 import { askToNotify, notify, notifyState, type NotifyState } from '@app/notify'
 import { armPush } from '@app/push'
 import { useGame } from '@app/store'
@@ -18,6 +19,7 @@ import { useGame } from '@app/store'
  * can hold the permission and still be muted by the system. One tap settles it.
  */
 export function NotifyCheck() {
+  const { t } = useT()
   const code = useGame((s) => s.net?.code ?? null)
   const [state, setState] = useState<NotifyState>(() => notifyState())
   const [asking, setAsking] = useState(false)
@@ -38,11 +40,8 @@ export function NotifyCheck() {
 
   const test = async () => {
     setTried(true)
-    await notify(
-      'Von Kontinent zu Kontinent',
-      'Probemeldung — so meldet sich Ihr Schiff.',
-      'probe',
-    )
+    // The title is the game's own name, which is not translated.
+    await notify('Von Kontinent zu Kontinent', t('notify.test.body'), 'probe')
   }
 
   return (
@@ -52,32 +51,32 @@ export function NotifyCheck() {
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[13px] leading-tight font-semibold">
-          {state === 'granted'
-            ? 'Ihr Schiff meldet sich'
-            : state === 'denied'
-              ? 'Meldungen sind abgeschaltet'
-              : 'Soll sich Ihr Schiff melden?'}
+          {t(
+            state === 'granted' ? 'notify.on' : state === 'denied' ? 'notify.off' : 'notify.ask',
+          )}
         </p>
         <p className="text-ink-faint mt-0.5 text-[12px] leading-snug">
-          {state === 'granted'
-            ? tried
-              ? 'Eine Probemeldung ist hinausgegangen. Kommt sie nicht an, sperrt das Gerät selbst — bei einer installierten App unter Einstellungen ▸ Apps ▸ Benachrichtigungen.'
-              : code
-                ? 'Sie erfahren, wenn ein Hafen erreicht ist und wenn die Saison schließt — auch wenn die App geschlossen ist.'
-                : 'Sie erfahren, wenn ein Hafen erreicht ist und wenn die Saison schließt — solange die Seite geöffnet bleibt oder im Hintergrund läuft.'
-            : state === 'denied'
-              ? 'Ihr Browser hat Meldungen für diese Seite gesperrt. Das läßt sich nur in den Einstellungen des Browsers wieder ändern.'
-              : 'Eine Fahrt dauert echte Stunden. Mit Meldungen können Sie das Gerät weglegen und erfahren trotzdem, wenn der Hafen erreicht ist.'}
+          {t(
+            state === 'granted'
+              ? tried
+                ? 'notify.tested'
+                : code
+                  ? 'notify.whileClosed'
+                  : 'notify.whileOpen'
+              : state === 'denied'
+                ? 'notify.blocked'
+                : 'notify.why',
+          )}
         </p>
       </div>
       {state === 'default' && (
         <button className="btn btn-sm shrink-0" onClick={() => void ask()} disabled={asking}>
-          {asking ? '…' : 'Erlauben'}
+          {asking ? '…' : t('notify.allow')}
         </button>
       )}
       {state === 'granted' && (
         <button className="btn btn-sm shrink-0" onClick={() => void test()}>
-          Probe
+          {t('notify.test')}
         </button>
       )}
     </div>

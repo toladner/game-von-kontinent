@@ -90,6 +90,9 @@ describe('leaving an address the Partieserver can reach', () => {
         endpoint: 'https://fcm.googleapis.com/fcm/send/xyz',
         keys: { p256dh: 'p256dh-wert', auth: 'auth-wert' },
       },
+      // So the server knows which language to compose a notice in: it is
+      // read on this telephone, not on the one that opened the table.
+      locale: 'de',
     })
   })
 

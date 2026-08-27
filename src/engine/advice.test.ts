@@ -163,8 +163,8 @@ describe('casting off', () => {
 describe('what a Konjunkturkarte did to you', () => {
   const cardWith = (effects: KonjunkturCard['effects']): KonjunkturCard => ({
     id: 'test',
-    title: 'Prüfkarte',
-    lines: [],
+    title: { de: 'Prüfkarte', en: 'Test card' },
+    lines: { de: [], en: [] },
     effects,
   })
 

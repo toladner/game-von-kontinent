@@ -1,8 +1,9 @@
 import { konjunkturTenor } from '@engine/selectors'
 import type { Good, KonjunkturCard } from '@engine/types'
 import { GoodIcon } from './GoodIcon'
-
-const fmt = (n: number) => n.toLocaleString('de-DE')
+import { useT } from '@app/locale'
+import { named } from '@i18n/locale'
+import type { MsgKey } from '@i18n'
 
 /**
  * A Warenkarte, as the Exportbank issues it: tan card stock, green press,
@@ -26,6 +27,7 @@ export function Warenkarte({
   onClick?: () => void
   action?: string
 }) {
+  const { t, num, locale } = useT()
   const Tag = onClick ? 'button' : 'div'
   const toneClass =
     tone === 'gut' ? 'text-press' : tone === 'schlecht' ? 'text-rot' : 'text-press'
@@ -48,7 +50,7 @@ export function Warenkarte({
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <span className="smallcaps press-green text-[15px] leading-tight font-bold">
-              {good.name}
+              {named(good)[locale]}
             </span>
             {/* Die Nummer aus dem Warenverzeichnis — kein Bestand.
                 Groß und in Pressgrün neben zwei Geldbeträgen las sie sich wie
@@ -57,7 +59,7 @@ export function Warenkarte({
                 Ordnungsnummer, unter der die Ware im Verzeichnis steht. */}
             <span
               className="display text-ink-faint shrink-0 text-[12px] leading-none"
-              aria-label={`Warenverzeichnis Nummer ${good.id}`}
+              aria-label={t('card.number', { id: good.id })}
             >
               N<sup className="text-[8px]">o</sup> {good.id}
             </span>
@@ -65,12 +67,12 @@ export function Warenkarte({
 
           <dl className="teletype mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5 text-[13px]">
             <div className="flex items-baseline gap-1.5">
-              <dt className="smallcaps text-ink-soft text-[11px]">Einkauf</dt>
-              <dd className="tnum press-green font-bold">{fmt(good.buy)}</dd>
+              <dt className="smallcaps text-ink-soft text-[11px]">{t('card.buy')}</dt>
+              <dd className="tnum press-green font-bold">{num(good.buy)}</dd>
             </div>
             <div className="flex items-baseline gap-1.5">
-              <dt className="smallcaps text-ink-soft text-[11px]">Verkauf</dt>
-              <dd className={`tnum font-bold ${toneClass}`}>{fmt(price ?? good.sell)}</dd>
+              <dt className="smallcaps text-ink-soft text-[11px]">{t('card.sell')}</dt>
+              <dd className={`tnum font-bold ${toneClass}`}>{num(price ?? good.sell)}</dd>
             </div>
           </dl>
         </div>
@@ -92,7 +94,6 @@ export function Warenkarte({
   )
 }
 
-/** A Konjunkturkarte: pale green slip, typewriter face, scissor-cut edge. */
 /**
  * When and to whom a standing world card applies.
  *
@@ -101,31 +102,26 @@ export function Warenkarte({
  * bill with no date on it — which is exactly how it felt when the whole fleet
  * was charged the moment it turned. The card is unchanged; what it needs is a
  * line saying when it will reach you.
+ *
+ * Returns the key rather than the sentence, so the slip below can render it in
+ * whichever language it is being read in.
  */
-function standingNote(card: KonjunkturCard): string | null {
+const STANDING: Partial<Record<KonjunkturCard['effects'][number]['kind'], MsgKey>> = {
+  feeForDrawer: 'card.standing.feeForDrawer',
+  payoutToDrawer: 'card.standing.payoutToDrawer',
+  portFeeAllInPort: 'card.standing.portFeeAllInPort',
+  leviedOnAllShips: 'card.standing.leviedOnAllShips',
+  stormInRegion: 'card.standing.stormInRegion',
+  cargoDamagedInRegion: 'card.standing.cargoDamagedInRegion',
+  delayInRegion: 'card.standing.delayInRegion',
+  goodPriceDelta: 'card.standing.goodPriceDelta',
+  portClosed: 'card.standing.portClosed',
+}
+
+function standingNote(card: KonjunkturCard): MsgKey | null {
   for (const effect of card.effects) {
-    switch (effect.kind) {
-      case 'feeForDrawer':
-        return 'Fällig, sobald gelöscht wird — einmal je Schiff, solange die Karte steht. Wer nichts an Land bringt, zahlt nichts.'
-      case 'payoutToDrawer':
-        return 'Geht an jedes Haus, das einen Hafen anläuft: ein Telegramm erreicht niemanden auf See.'
-      case 'portFeeAllInPort':
-        return 'Zahlt, wessen Schiff im Hafen liegt oder anlegt, solange die Karte steht.'
-      case 'leviedOnAllShips':
-        return 'Zahlbar von allen Schiffen, auch auf See — ein Zehntel der Ladung, die an Bord ist. Ein leerer Laderaum kostet nichts.'
-      case 'stormInRegion':
-        return 'Trifft jedes Schiff, das sich in dieser Ecke der Welt befindet — im Hafen wie auf See.'
-      case 'cargoDamagedInRegion':
-        return 'Die Ladung bleibt an Bord, bringt aber nur die Hälfte. Wo Sie den Posten losschlagen, bleibt Ihre Sache.'
-      case 'delayInRegion':
-        return 'Trifft jedes Schiff, das dort gerade unterwegs ist. Wer im Hafen liegt, liegt sicher.'
-      case 'goodPriceDelta':
-        return 'Gilt in jedem Hafen — es kommt darauf an, was Sie geladen haben, nicht wo Sie liegen.'
-      case 'portClosed':
-        return 'Welcher Hafen es trifft, steht in den Nachrichten. Hinfahren dürfen Sie weiter — vielleicht ist die Sperre aufgehoben, wenn Sie ankommen.'
-      default:
-        continue
-    }
+    const key = STANDING[effect.kind]
+    if (key) return key
   }
   return null
 }
@@ -138,6 +134,7 @@ export function KonjunkturSlip({
   /** Turned for the whole world and in force until the next one. */
   standing?: boolean
 }) {
+  const { t, locale } = useT()
   const note = standing ? standingNote(card) : null
   // Good news on green paper, bad on red, and the cards that cut both ways on
   // the straw-coloured stock — the temper of the card before a word is read.
@@ -145,19 +142,19 @@ export function KonjunkturSlip({
   return (
     <div className={`paper-slip slip-${tenor} coupon-edge w-full rotate-[-1.2deg] px-4 py-5`}>
       <p className="smallcaps text-center text-[10px] tracking-[0.3em] text-black/55">
-        Konjunkturkarte
+        {t('card.heading')}
       </p>
       <hr className="my-2 border-t border-black/25" />
-      <p className="display text-center text-xl">{card.title}</p>
+      <p className="display text-center text-xl">{card.title[locale]}</p>
       <div className="teletype mt-2 space-y-0.5 text-center text-[13px]">
-        {card.lines.map((line, i) => (
+        {card.lines[locale].map((line, i) => (
           <p key={i}>{line}</p>
         ))}
       </div>
       {note && (
         <>
           <hr className="mt-3 mb-2 border-t border-dashed border-black/20" />
-          <p className="text-center text-[11px] leading-snug text-black/60">{note}</p>
+          <p className="text-center text-[11px] leading-snug text-black/60">{t(note)}</p>
         </>
       )}
     </div>

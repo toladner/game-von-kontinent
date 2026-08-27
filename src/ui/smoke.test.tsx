@@ -1810,7 +1810,7 @@ describe('a second device with no seat', () => {
  * three classes look like is the stylesheet's business.
  */
 describe('the stock a Konjunkturkarte is printed on', () => {
-  const titled = (title: string) => CLASSIC_PACK.konjunktur.find((c) => c.title === title)!
+  const titled = (title: string) => CLASSIC_PACK.konjunktur.find((c) => c.title.de === title)!
 
   it('prints good news on green and bad news on red', () => {
     const { container, rerender } = render(<KonjunkturSlip card={titled('Hausse')} />)
@@ -1960,7 +1960,9 @@ describe('a telegram in the sender’s colour', () => {
     )! as HTMLElement
     expect(entry.textContent).toContain('Bo')
     expect(entry.style.borderColor).toBe(ink)
-    const name = entry.querySelector('p span') as HTMLElement
+    // The sender's name is emphasised inside the phrase now, so it comes
+    // out of Emph as a <strong> rather than a hand-placed <span>.
+    const name = entry.querySelector('p strong') as HTMLElement
     expect(name.textContent).toBe('Bo')
     expect(name.style.color).toBe(ink)
   })
