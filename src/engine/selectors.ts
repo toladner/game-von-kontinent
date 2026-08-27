@@ -281,6 +281,34 @@ export function castOffMs(state: GameState, vehicle: VehicleInstance): number {
 }
 
 /**
+ * Where a new course begins, and when.
+ *
+ * A ship lying alongside lays it from the berth she is in, and a ship whose
+ * cargo is still being worked counts as lying alongside: nothing has been
+ * cast off yet, so the whole voyage may be torn up.
+ *
+ * Once she is at sea it is a different question. A merchant may change his
+ * mind — word of a better price does not wait for a ship to make port — but
+ * she cannot put about between two marks with nothing to turn on. So she
+ * runs on to the mark ahead of her and the new course is laid from there,
+ * with `cameFrom` following her, since the same rule bars her from doubling
+ * straight back the way she came.
+ *
+ * `at` is the instant that course starts being sailed, which is what any
+ * estimate of it has to be reckoned from.
+ */
+export function courseOrigin(
+  state: GameState,
+  vehicle: VehicleInstance,
+): { node: NodeId; cameFrom: NodeId | null; at: number } {
+  const voyage = vehicle.voyage
+  if (!voyage || state.now < voyage.departsAt) {
+    return { node: vehicle.nodeId, cameFrom: vehicle.cameFrom, at: state.now }
+  }
+  return { node: voyage.route[0]!, cameFrom: vehicle.nodeId, at: voyage.legArrivesAt }
+}
+
+/**
  * Travel time from a ship's berth to every node it can reach, in ms.
  *
  * Walks the same breadth-first tree `routeTo` walks — fewest pips wins, and

@@ -24,12 +24,13 @@ import {
   castOffMs,
   closureAt,
   continentOf,
+  courseOrigin,
   legMsFor,
   portAt,
-  sailingTimeMs,
   quoteSale,
   routeTo,
   verkaufszwangOpen,
+  voyageEndsAt,
 } from './selectors'
 import type { Continent, KonjunkturEffect, Money, NodeId } from './types'
 import { exportsAt } from './market'
@@ -1038,42 +1039,79 @@ export function applyAction(
           return reject(state, 'Zu diesem Kapitän müssen Sie eine Taube schicken.')
         }
       }
-      // A course may be changed while she is still alongside: the hatches are
-      // open, the merchant may trade, and shutting them out of the one
-      // decision that matters would be an odd place to draw the line.
-      if (atSea(draft as GameState, ship)) {
-        return reject(state, 'Das Schiff ist bereits unterwegs.')
+      /*
+       * A course may be changed while she is still alongside: the hatches are
+       * open, the merchant may trade, and shutting them out of the one
+       * decision that matters would be an odd place to draw the line.
+       *
+       * And it may be changed again once she has sailed. A voyage runs for
+       * hours here, prices move while it does, and a house that hears of a
+       * better market has every right to act on it. What it cannot do is turn
+       * her round in open water — that is `courseOrigin`'s business, and it
+       * is why the leg under way below is left exactly as it stands.
+       */
+      const sailing = atSea(draft as GameState, ship)
+      if (!sailing) {
+        const here = portAt(ctx, ship.nodeId)
+        if (!here) return reject(state, 'Das Schiff liegt nicht im Hafen.')
+        if (action.to === here) return reject(state, 'Es liegt bereits dort.')
+      } else if (action.to === ship.voyage!.destination) {
+        return reject(state, 'Diesen Kurs hält sie bereits.')
       }
-      const here = portAt(ctx, ship.nodeId)
-      if (!here) return reject(state, 'Das Schiff liegt nicht im Hafen.')
-      if (action.to === here) return reject(state, 'Es liegt bereits dort.')
 
-      const route = routeTo(ctx, ship.nodeId, ship.cameFrom, action.to)
-      if (route.length === 0) return reject(state, 'Dorthin führt keine Linie.')
+      const origin = courseOrigin(draft as GameState, ship)
+      const onward = routeTo(ctx, origin.node, origin.cameFrom, action.to)
+      // Nothing onward means one of two things: no line leads there at all,
+      // or the mark she is already running to is the harbour now wanted — in
+      // which case the new course is simply a very short one.
+      if (onward.length === 0 && origin.node !== action.to) {
+        return reject(state, 'Dorthin führt keine Linie.')
+      }
 
-      const legMs = legMsFor(ctx, draft as GameState, ship, ship.nodeId, route[0]!)
-      // She is still alongside until the cargo is worked; the first leg only
-      // begins when she casts off, which is why the delay lands here rather
-      // than as a separate phase nobody would think to look for.
-      const castOff = castOffMs(draft as GameState, ship)
-      patchVehicle(draft, index, ship.id, {
-        voyage: {
-          route,
-          plan: [ship.nodeId, ...route],
-          legStartedAt: draft.now + castOff,
-          legArrivesAt: draft.now + castOff + legMs,
-          destination: action.to,
-          departsAt: draft.now + castOff,
-        },
-      })
+      if (!sailing) {
+        const legMs = legMsFor(ctx, draft as GameState, ship, ship.nodeId, onward[0]!)
+        // She is still alongside until the cargo is worked; the first leg only
+        // begins when she casts off, which is why the delay lands here rather
+        // than as a separate phase nobody would think to look for.
+        const castOff = castOffMs(draft as GameState, ship)
+        patchVehicle(draft, index, ship.id, {
+          voyage: {
+            route: onward,
+            plan: [ship.nodeId, ...onward],
+            legStartedAt: draft.now + castOff,
+            legArrivesAt: draft.now + castOff + legMs,
+            destination: action.to,
+            departsAt: draft.now + castOff,
+          },
+        })
+      } else {
+        const under = ship.voyage!
+        const route = origin.node === action.to ? [action.to] : [origin.node, ...onward]
+        /*
+         * The leg she is on is untouched: she is on it, and its arrival is
+         * what the whole clock hangs from. Only what lies beyond the next
+         * mark is rewritten. The chart still wants the water already under
+         * her keel, so the plan keeps everything up to where she is and takes
+         * the new course from there.
+         */
+        const passed = under.plan.indexOf(ship.nodeId)
+        const behind = passed >= 0 ? under.plan.slice(0, passed + 1) : [ship.nodeId]
+        patchVehicle(draft, index, ship.id, {
+          voyage: { ...under, route, plan: [...behind, ...route], destination: action.to },
+        })
+      }
+
+      const ordered = draft.players[index]!.fleet.find((v) => v.id === ship.id)!
       events.push({
         type: 'setSail',
         playerId: player.id,
         to: action.to,
-        // Summed leg by leg. Multiplying one leg by the route length was
-        // right only while every leg cost the same, which stopped being true
-        // when voyages started being charged by the sea mile.
-        arrivesAt: draft.now + (sailingTimeMs(ctx, draft as GameState, ship, action.to) ?? legMs),
+        // Summed leg by leg off the voyage as it now stands. Multiplying one
+        // leg by the route length was right only while every leg cost the
+        // same, which stopped being true when voyages started being charged
+        // by the sea mile — and is wrong outright for a course laid at sea,
+        // where the first leg was priced from a different pair of marks.
+        arrivesAt: voyageEndsAt(ctx, draft as GameState, ordered) ?? draft.now,
       })
       break
     }

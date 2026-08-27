@@ -9,19 +9,21 @@ import {
 } from '@engine/advice'
 import {
   buyOffers,
+  courseOrigin,
   marketReport,
   routeTo,
   sailingTimeMs,
   saleQuotes,
   sellDestinations,
   verkaufszwangOpen,
+  voyageTimesFrom,
   closureAt,
 } from '@engine/selectors'
 import { exportsAt } from '@engine/market'
 import { durationText } from './useNow'
 import { goodOf, portOf } from '@engine/context'
 import type { EngineContext } from '@engine/context'
-import { flagship, type GameState, type PlayerState } from '@engine/state'
+import { flagship, type GameState, type PlayerState, type VehicleInstance } from '@engine/state'
 import { Warenkarte } from './Cards'
 import { CargoHold } from './Cargo'
 import { Emph } from './Emph'
@@ -663,15 +665,38 @@ export function PortPreviewSheet({
   const port = portOf(ctx, portId)
   const country = ctx.pack.map.countries.find((c) => c.id === port.country)
   const ship = flagship(player)
-  const here = ship.nodeId === portId
+
+  /*
+   * A ship at sea can still be given a new destination, but not from where
+   * she floats: she runs on to the mark ahead of her first. So everything
+   * quoted here — the distance, the hours, the button — is reckoned from
+   * that mark, and the run to it is added back on at the end.
+   */
+  const origin = courseOrigin(state, ship)
+  const sailing = origin.node !== ship.nodeId
+  const here = !sailing && ship.nodeId === portId
+  const bound = sailing && ship.voyage!.destination === portId
 
   const exports = exportsAt(ctx, state, portId)
   const quotes = saleQuotes(ctx, state, player, portId)
   const earners = quotes.filter((q) => q.kind === 'markt')
   const takings = earners.reduce((sum, q) => sum + q.price, 0)
 
-  const route = here ? [] : routeTo(ctx, ship.nodeId, ship.cameFrom, portId)
-  const eta = here ? null : sailingTimeMs(ctx, state, ship, portId)
+  // The ship as she will be at that mark, so the map is walked from there.
+  const asFrom: VehicleInstance = sailing
+    ? { ...ship, nodeId: origin.node, cameFrom: origin.cameFrom, voyage: null }
+    : ship
+  const route = here
+    ? []
+    : origin.node === portId
+      ? [portId]
+      : routeTo(ctx, origin.node, origin.cameFrom, portId)
+  const eta =
+    route.length === 0
+      ? null
+      : sailing
+        ? origin.at - state.now + (voyageTimesFrom(ctx, state, asFrom).get(portId) ?? 0)
+        : sailingTimeMs(ctx, state, ship, portId)
 
   return (
     <Sheet
@@ -682,9 +707,13 @@ export function PortPreviewSheet({
       footer={
         here ? (
           <p className="text-ink-soft py-1 text-center text-[13px]">Sie liegen bereits hier.</p>
+        ) : bound ? (
+          <p className="text-ink-soft py-1 text-center text-[13px]">
+            Dorthin ist Ihr Schiff bereits unterwegs.
+          </p>
         ) : onSetCourse && route.length > 0 ? (
           <button className="btn btn-primary w-full text-base" onClick={() => onSetCourse(portId)}>
-            Kurs auf {port.name} setzen
+            {sailing ? `Kurs ändern auf ${port.name}` : `Kurs auf ${port.name} setzen`}
           </button>
         ) : (
           <p className="text-ink-soft py-1 text-center text-[13px]">
@@ -696,18 +725,28 @@ export function PortPreviewSheet({
       <SperrBand closure={closureAt(state, portId)} />
 
       {!here && (
-        <div className="teletype mb-3 flex items-center justify-between gap-2 rounded-sm border border-black/15 bg-black/5 px-2.5 py-2 text-[13px]">
-          <span>
-            <span className="smallcaps text-ink-soft text-[11px]">Entfernung</span>{' '}
-            <span className="tnum font-bold">
-              {route.length} {route.length === 1 ? 'Punkt' : 'Punkte'}
-            </span>
-          </span>
-          {eta !== null && (
+        <div className="mb-3">
+          <div className="teletype flex items-center justify-between gap-2 rounded-sm border border-black/15 bg-black/5 px-2.5 py-2 text-[13px]">
             <span>
-              <span className="smallcaps text-ink-soft text-[11px]">Fahrt</span>{' '}
-              <span className="tnum font-bold">{durationText(eta)}</span>
+              <span className="smallcaps text-ink-soft text-[11px]">Entfernung</span>{' '}
+              <span className="tnum font-bold">
+                {route.length} {route.length === 1 ? 'Punkt' : 'Punkte'}
+              </span>
             </span>
+            {eta !== null && (
+              <span>
+                <span className="smallcaps text-ink-soft text-[11px]">Fahrt</span>{' '}
+                <span className="tnum font-bold">{durationText(eta)}</span>
+              </span>
+            )}
+          </div>
+          {/* Sonst wirkt die Fahrtzeit zu lang: sie enthält den Punkt, den das
+              Schiff noch anlaufen muß, ehe der neue Kurs überhaupt gilt. */}
+          {sailing && !bound && route.length > 0 && (
+            <p className="text-ink-soft mt-1 text-[12px] leading-snug italic">
+              Auf hoher See dreht kein Schiff bei. Sie läuft erst den nächsten Punkt an; von dort
+              gilt der neue Kurs.
+            </p>
           )}
         </div>
       )}

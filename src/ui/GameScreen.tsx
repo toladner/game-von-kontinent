@@ -517,9 +517,12 @@ export function GameScreen() {
           portId={preview}
           snap={snap}
           onSnap={close}
-          // Only offered when the ship is actually free to be given a course.
+          /* Lying alongside or already at sea — either way an order can be
+             given. What a voyage under way costs is a leg: she finishes the
+             one she is on before the new course begins, which the sheet says
+             plainly rather than leaving it to be discovered from the clock. */
           onSetCourse={
-            portId && !voyage
+            realtime && (portId || voyage)
               ? (to) => {
                   dispatch({ type: 'setCourse', to })
                   setKind(null)

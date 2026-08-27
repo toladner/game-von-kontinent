@@ -395,11 +395,50 @@ describe('real-time sailing', () => {
     expect(changed.events.some((e) => e.type === 'rejected')).toBe(false)
     expect(flagship(changed.state.players[0]!).voyage!.destination).toBe(second)
 
-    // Once she has cast off, the decision is made.
-    const departs = flagship(changed.state.players[0]!).voyage!.departsAt
-    const sailed = applyAction(ctx, changed.state, { type: 'tick', at: departs + 1000 }).state
-    const late = applyAction(ctx, sailed, { type: 'setCourse', to: first, by: 'a' })
-    expect(late.events.some((e) => e.type === 'rejected')).toBe(true)
+    // Alongside, the whole voyage is torn up: she has not cast off, so even
+    // the first leg is still open to argument.
+    expect(flagship(changed.state.players[0]!).voyage!.plan[0]).toBe(from)
+  })
+
+  it('lets a course be changed at sea, but not turned round in open water', () => {
+    let s = afloat()
+    const from = flagship(s.players[0]!).nodeId
+    const reachable = [...ctx.portsById.keys()].filter(
+      (id) => id !== portAt(ctx, from) && routeTo(ctx, from, null, id).length >= 3,
+    )
+    const [first, second] = [reachable[0]!, reachable[1]!]
+
+    s = applyAction(ctx, s, { type: 'setCourse', to: first, by: 'a' }).state
+    const under = flagship(s.players[0]!).voyage!
+    s = applyAction(ctx, s, { type: 'tick', at: under.departsAt + 1000 }).state
+
+    // Word of a better price does not wait for a ship to make port, and a
+    // voyage here runs for hours. So the order stands.
+    const late = applyAction(ctx, s, { type: 'setCourse', to: second, by: 'a' })
+    expect(late.events.some((e) => e.type === 'rejected')).toBe(false)
+
+    const after = flagship(late.state.players[0]!).voyage!
+    expect(after.destination).toBe(second)
+    // She is between two marks with nothing to turn on: the leg she is on is
+    // sailed out exactly as it was, and the new course is laid from its end.
+    expect(after.route[0]).toBe(under.route[0])
+    expect(after.legStartedAt).toBe(under.legStartedAt)
+    expect(after.legArrivesAt).toBe(under.legArrivesAt)
+    // And the chart keeps the water already under her keel.
+    expect(after.plan[0]).toBe(from)
+
+    // The announced hour is the one the new course actually works out to,
+    // whose first leg was priced from a different pair of marks entirely.
+    const announced = late.events.find((e) => e.type === 'setSail')
+    if (announced?.type === 'setSail') {
+      expect(announced.arrivesAt).toBe(
+        voyageEndsAt(ctx, late.state, flagship(late.state.players[0]!)),
+      )
+    }
+
+    // Holding the course she already holds is not an order.
+    const again = applyAction(ctx, late.state, { type: 'setCourse', to: second, by: 'a' })
+    expect(again.events.some((e) => e.type === 'rejected')).toBe(true)
   })
 
   it('reports an arrival time that matches the voyage it describes', () => {

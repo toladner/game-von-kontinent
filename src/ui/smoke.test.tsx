@@ -11,6 +11,7 @@ import { applyAction, replay } from '@engine/reducer'
 import { CLASSIC_PACK } from '@content/maps/classic'
 import { KonjunkturSlip } from './Cards'
 import { HouseBadge } from './GameScreen'
+import { PortPreviewSheet } from './PortPanel'
 
 /**
  * A stand-in for looking at the thing: boots the real app, walks the real
@@ -562,6 +563,63 @@ describe('the set course on the plan', () => {
     // plan — which is why the strip is still there to tap again.
     expect(marked()).toBe(1)
     expect(screen.getByRole('button', { name: `${name} auf dem Plan zeigen` })).toBeTruthy()
+  })
+
+  it('offers a ship already at sea a different harbour to make for', () => {
+    const { to } = setSail('umleiten')
+    act(() => useGame.getState().dispatch({ type: 'setCourse', to }))
+
+    const ctx = useGame.getState().ctx
+    const ordered = useGame.getState().state!
+    const under = flagship(ordered.players[0]!).voyage!
+    // Cast off. Until she does she is lying alongside with the hatches open
+    // and the whole voyage may be torn up; the case worth testing is the one
+    // where she is out on the water and cannot simply be turned round.
+    const state = applyAction(ctx, ordered, { type: 'tick', at: under.departsAt + 1000 }).state
+    const player = state.players[0]!
+    const afloat = flagship(player)
+    expect(afloat.voyage!.legStartedAt).toBe(under.legStartedAt)
+
+    const elsewhere = [...ctx.portsById.keys()].find(
+      (id) =>
+        id !== under.destination &&
+        routeTo(ctx, under.route[0]!, afloat.nodeId, id).length > 0,
+    )!
+
+    const orders: string[] = []
+    cleanup()
+    render(
+      <PortPreviewSheet
+        ctx={ctx}
+        state={state}
+        player={player}
+        portId={elsewhere}
+        snap="full"
+        onSnap={() => {}}
+        onSetCourse={(p) => orders.push(p)}
+      />,
+    )
+
+    // The button is there and says what it is: a change, not a first order.
+    // And the extra hours in the quoted passage are accounted for rather than
+    // left to be discovered from the clock.
+    expect(screen.getByText(/dreht kein Schiff bei/)).toBeTruthy()
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /^Kurs ändern auf/ }))
+    })
+    expect(orders).toEqual([elsewhere])
+
+    // And the order takes: she sails out the leg she is on — same mark ahead,
+    // same hour of reaching it — and everything past it is redrawn.
+    const changed = applyAction(ctx, state, {
+      type: 'setCourse',
+      to: elsewhere,
+      by: player.id,
+    }).state
+    const after = flagship(changed.players[0]!).voyage!
+    expect(after.destination).toBe(elsewhere)
+    expect(after.route[0]).toBe(under.route[0])
+    expect(after.legArrivesAt).toBe(under.legArrivesAt)
   })
 })
 
