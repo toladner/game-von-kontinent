@@ -64,7 +64,8 @@ export const HARBOUR = {
     en: '{sign}{amount} on what you paid',
   },
   'port.sell.betterElsewhere': { de: 'Besser anderswo:', en: 'Better elsewhere:' },
-  'port.sell.pips': { de: '({n} Pkt.)', en: '({n} pts)' },
+  'port.sell.pips.one': { de: '({n} Pkt.)', en: '({n} pt)' },
+  'port.sell.pips.other': { de: '({n} Pkt.)', en: '({n} pts)' },
   'port.sell.proceeds': { de: 'Erlös', en: 'Proceeds' },
 
   // --- Buying --------------------------------------------------------------
@@ -113,8 +114,12 @@ export const HARBOUR = {
   },
   'report.takes': { de: ' Fahrt · nimmt ', en: ' of sailing · takes ' },
   'report.takesWithClock': { de: ' · {duration} Fahrt · nimmt ', en: ' · {duration} sailing · takes ' },
-  'report.lots': { de: '{n} Posten', en: '{n} lots' },
-  'report.staysAboard': { de: ' · {n} bleibt an Bord', en: ' · {n} stays aboard' },
+  // "Posten" is the same word however many there are; the English noun is
+  // not, and neither is the verb that follows it.
+  'report.lots.one': { de: '{n} Posten', en: '{n} lot' },
+  'report.lots.other': { de: '{n} Posten', en: '{n} lots' },
+  'report.staysAboard.one': { de: ' · {n} bleibt an Bord', en: ' · {n} stays aboard' },
+  'report.staysAboard.other': { de: ' · {n} bleiben an Bord', en: ' · {n} stay aboard' },
   'report.open': { de: 'Öffnen', en: 'Open' },
   'report.setCourse': { de: 'Kurs auf {port} setzen', en: 'Set a course for {port}' },
 

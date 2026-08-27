@@ -23,6 +23,13 @@ import { pick, type Locale, type Localized } from './locale'
  * card's headline, a good, a country. Letting a variable be a localized pair
  * and resolving it here is what stops every call site from having to know the
  * locale just to hand over a noun.
+ *
+ * One naming rule, which a test enforces: a hole holding a bare number the
+ * reader will count is always called `{n}`, and a phrase containing `{n}` is
+ * either half of a one/other pair or is listed as a deliberate exception.
+ * Anything under any other name is text that was counted somewhere else —
+ * a ready-made "3 Meldungen", a sum of money, a harbour — and needs no
+ * counting here. It is what lets a phrase carry two counts at once.
  */
 export type Var = string | number | Localized<string>
 
@@ -33,6 +40,19 @@ export type Phrase = Localized<string>
 
 /** A catalogue is a flat map of dotted keys to phrases. */
 export type Catalog = Readonly<Record<string, Phrase>>
+
+/**
+ * Which half of a pair a count calls for.
+ *
+ * German and English agree on the rule — one is one, and everything else,
+ * nought included, is the other — so there is one function here and no table
+ * of language rules. It is exported because the choice has to be made in two
+ * places: in `tn`, where a component renders a phrase, and in `msgn`, where
+ * the engine puts a count into a message it will not be rendering itself.
+ */
+export function plural(n: number): 'one' | 'other' {
+  return n === 1 ? 'one' : 'other'
+}
 
 /**
  * Fill `{name}` holes.
@@ -84,8 +104,7 @@ export function translator<C extends Catalog>(catalog: C) {
    * `{n} Punkt` / `{n} Punkte` needs no counting at the call site.
    */
   function tn(locale: Locale, key: Stem, n: number, vars?: Vars): string {
-    const which = `${key}.${n === 1 ? 'one' : 'other'}` as Key
-    return t(locale, which, { n, ...vars })
+    return t(locale, `${key}.${plural(n)}` as Key, { n, ...vars })
   }
 
   return { t, tn }

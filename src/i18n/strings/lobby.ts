@@ -39,8 +39,8 @@ export const LOBBY = {
     en: 'Whoever is not on the quay now does not sail.',
   },
   'lobby.terms': {
-    de: '{rounds} Runden · {capital} Kapital',
-    en: '{rounds} rounds · {capital} capital',
+    de: '{n} Runden · {capital} Kapital',
+    en: '{n} rounds · {capital} capital',
   },
   'lobby.leave': { de: 'Verlassen', en: 'Leave' },
   'lobby.castOff': { de: 'Ausfahrt freigeben', en: 'Give the order to sail' },

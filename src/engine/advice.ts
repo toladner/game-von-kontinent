@@ -346,7 +346,7 @@ export function konjunkturOutcome(
             sign: up ? '+' : '−',
             percent: Math.abs(effect.percent),
           }),
-          detail: t(locale, 'advice.card.regional.detail', { rounds: effect.rounds }),
+          detail: t(locale, 'advice.card.regional.detail', { n: effect.rounds }),
           tone: up ? 'gut' : 'schlecht',
         }
       }

@@ -43,9 +43,11 @@ export const FLEET = {
   'fleet.mail.read': { de: 'Gelesene Briefe', en: 'Letters read' },
   'fleet.mail.none': { de: 'Noch keine Nachricht erhalten.', en: 'No word has reached you yet.' },
   'fleet.mail.dateline': { de: '{port}, den {time} Uhr', en: '{port}, at {time}' },
+  'fleet.mail.lots.one': { de: '{n} Posten', en: '{n} lot' },
+  'fleet.mail.lots.other': { de: '{n} Posten', en: '{n} lots' },
   'fleet.mail.body': {
-    de: 'Die *{ship}* liegt hier{bound}. {lots} Posten an Bord.',
-    en: 'The *{ship}* is lying here{bound}. {lots} lots aboard.',
+    de: 'Die *{ship}* liegt hier{bound}. {lots} an Bord.',
+    en: 'The *{ship}* is lying here{bound}. {lots} aboard.',
   },
   'fleet.mail.bound': { de: ', bestimmt nach {port}', en: ', bound for {port}' },
   'fleet.mail.awaitingOrders': { de: ' und wartet auf Order', en: ' and awaiting orders' },

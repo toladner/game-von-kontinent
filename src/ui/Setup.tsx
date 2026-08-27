@@ -599,7 +599,7 @@ function paceHint(T: Translate, minutesPerPip: number): string {
   // The Atlantic runs to roughly a dozen pips on the classic plan.
   const crossing = minutesPerPip * 12
   if (crossing < 60) return T.t('setup.pace.minutes', { n: crossing })
-  return T.t('setup.pace.hours', { n: Math.round((crossing / 60) * 10) / 10 })
+  return T.tn('setup.pace.hours', Math.round((crossing / 60) * 10) / 10)
 }
 
 function Legend({ children }: { children: React.ReactNode }) {
@@ -687,7 +687,7 @@ function StepOptionen({
   onNext: () => void
 }) {
   const T = useT()
-  const { t, num, locale } = T
+  const { t, tn, num, locale } = T
   return (
     <div className="anim-fade">
       <Section title={t('setup.section.board')} hint={t('setup.section.board.hint')}>
@@ -770,10 +770,10 @@ function StepOptionen({
                 options.durationHours >= 168
                   ? t('setup.aWeek')
                   : options.durationHours >= 24
-                    ? t('setup.days', { n: Math.round(options.durationHours / 24) })
+                    ? tn('setup.days', Math.round(options.durationHours / 24))
                     : undefined
               }
-              format={(v) => t('setup.hours', { n: v })}
+              format={(v) => tn('setup.hours', v)}
               onChange={(v) => set('durationHours', v)}
             />
           </>
@@ -924,7 +924,7 @@ function StepNamen({
   onBack: () => void
   onStart: () => void
 }) {
-  const { t, num } = useT()
+  const { t, tn, num } = useT()
   const online = options.table === 'online-eroeffnen'
   const setTrader = (i: number, value: Trader) =>
     setNames((prev) => prev.map((t, j) => (j === i ? value : t)))
@@ -970,8 +970,8 @@ function StepNamen({
           : [
               options.travel === 'echtzeit'
                 ? t('setup.summary.realtime', {
-                    pace: options.minutesPerPip,
-                    hours: options.durationHours,
+                    pace: t('setup.minutes', { n: options.minutesPerPip }),
+                    hours: tn('setup.hours', options.durationHours),
                   })
                 : t('setup.summary.rounds', { n: options.totalRounds }),
               t('setup.summary.capital', { amount: num(options.startingCapital) }),

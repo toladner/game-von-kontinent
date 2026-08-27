@@ -139,7 +139,7 @@ export function PortSheet({
   onTabChange?: (tab: Tab) => void
 }) {
   const T = useT()
-  const { t, num, locale } = T
+  const { t, tn, num, locale } = T
   const port = portOf(ctx, portId)
   const country = ctx.pack.map.countries.find((c) => c.id === port.country)
   const offers = buyOffers(ctx, state, player, portId)
@@ -381,7 +381,7 @@ export function PortSheet({
                                 {signed(T, d.profit)}
                               </span>{' '}
                               <span className="text-ink-faint">
-                                {t('port.sell.pips', { n: d.distance })}
+                                {tn('port.sell.pips', d.distance)}
                               </span>
                             </span>
                           ))}
@@ -603,14 +603,14 @@ export function MarketReport({
                       })
                       .filter(Boolean)
                       .join(', ')
-                  : t('report.lots', { n: d.sellable })}
+                  : tn('report.lots', d.sellable)}
                 {/* A harbour that takes part of the hold is a different kind
                     of choice, not a worse version of the same one — so it
                     says so rather than leaving it to be inferred from a list
                     of names the reader would have to count. */}
                 {cargo > d.sellable && (
                   <span className="text-rot">
-                    {t('report.staysAboard', { n: cargo - d.sellable })}
+                    {tn('report.staysAboard', cargo - d.sellable)}
                   </span>
                 )}
               </span>

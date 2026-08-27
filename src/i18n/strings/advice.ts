@@ -191,8 +191,8 @@ export const ADVICE = {
     en: '{title}: {sign}{percent} %.',
   },
   'advice.card.regional.detail': {
-    de: 'Gilt {rounds} Runden lang für jeden Verkauf in diesem Erdteil — für Sie wie für die Mitspieler. Anderswo ändert sich nichts.',
-    en: 'It holds for {rounds} rounds on every sale in this part of the world — for you as for the others. Elsewhere nothing changes.',
+    de: 'Gilt {n} Runden lang für jeden Verkauf in diesem Erdteil — für Sie wie für die Mitspieler. Anderswo ändert sich nichts.',
+    en: 'It holds for {n} rounds on every sale in this part of the world — for you as for the others. Elsewhere nothing changes.',
   },
   'advice.card.storm.one': {
     de: 'Jedes Schiff in diesem Seegebiet verliert einen Posten — den teuersten zuerst. Wer anderswo fährt, kommt davon.',

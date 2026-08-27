@@ -23,7 +23,7 @@ import {
 } from './net'
 import { armPush } from './push'
 import { currentLocale, useLocaleStore } from './locale'
-import { msg, t, type Message, type MsgKey, type Vars } from '@i18n'
+import { msg, t, tn, type Message, type MsgKey, type MsgStem, type Vars } from '@i18n'
 import { formatMoney as moneyIn, formatNumber, named } from '@i18n/locale'
 
 const SAVE_KEY = 'vkzk.partie.v1'
@@ -308,6 +308,7 @@ function describe(
 ): LogLine | null {
   const locale = currentLocale()
   const say = (key: MsgKey, vars?: Vars) => t(locale, key, vars)
+  const sayN = (key: MsgStem, n: number, vars?: Vars) => tn(locale, key, n, vars)
   const nameOf = (id: string) => state.players.find((p) => p.id === id)?.name ?? id
   const goodOf = (id: number) => {
     const good = ctx.goodsById.get(id)
@@ -458,7 +459,7 @@ function describe(
           reason: event.reason,
           cost:
             state.config.travel === 'echtzeit'
-              ? say('log.heldUp.minutes', { minutes: event.minutes })
+              ? sayN('log.heldUp.minutes', event.minutes)
               : say('log.heldUp.round'),
         }),
         'schlecht',

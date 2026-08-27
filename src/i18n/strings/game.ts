@@ -36,11 +36,13 @@ export const GAME = {
   // --- The dials along the strip, which only a screen reader reads --------
   'strip.news': { de: 'Nachrichten', en: 'News' },
   'strip.news.unread': { de: 'Nachrichten, {n} ungelesen', en: 'News, {n} unread' },
-  'strip.fleet': { de: 'Flotte: {n} Schiffe', en: 'Fleet: {n} ships' },
-  'strip.fleet.mail': {
-    de: 'Flotte: {n} Schiffe, {mail} Briefe',
-    en: 'Fleet: {n} ships, {mail} letters',
-  },
+  'strip.fleet.one': { de: 'Flotte: {n} Schiff', en: 'Fleet: {n} ship' },
+  'strip.fleet.other': { de: 'Flotte: {n} Schiffe', en: 'Fleet: {n} ships' },
+  // The label reads out two counts when there is post waiting. A phrase can
+  // only turn on one number, so each half is counted on its own and the two
+  // are read one after the other — see `GameScreen`.
+  'strip.letters.one': { de: '{n} Brief', en: '{n} letter' },
+  'strip.letters.other': { de: '{n} Briefe', en: '{n} letters' },
   'strip.settings': { de: 'Einstellungen', en: 'Settings' },
 
   // --- The one thing to do next -------------------------------------------
@@ -135,17 +137,21 @@ export const GAME = {
   // --- The news sheet -------------------------------------------------------
   'news.title': { de: 'Nachrichten', en: 'News' },
   'news.empty': { de: 'Noch ist nichts eingegangen', en: 'Nothing has come in yet' },
+  // `{total}` arrives already counted — "12 Meldungen" — for the same reason
+  // as the fleet label above: the phrase turns on the telegrams, and the
+  // reports beside them have to be counted before they get here.
   'news.wire.one': {
-    de: '{n} Telegramm · {total} Meldungen insgesamt',
-    en: '{n} telegram · {total} reports in all',
+    de: '{n} Telegramm · {total} insgesamt',
+    en: '{n} telegram · {total} in all',
   },
   'news.wire.other': {
-    de: '{n} Telegramme · {total} Meldungen insgesamt',
-    en: '{n} telegrams · {total} reports in all',
+    de: '{n} Telegramme · {total} insgesamt',
+    en: '{n} telegrams · {total} in all',
   },
   'news.aboutHouse': { de: '{n} zu {name} · {total} insgesamt', en: '{n} on {name} · {total} in all' },
   'news.fresh': { de: '{n} neu · {total} insgesamt', en: '{n} new · {total} in all' },
-  'news.count': { de: '{n} Meldungen', en: '{n} reports' },
+  'news.count.one': { de: '{n} Meldung', en: '{n} report' },
+  'news.count.other': { de: '{n} Meldungen', en: '{n} reports' },
   'news.filter': { de: 'Nachrichten filtern', en: 'Filter the news' },
   'news.all': { de: 'Alle', en: 'All' },
   'news.telegrams': { de: 'Telegramme', en: 'Telegrams' },

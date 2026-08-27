@@ -1,5 +1,5 @@
 import type { ActionResult, GameAction, GameEvent } from './actions'
-import { msg, type MsgKey, type Vars } from '../i18n'
+import { msg, msgn, type MsgKey, type MsgStem, type Vars } from '../i18n'
 import { named, type Localized } from '../i18n/locale'
 import type {
   CargoItem,
@@ -90,6 +90,17 @@ function patchShip(draft: Draft, index: number, patch: Partial<VehicleInstance>)
 const reject = (state: GameState, key: MsgKey, vars?: Vars): ActionResult => ({
   state,
   events: [{ type: 'rejected', reason: msg(key, vars) }],
+})
+
+/** The same, for a refusal that names a number of things. */
+const rejectN = (
+  state: GameState,
+  key: MsgStem,
+  n: number,
+  vars?: Vars,
+): ActionResult => ({
+  state,
+  events: [{ type: 'rejected', reason: msgn(key, n, vars) }],
 })
 
 // ---------------------------------------------------------------------------
@@ -980,7 +991,7 @@ export function applyAction(
       }
       const capacity = buyer.kind.capacity
       if (capacity !== null && buyer.cargo.length >= capacity) {
-        return reject(state, 'reject.holdFull', { n: capacity })
+        return rejectN(state, 'reject.holdFull', capacity)
       }
       if ((draft.bankStock[action.goodId] ?? 0) <= 0) {
         return reject(state, 'reject.bankOutOfCards')

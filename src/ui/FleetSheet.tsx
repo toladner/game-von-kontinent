@@ -197,7 +197,7 @@ export function FleetSheet({
                     <Emph
                       text={t('fleet.mail.body', {
                         ship: letter.vehicleName,
-                        lots: letter.sighting.cargo.length,
+                        lots: tn('fleet.mail.lots', letter.sighting.cargo.length),
                         bound: letter.sighting.bound
                           ? t('fleet.mail.bound', {
                               port: portName(ctx, letter.sighting.bound, locale),

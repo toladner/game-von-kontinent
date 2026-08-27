@@ -1,5 +1,5 @@
 import type { Locale } from './locale'
-import { translator, type Vars } from './t'
+import { plural, translator, type Vars } from './t'
 import { ADVICE } from './strings/advice'
 import { CARDS } from './strings/cards'
 import { FLEET } from './strings/fleet'
@@ -73,6 +73,18 @@ export interface Message {
 
 export function msg(key: MsgKey, vars?: Vars): Message {
   return vars ? { key, vars } : { key }
+}
+
+/**
+ * The same, for a message that counts something.
+ *
+ * The count has to be resolved where it is known rather than where it is
+ * read: the reader gets a key and a bag of variables, and by then nothing
+ * tells it which of the two variables the phrase turns on. Both languages
+ * count alike, so choosing the half here loses nothing.
+ */
+export function msgn(key: MsgStem, n: number, vars?: Vars): Message {
+  return msg(`${key}.${plural(n)}` as MsgKey, { n, ...vars })
 }
 
 export function render(locale: Locale, message: Message): string {

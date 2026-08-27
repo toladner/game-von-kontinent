@@ -73,7 +73,7 @@ export function GameScreen() {
   const focus = useGame((s) => s.focus)
   const announceFocus = useGame((s) => s.announceFocus)
 
-  const { t, render } = useT()
+  const { t, tn, render } = useT()
   const realtime = state.config.travel === 'echtzeit'
   const now = useNow(1000, realtime)
 
@@ -327,9 +327,12 @@ export function GameScreen() {
               state.config.sicht === 'realistisch') && (
               <Cell
                 label={
+                  // Two counts, so two phrases: the ships and the letters are
+                  // each chosen by their own number and then read one after
+                  // the other.
                   waitingMail > 0
-                    ? t('strip.fleet.mail', { n: player.fleet.length, mail: waitingMail })
-                    : t('strip.fleet', { n: player.fleet.length })
+                    ? `${tn('strip.fleet', player.fleet.length)}, ${tn('strip.letters', waitingMail)}`
+                    : tn('strip.fleet', player.fleet.length)
                 }
                 onOpen={() => open('flotte')}
               >
@@ -1541,12 +1544,12 @@ function NewsSheet({
         log.length === 0
           ? t('news.empty')
           : onWire
-            ? tn('news.wire', wire.length, { total: log.length })
+            ? tn('news.wire', wire.length, { total: tn('news.count', log.length) })
             : house
               ? t('news.aboutHouse', { n: shown.length, name: house, total: log.length })
               : fresh > 0
                 ? t('news.fresh', { n: fresh, total: log.length })
-                : t('news.count', { n: log.length })
+                : tn('news.count', log.length)
       }
     >
       {onSend && <TelegramForm onSend={onSend} />}

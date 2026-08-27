@@ -104,7 +104,7 @@ export function Lobby() {
             )}
             {' · '}
             {t('lobby.terms', {
-              rounds: state.config.totalRounds,
+              n: state.config.totalRounds,
               capital: num(state.config.startingCapital),
             })}
           </p>

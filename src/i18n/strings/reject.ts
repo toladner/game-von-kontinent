@@ -97,7 +97,11 @@ export const REJECT = {
     de: 'Von einer Warengattung nur eine Karte.',
     en: 'One card only from any one class of goods.',
   },
-  'reject.holdFull': {
+  'reject.holdFull.one': {
+    de: 'Der Laderaum faßt nur {n} Posten.',
+    en: 'The hold takes only {n} lot.',
+  },
+  'reject.holdFull.other': {
     de: 'Der Laderaum faßt nur {n} Posten.',
     en: 'The hold takes only {n} lots.',
   },

@@ -85,9 +85,13 @@ export const LOG = {
     de: '{name} wird aufgehalten — {reason}. {cost}',
     en: '{name} is held up — {reason}. {cost}',
   },
-  'log.heldUp.minutes': {
-    de: 'Verlust: {minutes} Minuten.',
-    en: 'Lost: {minutes} minutes.',
+  'log.heldUp.minutes.one': {
+    de: 'Verlust: {n} Minute.',
+    en: 'Lost: {n} minute.',
+  },
+  'log.heldUp.minutes.other': {
+    de: 'Verlust: {n} Minuten.',
+    en: 'Lost: {n} minutes.',
   },
   'log.heldUp.round': {
     de: 'Eine Runde wird ausgesetzt.',

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { currentLocale } from '@app/locale'
-import { t } from '@i18n'
-import { bcp47 } from '@i18n/locale'
+import { t, tn } from '@i18n'
+import { bcp47, type Locale } from '@i18n/locale'
 
 /**
  * The wall clock, for countdowns and for sliding ships between pips.
@@ -32,21 +32,36 @@ export function useNow(intervalMs = 1000, active = true): number {
  * re-renders the tree, so the values follow.
  */
 
+/**
+ * "2 Std 14 Min", "47 Min", "30 Sek" — a span with no preposition on it.
+ *
+ * Both of the functions below want this figure and differ only in what they
+ * wrap round it. Written once because the hour has to be counted wherever it
+ * turns up, including in the middle of "1 Std 20 Min", and a phrase per unit
+ * cannot say that.
+ */
+function spanText(locale: Locale, ms: number): string {
+  const totalMinutes = Math.floor(ms / 60_000)
+  if (totalMinutes < 1) {
+    return t(locale, 'time.seconds', { n: Math.max(1, Math.round(ms / 1000)) })
+  }
+  if (totalMinutes < 60) return t(locale, 'time.minutes', { n: totalMinutes })
+  const hours = tn(locale, 'time.hours', Math.floor(totalMinutes / 60))
+  const minutes = totalMinutes % 60
+  return minutes === 0
+    ? hours
+    : t(locale, 'time.hoursMinutes', {
+        hours,
+        minutes: t(locale, 'time.minutes', { n: minutes }),
+      })
+}
+
 /** "in 2 Std 14 Min", "in 47 Min", "in 30 Sek", "jetzt". */
 export function untilText(target: number, now: number): string {
   const locale = currentLocale()
   const ms = target - now
   if (ms <= 0) return t(locale, 'time.now')
-  const totalMinutes = Math.floor(ms / 60_000)
-  if (totalMinutes < 1) {
-    return t(locale, 'time.in.seconds', { n: Math.max(1, Math.round(ms / 1000)) })
-  }
-  if (totalMinutes < 60) return t(locale, 'time.in.minutes', { n: totalMinutes })
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  return minutes === 0
-    ? t(locale, 'time.in.hours', { n: hours })
-    : t(locale, 'time.in.hoursMinutes', { h: hours, m: minutes })
+  return t(locale, 'time.in', { duration: spanText(locale, ms) })
 }
 
 /** A wall-clock time of day, as a ship's officer would write it. */
@@ -72,19 +87,13 @@ export function roughDuration(ms: number): string {
   const minutes = Math.floor(ms / 60_000)
   if (minutes < 60) return t(locale, 'time.minutes', { n: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 48) return t(locale, 'time.hours', { n: hours })
-  return t(locale, 'time.days', { n: Math.floor(hours / 24) })
+  if (hours < 48) return tn(locale, 'time.hours', hours)
+  return tn(locale, 'time.days', Math.floor(hours / 24))
 }
 
 /** "3 Std 20 Min" — a plain duration, no preposition. */
 export function durationText(ms: number): string {
   const locale = currentLocale()
   if (ms <= 0) return t(locale, 'time.elapsed')
-  const totalMinutes = Math.floor(ms / 60_000)
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  if (hours === 0) return t(locale, 'time.minutes', { n: minutes })
-  return minutes === 0
-    ? t(locale, 'time.hours', { n: hours })
-    : t(locale, 'time.hoursMinutes', { h: hours, m: minutes })
+  return spanText(locale, ms)
 }
