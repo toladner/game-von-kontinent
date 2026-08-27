@@ -15,6 +15,7 @@ import {
   forgetTable,
   hasSeatAt,
   rememberedTable,
+  noteSeat,
   rememberTable,
   Session,
   type ConnectionStatus,
@@ -728,6 +729,10 @@ export const useGame = create<Store>((set, get) => ({
     // here next time the app is opened, and a table you failed to connect to
     // is exactly the one worth retrying.
     rememberTable({ code, name, ...(gender ? { gender } : {}) })
+    // And into the register of every table this device sits at, which is what
+    // the title page lists. Written here rather than on connect so a table
+    // you failed to reach the first time is still on the list to try again.
+    noteSeat(code, name, gender)
     set({ state: null, log: [], newsSeen: 0, lastEvents: [], notice: null, net: { code, status: 'verbindet', playerId: null, online: [] } })
 
     session = new Session(code, name, gender, {

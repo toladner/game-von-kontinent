@@ -201,6 +201,16 @@ export const SETUP = {
   'setup.oneMoment': { de: 'Einen Augenblick …', en: 'One moment …' },
   'setup.goAboard': { de: 'An Bord gehen', en: 'Go aboard' },
 
+  // --- The tables this device is sitting at --------------------------------
+  'tables.heading': { de: 'Ihre Tische ({n})', en: 'Your tables ({n})' },
+  'tables.unnamed': { de: 'Ohne Namen', en: 'No name given' },
+  'tables.asking': { de: 'wird angefragt …', en: 'asking …' },
+  'tables.noAnswer': { de: 'meldet sich nicht', en: 'no answer' },
+  'tables.finished': { de: 'abgerechnet', en: 'reckoned up' },
+  'tables.seated.one': { de: '{n} Haus am Tisch', en: '{n} house at the table' },
+  'tables.seated.other': { de: '{n} Häuser am Tisch', en: '{n} houses at the table' },
+  'tables.giveUp': { de: 'Platz an Tisch {code} aufgeben', en: 'Give up your seat at table {code}' },
+
   // --- Joining --------------------------------------------------------------
   'setup.tableCode': { de: 'Code der Partie', en: 'Table code' },
   'setup.noSuchTable': {

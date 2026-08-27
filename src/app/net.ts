@@ -56,6 +56,7 @@ export type ConnectionStatus = 'verbindet' | 'verbunden' | 'getrennt'
 
 const TOKEN_PREFIX = 'vkzk.token.'
 const TABLE_KEY = 'vkzk.tisch.v1'
+const SEATS_KEY = 'vkzk.tische.v1'
 
 export function storedToken(code: string): string | null {
   try {
@@ -82,8 +83,80 @@ export function hasSeatAt(code: string): boolean {
 export function forgetSeat(code: string): void {
   try {
     localStorage.removeItem(TOKEN_PREFIX + code)
+    const seats = storedSeats()
+    delete seats[code]
+    localStorage.setItem(SEATS_KEY, JSON.stringify(seats))
   } catch {
     /* nothing to clean up */
+  }
+}
+
+/**
+ * Every table this device holds a seat at.
+ *
+ * The seat tokens were always here — one key per table, written when the
+ * server hands a seat over and removed only when the seat is given up. What
+ * was missing was anything to show for them: the app remembered exactly one
+ * table, the last, so a player sitting at three had to keep the other two
+ * codes on a piece of paper.
+ *
+ * The tokens are the authority on *whether* there is a seat; the record below
+ * carries what is worth showing about it — the name being played under and
+ * when the table was last opened, so the list can be put in a sensible order.
+ * A token without a record is still listed: a seat is a seat, even if it was
+ * taken before this was written.
+ */
+export interface KnownTable {
+  readonly code: string
+  readonly name: string
+  readonly gender?: Gender
+  /** When this device last sat down. Absent for seats taken before v1. */
+  readonly seenAt?: number
+}
+
+type SeatRecord = Record<string, { name: string; gender?: Gender; seenAt: number }>
+
+function storedSeats(): SeatRecord {
+  try {
+    const raw = localStorage.getItem(SEATS_KEY)
+    const parsed = raw ? (JSON.parse(raw) as SeatRecord) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+/** Note that this device is sitting at a table, and under what name. */
+export function noteSeat(code: string, name: string, gender?: Gender): void {
+  try {
+    const seats = storedSeats()
+    seats[code] = { name, seenAt: Date.now(), ...(gender ? { gender } : {}) }
+    localStorage.setItem(SEATS_KEY, JSON.stringify(seats))
+  } catch {
+    /* private mode: the table still plays, it just will not be listed */
+  }
+}
+
+/**
+ * The tables, most recently opened first.
+ *
+ * Read from the token keys rather than from the record, so a seat can never
+ * be listed that the device cannot actually take — which would be a code that
+ * looks like a way back in and is not.
+ */
+export function knownTables(): KnownTable[] {
+  try {
+    const seats = storedSeats()
+    const codes: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(TOKEN_PREFIX)) codes.push(key.slice(TOKEN_PREFIX.length))
+    }
+    return codes
+      .map((code) => ({ code, name: seats[code]?.name ?? '', ...(seats[code] ?? {}) }))
+      .sort((a, b) => (b.seenAt ?? 0) - (a.seenAt ?? 0))
+  } catch {
+    return []
   }
 }
 

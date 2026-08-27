@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useT, type Translate } from '@app/locale'
 import { LanguagePicker } from './Settings'
+import { YourTables } from './YourTables'
+import type { KnownTable } from '@app/net'
 import { forgetSeat, hasSeatAt, tableInfo, type TableLookup, type TableSeat } from '@app/net'
 import { makePersona, type Gender } from '@engine/persona'
 import { MAX_PLAYERS } from '@engine/reducer'
@@ -148,6 +150,10 @@ export function Setup() {
                 setStep('optionen')
               }}
               onJoin={() => setStep('beitreten')}
+              // The seat is already held, so there is no name to ask for and no
+              // code to type: this is the join the code box performs, with
+              // both halves already known.
+              onOpenTable={(table) => join(table.code, table.name, table.gender)}
             />
           )}
 
@@ -608,12 +614,15 @@ function StepModus({
   onClassic,
   onFull,
   onJoin,
+  onOpenTable,
 }: {
   canResume: boolean
   onResume: () => void
   onClassic: () => void
   onFull: () => void
   onJoin: () => void
+  /** Straight back into a table this device already has a seat at. */
+  onOpenTable: (table: KnownTable) => void
 }) {
   const { t } = useT()
   return (
@@ -641,6 +650,11 @@ function StepModus({
 
         <Choice title={t('setup.join')} blurb={t('setup.join.blurb')} onClick={onJoin} />
       </div>
+
+      {/* Directly under the way in by code, because it is the same errand:
+          getting back to a table. One of them needs the code typed, the
+          other has it already. */}
+      <YourTables onOpen={onOpenTable} />
 
       {canResume && (
         <button className="btn mt-6 w-full" onClick={onResume}>
