@@ -365,6 +365,36 @@ describe('the Wohin? list under distance pricing', () => {
     }
   }
 
+  /**
+   * On a clock the clock decides the order.
+   *
+   * Time is charged by the sea mile, so the points and the hours disagree:
+   * London and Leningrad are both three points out of Hamburg and Leningrad
+   * is nearly twice the voyage. Every row names both figures, and a list put
+   * in order of the one while each row is read for the other sets "96 Min"
+   * above "54 Min".
+   */
+  it('reads from soonest to latest once the ships sail on a clock', () => {
+    const seen = new Set<string>()
+    for (let i = 0; i < 60 && seen.size < 8; i++) {
+      const s = vollBeladen({ travel: 'echtzeit', seed: `p${i}` })
+      const here = portAt(ctx, flagship(s.players[0]!).nodeId)!
+      if (seen.has(here)) continue
+      seen.add(here)
+
+      const rows = marketReport(ctx, s, s.players[0]!, 6)
+      expect(rows.length, here).toBeGreaterThan(1)
+      for (const row of rows) expect(row.travelMs, `${here}/${row.name.de}`).toBeDefined()
+      for (let k = 1; k < rows.length; k++) {
+        expect(
+          rows[k]!.travelMs!,
+          `${here}: ${rows[k]!.name.de} arrives before ${rows[k - 1]!.name.de}`,
+        ).toBeGreaterThanOrEqual(rows[k - 1]!.travelMs!)
+      }
+    }
+    expect(seen.size, 'expected a spread of starting harbours').toBeGreaterThan(4)
+  })
+
   it('never gives more than two rows to harbours that will not take the hold', () => {
     // Off a harbour with a crowded hinterland the chart picks these up on its
     // own, and four of six is no longer a list of places worth sailing to.

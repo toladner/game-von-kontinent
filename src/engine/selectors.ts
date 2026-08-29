@@ -544,13 +544,32 @@ export function marketReport(
    */
   const draw = seedFrom(`wohin:${ship.id}:${ship.nodeId}:${ship.portCalls}`)
 
+  /*
+   * Nearest first — but "nearest" is not the same word in the two games.
+   *
+   * Time is charged by the sea mile and not by the hop: a point is worth ten
+   * minutes along the Gambia coast and forty-six between Beira and
+   * Mosambique, because `minutesPerPip` buys a segment of median length and
+   * every other segment is billed against it. So the points and the hours
+   * disagree, and out of Hamburg they disagree loudly — London and Leningrad
+   * are both three points away, and Leningrad is nearly twice the voyage.
+   *
+   * Each row of the chart names both, and a list ordered by the one while
+   * every row is read for the other puts "96 Min" above "54 Min". Where the
+   * ships sail on a clock the clock decides the order, because that is the
+   * figure the merchant is choosing on.
+   */
+  const nearestFirst = clock
+    ? (a: Destination, b: Destination) => (a.travelMs ?? 0) - (b.travelMs ?? 0)
+    : byDistance
+
   // Under fixed prices a good fetches the same figure in every harbour, so
   // profit is flat and the only question is which is nearest — the best few
   // by score are exactly the right answer.
   if (state.config.preise !== 'entfernung') {
-    return [...withAwkwardOptions(usable.slice(0, limit), usable, inHold, limit, draw)].sort(
-      byDistance,
-    )
+    return [
+      ...withAwkwardOptions(usable.slice(0, limit), usable, inHold, limit, draw, nearestFirst),
+    ].sort(nearestFirst)
   }
 
   /*
@@ -568,8 +587,9 @@ export function marketReport(
     inHold,
     limit,
     draw,
+    nearestFirst,
   )
-  return [...spread].sort(byDistance)
+  return [...spread].sort(nearestFirst)
 }
 
 /** Near to far, which is the order the whole chart is read in. */
@@ -606,6 +626,7 @@ function withAwkwardOptions(
   held: number,
   limit: number,
   draw: RngState,
+  nearestFirst: (a: Destination, b: Destination) => number,
   want = 2,
 ): readonly Destination[] {
   if (held < 2 || chosen.length < 2) return chosen
@@ -624,7 +645,7 @@ function withAwkwardOptions(
   if (standing.length > want) {
     const spare = candidates.filter((d) => d.sellable >= held && !taken.has(d.portId))
     const dropping = new Set(
-      [...standing].sort(byDistance).slice(want).map((d) => d.portId),
+      [...standing].sort(nearestFirst).slice(want).map((d) => d.portId),
     )
     let next = 0
     return chosen.map((d) =>
@@ -653,7 +674,7 @@ function withAwkwardOptions(
           ...within,
           ...pool
             .filter((d) => d.distance > reach)
-            .sort(byDistance)
+            .sort(nearestFirst)
             .slice(0, room - within.length),
         ]
   if (drawFrom.length === 0) return chosen
