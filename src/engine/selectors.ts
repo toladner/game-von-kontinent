@@ -524,15 +524,25 @@ export function marketReport(
 
   const inHold = ship.cargo.length
 
+  /**
+   * However the rows are chosen, the chart is read from near to far.
+   *
+   * Score is good at picking rows and bad at ordering them. A harbour that
+   * takes half the hold earns half the money, so by score it sinks below
+   * every harbour that takes all of it — and the two awkward options then
+   * sit in the last two lines of every chart ever drawn, which reads as the
+   * dregs of the list rather than as the branch they were put there to be.
+   * Distance is the one figure every row can be compared on honestly, and
+   * under fixed prices it is very nearly the same order anyway: the harbours
+   * that buy the whole hold all pay alike, so nearest is best is first.
+   */
+  const nearToFar = (a: Destination, b: Destination) => a.distance - b.distance
+
   // Under fixed prices a good fetches the same figure in every harbour, so
   // profit is flat and the only question is which is nearest — the best few
   // by score are exactly the right answer.
   if (state.config.preise !== 'entfernung') {
-    // Sorted again at the end: making room for the awkward options writes
-    // them in wherever a slot came free, which is no order at all.
-    return [...withAwkwardOptions(usable.slice(0, limit), usable, limit, inHold)].sort(
-      (a, b) => score(b) - score(a),
-    )
+    return [...withAwkwardOptions(usable.slice(0, limit), usable, limit, inHold)].sort(nearToFar)
   }
 
   /*
@@ -550,7 +560,7 @@ export function marketReport(
     limit,
     inHold,
   )
-  return [...spread].sort((a, b) => a.distance - b.distance)
+  return [...spread].sort(nearToFar)
 }
 
 /**
@@ -591,13 +601,49 @@ function withAwkwardOptions(
       out.push(extra)
       continue
     }
-    // Displace the last harbour that would buy the whole hold, so the obvious
-    // answer keeps the top of the list and only its spare copies give way.
-    const victim = out.map((d) => d.sellable >= held).lastIndexOf(true)
+    const victim = mostRedundant(out, held)
     if (victim < 0) break
     out[victim] = extra
   }
   return out
+}
+
+/**
+ * Which harbour gives up its place to an awkward one.
+ *
+ * Not the farthest, which was the first rule here and the reason the awkward
+ * options ended up dangling past the end of every chart: a harbour that takes
+ * half the hold is rare, because few harbours ship any one good, so it nearly
+ * always lies further out than the ring of harbours that take everything —
+ * and throwing away the farthest ordinary harbour to make room for it threw
+ * away the very row it needed to be weighed against. Sell one posten here at
+ * three pips, or carry both to that harbour at four: that is the question,
+ * and it cannot be asked once the harbour at four has been struck off.
+ *
+ * What the chart can spare instead is a row it is already saying twice. Two
+ * harbours a pip apart that both buy the whole hold are one piece of news
+ * under fixed prices, where they also pay the same money. So the closest pair
+ * gives up its outer half, and the chart keeps its spread.
+ */
+function mostRedundant(rows: readonly Destination[], held: number): number {
+  const ordinary = rows
+    .map((d, index) => ({ d, index }))
+    .filter(({ d }) => d.sellable >= held)
+    .sort((a, b) => a.d.distance - b.d.distance)
+  if (ordinary.length === 0) return -1
+
+  // Where no two of them stand near each other, the farthest is the one the
+  // chart can most afford to lose after all.
+  let worst = ordinary.at(-1)!
+  let narrowest = Infinity
+  for (let i = 1; i < ordinary.length; i++) {
+    const gap = ordinary[i]!.d.distance - ordinary[i - 1]!.d.distance
+    if (gap < narrowest) {
+      narrowest = gap
+      worst = ordinary[i]!
+    }
+  }
+  return worst.index
 }
 
 /**

@@ -311,10 +311,43 @@ describe('the Wohin? list under distance pricing', () => {
   })
 
   it('reads from near to far, so the trade-off is in order', () => {
-    const s = laden({ preise: 'entfernung' })
-    const report = marketReport(ctx, s, s.players[0]!, 6)
-    for (let i = 1; i < report.length; i++) {
-      expect(report[i]!.distance).toBeGreaterThanOrEqual(report[i - 1]!.distance)
+    // Both ways of pricing, because the order is what puts a harbour that
+    // takes half the hold beside the ones that would take all of it. Ranked
+    // by what a place pays instead, the half-sale earns half the money and
+    // sinks to the foot of the chart every single time.
+    for (const preise of ['fest', 'entfernung'] as const) {
+      const s = laden({ preise })
+      const report = marketReport(ctx, s, s.players[0]!, 6)
+      for (let i = 1; i < report.length; i++) {
+        expect(report[i]!.distance, preise).toBeGreaterThanOrEqual(report[i - 1]!.distance)
+      }
+    }
+  })
+
+  /**
+   * The awkward option has to be somewhere a reader would look at it.
+   *
+   * It cannot always be mixed into the middle: few harbours ship any one
+   * good, so a harbour that refuses part of the hold is a rare thing and the
+   * nearest one is sometimes genuinely the farthest row on the chart. But it
+   * was in the last two lines of every chart ever drawn, on every table, and
+   * that is not the map being unkind — it was the chart making room by
+   * striking off its farthest ordinary harbour, which is precisely the row
+   * the awkward one needed to be weighed against.
+   */
+  it('does not park the awkward harbours at the foot of the chart', () => {
+    const seeds = ['markt', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k']
+    for (const preise of ['fest', 'entfernung'] as const) {
+      const atTheFoot = seeds.filter((seed) => {
+        const s = vollBeladen({ preise, seed })
+        const held = flagship(s.players[0]!).cargo.length
+        const rows = marketReport(ctx, s, s.players[0]!, 6)
+        return rows.slice(-2).every((d) => d.sellable < held)
+      })
+      expect(
+        atTheFoot.length,
+        `${preise}: the awkward harbours came last on ${atTheFoot.length} of ${seeds.length} tables`,
+      ).toBeLessThan(seeds.length / 2)
     }
   })
 
