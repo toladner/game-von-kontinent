@@ -335,19 +335,75 @@ describe('the Wohin? list under distance pricing', () => {
    * striking off its farthest ordinary harbour, which is precisely the row
    * the awkward one needed to be weighed against.
    */
-  it('does not park the awkward harbours at the foot of the chart', () => {
-    const seeds = ['markt', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k']
+  /**
+   * One table per starting harbour, both ways of pricing.
+   *
+   * Seeds picked by hand all landed in Europe and the Atlantic, where the
+   * harbours that split the hold are few and far out. Daressalam, where a
+   * dozen of them lie within three pips, was never sampled and the chart's
+   * behaviour there went unseen — so the sample is taken by where the ship
+   * starts, not by the seed that put her there.
+   */
+  const tables = function* () {
     for (const preise of ['fest', 'entfernung'] as const) {
-      const atTheFoot = seeds.filter((seed) => {
-        const s = vollBeladen({ preise, seed })
+      const seen = new Set<string>()
+      for (let i = 0; i < 120 && seen.size < 12; i++) {
+        const s = vollBeladen({ preise, seed: `p${i}` })
+        const here = portAt(ctx, flagship(s.players[0]!).nodeId)!
+        if (seen.has(here)) continue
         const held = flagship(s.players[0]!).cargo.length
-        const rows = marketReport(ctx, s, s.players[0]!, 6)
-        return rows.slice(-2).every((d) => d.sellable < held)
-      })
+        if (held < 2) continue
+        seen.add(here)
+        yield {
+          where: `${preise}/${here}`,
+          seed: `p${i}`,
+          preise,
+          held,
+          rows: marketReport(ctx, s, s.players[0]!, 6),
+        }
+      }
+    }
+  }
+
+  it('never gives more than two rows to harbours that will not take the hold', () => {
+    // Off a harbour with a crowded hinterland the chart picks these up on its
+    // own, and four of six is no longer a list of places worth sailing to.
+    for (const { where, held, rows } of tables()) {
+      const awkward = rows.filter((d) => d.sellable < held)
+      expect(awkward.length, `${where}: ${awkward.map((d) => d.name.de).join(', ')}`)
+        .toBeLessThanOrEqual(2)
+    }
+  })
+
+  /**
+   * Near ones before far ones, which is what decides where they sit.
+   *
+   * A harbour that splits the hold is rare — few harbours ship any one good —
+   * so the nearest is sometimes genuinely the farthest thing on the chart,
+   * and no rule can put it in the middle without lying about the distance.
+   * What a rule can do is not walk past a nearer one to get to it, and that
+   * is what keeps the awkward rows off the foot of the chart wherever the map
+   * allows it at all.
+   */
+  it('does not sail past a nearer awkward harbour to reach a farther one', () => {
+    for (const { where, seed, preise, held, rows } of tables()) {
+      const shown = rows.filter((d) => d.sellable < held)
+      if (shown.length === 0) continue
+      const ordinary = rows.filter((d) => d.sellable >= held)
+      if (ordinary.length === 0) continue
+
+      // Everything the chart could have offered instead.
+      const s = vollBeladen({ preise, seed })
+      const reach = Math.max(...ordinary.map((d) => d.distance))
+      const nearer = marketReport(ctx, s, s.players[0]!, 500).filter(
+        (d) => d.sellable > 0 && d.sellable < held && d.distance <= reach,
+      )
+      if (nearer.length === 0) continue
+
       expect(
-        atTheFoot.length,
-        `${preise}: the awkward harbours came last on ${atTheFoot.length} of ${seeds.length} tables`,
-      ).toBeLessThan(seeds.length / 2)
+        Math.min(...shown.map((d) => d.distance)),
+        `${where}: offered ${shown[0]!.name.de} at ${shown[0]!.distance} with ${nearer[0]!.name.de} at ${nearer[0]!.distance} nearer`,
+      ).toBeLessThanOrEqual(reach)
     }
   })
 

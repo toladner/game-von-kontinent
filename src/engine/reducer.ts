@@ -712,7 +712,10 @@ function resolveArrival(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
   // so a captain may put about and go back the way they came. Only turning on
   // the spot at sea stays barred, which is what the Anleitung's ban on
   // "Pendeln" is really about.
-  patchShip(draft, index, { cameFrom: null })
+  patchShip(draft, index, {
+    cameFrom: null,
+    portCalls: (flagship(draft.players[index]!).portCalls ?? 0) + 1,
+  })
 
   events.push({ type: 'arrived', playerId: player.id, portId })
 
@@ -774,6 +777,7 @@ function resolveFinalRun(ctx: EngineContext, draft: Draft, events: GameEvent[]):
           patchVehicle(draft, i, start.id, {
             nodeId: dest,
             cameFrom: before,
+            portCalls: (start.portCalls ?? 0) + 1,
             skipTurns: 0,
             voyage: null,
           })
@@ -1172,6 +1176,7 @@ export function applyAction(
         kind,
         nodeId: buyerShip.nodeId,
         cameFrom: null,
+        portCalls: buyerShip.portCalls,
         skipTurns: 0,
         voyage: null,
         cargo: [],
@@ -1386,6 +1391,8 @@ function advanceVoyages(ctx: EngineContext, draft: Draft, events: GameEvent[]): 
           nodeId: next,
           cameFrom: vehicle.nodeId,
           purchasesThisVisit: rest.length === 0 ? [] : vehicle.purchasesThisVisit,
+          portCalls:
+            rest.length === 0 ? (vehicle.portCalls ?? 0) + 1 : vehicle.portCalls,
           voyage:
             rest.length === 0
               ? null
@@ -1684,6 +1691,7 @@ function applyJoin(
     kind: draft.config.startingVehicle,
     nodeId: homePort,
     cameFrom: null,
+    portCalls: 1,
     skipTurns: 0,
     voyage: null,
     cargo: [],

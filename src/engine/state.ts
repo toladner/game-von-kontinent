@@ -81,6 +81,18 @@ export interface VehicleInstance {
    * and leave the way they came. Only the flinch at sea stays forbidden.
    */
   readonly cameFrom: NodeId | null
+  /**
+   * How many harbours this ship has tied up in, counting the one she is lying
+   * in now. Nothing in the rules turns on it; it is the name of the port call,
+   * so that anything wanting one arrangement per visit — the Wohin? chart's
+   * draw, for one — has something to reckon from that stands still while the
+   * ship does and moves on when she does.
+   *
+   * A count rather than the hour of arrival because the clock only runs in
+   * real-time play: `now` is carried by the tick action, and a game played in
+   * rounds never sends one.
+   */
+  readonly portCalls: number
   /** Turns still to be sat out, e.g. after ramming another ship. */
   readonly skipTurns: number
   /** Null when lying still. Only used in real-time play. */

@@ -5,6 +5,7 @@ import { activePlayer, flagship, netWorth, type VehicleInstance } from './state'
 import { goodOf, type EngineContext } from './context'
 import { edgeKey, isPort } from './mapbuild'
 import { exportsAt, sellPriceAt } from './market'
+import { nextInt, seedFrom, type RngState } from './rng'
 import type { Continent, GoodId, KonjunkturCard, Money, NodeId, PortId } from './types'
 
 /** The port the given ship lies in, or null if it is on open water. */
@@ -524,25 +525,32 @@ export function marketReport(
 
   const inHold = ship.cargo.length
 
-  /**
-   * However the rows are chosen, the chart is read from near to far.
+  /*
+   * One arrangement of the chart per visit.
    *
-   * Score is good at picking rows and bad at ordering them. A harbour that
-   * takes half the hold earns half the money, so by score it sinks below
-   * every harbour that takes all of it — and the two awkward options then
-   * sit in the last two lines of every chart ever drawn, which reads as the
-   * dregs of the list rather than as the branch they were put there to be.
-   * Distance is the one figure every row can be compared on honestly, and
-   * under fixed prices it is very nearly the same order anyway: the harbours
-   * that buy the whole hold all pay alike, so nearest is best is first.
+   * Which rows carry the awkward harbours is drawn rather than reasoned (see
+   * below), and a draw has to be made from something that does not move while
+   * the player is standing in the harbour looking at it: opening the Kontor
+   * twice must not deal a different chart, and neither must buying a good,
+   * looking at a harbour, or coming back to the panel later in the same call.
+   * So it is made from the port call itself: this ship, the harbour she lies
+   * in, and how many harbours she has tied up in to get here. None of the
+   * three moves while the player is reading. Sail away and come back and the
+   * count has gone up, so the same harbour deals a different chart — which is
+   * the point of drawing at all.
+   *
+   * Not `cameFrom`, which is cleared on arrival; not the clock, which only
+   * runs in real-time play.
    */
-  const nearToFar = (a: Destination, b: Destination) => a.distance - b.distance
+  const draw = seedFrom(`wohin:${ship.id}:${ship.nodeId}:${ship.portCalls}`)
 
   // Under fixed prices a good fetches the same figure in every harbour, so
   // profit is flat and the only question is which is nearest — the best few
   // by score are exactly the right answer.
   if (state.config.preise !== 'entfernung') {
-    return [...withAwkwardOptions(usable.slice(0, limit), usable, limit, inHold)].sort(nearToFar)
+    return [...withAwkwardOptions(usable.slice(0, limit), usable, inHold, limit, draw)].sort(
+      byDistance,
+    )
   }
 
   /*
@@ -557,14 +565,18 @@ export function marketReport(
   const spread = withAwkwardOptions(
     spreadByDistance(worthwhile, limit),
     usable,
-    limit,
     inHold,
+    limit,
+    draw,
   )
-  return [...spread].sort(nearToFar)
+  return [...spread].sort(byDistance)
 }
 
+/** Near to far, which is the order the whole chart is read in. */
+const byDistance = (a: Destination, b: Destination) => a.distance - b.distance
+
 /**
- * Make room for harbours that will not take the whole hold.
+ * Give two rows of the chart to harbours that will not take the whole hold.
  *
  * Ranking by what a place pays quietly favours the ports that buy everything,
  * and a chart made only of those turns the decision into "which of these is
@@ -574,76 +586,101 @@ export function marketReport(
  * less. Two of them, so the awkward option is a real branch to weigh rather
  * than a single oddity easily read as a mistake.
  *
- * Only when the hold actually has something to split, and only as far as the
- * chart has not already offered them by itself.
+ * Which two is drawn, not ranked, and that is the point of this. Ranked by
+ * anything at all — what a place pays, how near it is — the same harbour
+ * comes up every time and always in the same row, and a row that never moves
+ * stops being read as a choice. Drawn afresh each port call, the chart asks a
+ * different question in a different place each time the ship ties up.
+ *
+ * From within the water the chart already covers where the map allows it,
+ * which on most of the board it does: an awkward harbour standing among the
+ * ordinary ones is a decision, while one dragged in from three times the
+ * distance is a different voyage. Where the map has nothing nearer — off
+ * Lissabon the nearest lies twelve pips out and everything that takes the
+ * whole hold is inside five — the nearest there is stands in, and lands at
+ * the foot of the chart because that is honestly where it is.
  */
 function withAwkwardOptions(
   chosen: readonly Destination[],
   candidates: readonly Destination[],
-  limit: number,
   held: number,
+  limit: number,
+  draw: RngState,
   want = 2,
 ): readonly Destination[] {
-  if (held < 2 || chosen.length === 0) return chosen
-  const missing = want - chosen.filter((d) => d.sellable < held).length
-  if (missing <= 0) return chosen
+  if (held < 2 || chosen.length < 2) return chosen
 
   const taken = new Set(chosen.map((d) => d.portId))
-  // Candidates arrive best-first, so these are the best of their kind.
-  const extras = candidates
-    .filter((d) => d.sellable > 0 && d.sellable < held && !taken.has(d.portId))
-    .slice(0, missing)
-  if (extras.length === 0) return chosen
+  const standing = chosen.filter((d) => d.sellable < held)
 
+  /*
+   * Off a harbour with a crowded hinterland the chart picks up more of them
+   * than were asked for — off Daressalam four of the six best by yield are
+   * harbours that ship one of the goods aboard. Two is the figure: more than
+   * that and the chart stops being a list of places worth sailing to and
+   * starts being a list of places not to bother with. The surplus goes to
+   * whatever the chart would have offered next.
+   */
+  if (standing.length > want) {
+    const spare = candidates.filter((d) => d.sellable >= held && !taken.has(d.portId))
+    const dropping = new Set(
+      [...standing].sort(byDistance).slice(want).map((d) => d.portId),
+    )
+    let next = 0
+    return chosen.map((d) =>
+      dropping.has(d.portId) && spare[next] !== undefined ? spare[next++]! : d,
+    )
+  }
+
+  // Never more than half the chart: the awkward harbour is there to be
+  // weighed against the ordinary ones, so some have to be left to weigh it
+  // against.
+  const room = Math.min(want - standing.length, Math.floor(limit / 2))
+  if (room <= 0) return chosen
+  const pool = candidates.filter(
+    (d) => d.sellable > 0 && d.sellable < held && !taken.has(d.portId),
+  )
+  const reach = Math.max(...chosen.map((d) => d.distance))
+  const within = pool.filter((d) => d.distance <= reach)
+  // Beyond the chart there is nothing to draw between: the harbour at twelve
+  // pips and the one at seventy are not two ways of doing the same thing, and
+  // only the near one is a voyage anybody would weigh. So the fallback takes,
+  // it does not draw.
+  const drawFrom =
+    within.length >= room
+      ? within
+      : [
+          ...within,
+          ...pool
+            .filter((d) => d.distance > reach)
+            .sort(byDistance)
+            .slice(0, room - within.length),
+        ]
+  if (drawFrom.length === 0) return chosen
+
+  let rng = draw
+  const spare = [...drawFrom]
   const out = [...chosen]
-  for (const extra of extras) {
-    if (out.length < limit) {
-      out.push(extra)
-      continue
+
+  for (let n = 0; n < room && spare.length > 0; n++) {
+    const [which, next] = nextInt(rng, spare.length)
+    rng = next
+    const extra = spare.splice(which, 1)[0]!
+
+    // It takes the place of the ordinary harbour standing nearest it, which
+    // is the row the chart can most afford to lose — two harbours a pip apart
+    // that both buy the whole hold are one piece of news — and which leaves
+    // the chart's spread of distances as it was.
+    let victim = -1
+    const gap = (i: number) => Math.abs(out[i]!.distance - extra.distance)
+    for (let i = 0; i < out.length; i++) {
+      if (out[i]!.sellable < held) continue
+      if (victim < 0 || gap(i) < gap(victim)) victim = i
     }
-    const victim = mostRedundant(out, held)
     if (victim < 0) break
     out[victim] = extra
   }
   return out
-}
-
-/**
- * Which harbour gives up its place to an awkward one.
- *
- * Not the farthest, which was the first rule here and the reason the awkward
- * options ended up dangling past the end of every chart: a harbour that takes
- * half the hold is rare, because few harbours ship any one good, so it nearly
- * always lies further out than the ring of harbours that take everything —
- * and throwing away the farthest ordinary harbour to make room for it threw
- * away the very row it needed to be weighed against. Sell one posten here at
- * three pips, or carry both to that harbour at four: that is the question,
- * and it cannot be asked once the harbour at four has been struck off.
- *
- * What the chart can spare instead is a row it is already saying twice. Two
- * harbours a pip apart that both buy the whole hold are one piece of news
- * under fixed prices, where they also pay the same money. So the closest pair
- * gives up its outer half, and the chart keeps its spread.
- */
-function mostRedundant(rows: readonly Destination[], held: number): number {
-  const ordinary = rows
-    .map((d, index) => ({ d, index }))
-    .filter(({ d }) => d.sellable >= held)
-    .sort((a, b) => a.d.distance - b.d.distance)
-  if (ordinary.length === 0) return -1
-
-  // Where no two of them stand near each other, the farthest is the one the
-  // chart can most afford to lose after all.
-  let worst = ordinary.at(-1)!
-  let narrowest = Infinity
-  for (let i = 1; i < ordinary.length; i++) {
-    const gap = ordinary[i]!.d.distance - ordinary[i - 1]!.d.distance
-    if (gap < narrowest) {
-      narrowest = gap
-      worst = ordinary[i]!
-    }
-  }
-  return worst.index
 }
 
 /**
