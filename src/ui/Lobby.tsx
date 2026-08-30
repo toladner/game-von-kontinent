@@ -86,18 +86,49 @@ export function Lobby() {
               {state.players.map((p) => {
                 const color = PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!
                 const here = net === null || online.has(p.id)
+                /*
+                 * Which of these houses is the reader's own.
+                 *
+                 * Nothing said so. Five portraits in five colours read as five
+                 * strangers, and the one piece of information the reader wants
+                 * first — which line is mine — was the one the register left
+                 * out; the colour seal only helps once you already know your
+                 * colour, which is what you came here to find out.
+                 *
+                 * At one device there is no "own": the whole table plays off
+                 * this screen, and marking a line would be marking the wrong
+                 * one for everybody but its owner.
+                 */
+                const yours = net !== null && p.id === net.playerId
                 return (
                   <li
                     key={p.id}
                     className="paper-card flex items-center gap-3 rounded-md p-2.5"
-                    style={{ borderLeft: `4px solid ${color.ink}` }}
+                    style={{
+                      // Wider rule and a wash of the house's own ink: the eye
+                      // finds it down the left edge without reading a word.
+                      borderLeft: `${yours ? 7 : 4}px solid ${color.ink}`,
+                      ...(yours
+                        ? { background: `color-mix(in srgb, ${color.ink} 8%, transparent)` }
+                        : {}),
+                    }}
                   >
                     <Portrait traits={p.persona.portrait} size={44} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">
-                        {p.name}
+                      <p className="flex items-baseline gap-2 text-sm font-semibold">
+                        <span className="truncate">{p.name}</span>
+                        {/* Ahead of "eröffnet", because one house can be both
+                            and whose house it is outranks who opened it. */}
+                        {yours && (
+                          <span
+                            className="smallcaps shrink-0 text-[9px] font-bold"
+                            style={{ color: color.ink }}
+                          >
+                            {t('lobby.yours')}
+                          </span>
+                        )}
                         {p.id === state.hostId && (
-                          <span className="smallcaps text-ink-faint ml-2 text-[9px]">
+                          <span className="smallcaps text-ink-faint shrink-0 text-[9px]">
                             {t('lobby.opened')}
                           </span>
                         )}
@@ -116,6 +147,30 @@ export function Lobby() {
                 )
               })}
             </ul>
+          )}
+
+          {/*
+            How a house gets back in, said before it is needed.
+
+            The dots above are the only sign that somebody is missing, and they
+            say nothing about what to do — the person who could act on it is
+            not reading this screen at all, because losing the seat is what
+            took them off it. So this is written for the table to relay: the
+            host reads it and can answer the question when it comes.
+
+            Standing rather than raised when a dot goes dark. A dot goes dark
+            for a moment whenever a telephone locks or a train enters a tunnel,
+            and an instruction that appeared each time would read as an alarm
+            about something that mends itself. Quiet and always there is the
+            honest version.
+
+            Only where there are seats to lose: a table played round one
+            device has no code, no tokens and nothing to take back.
+          */}
+          {net && state.players.length > 0 && (
+            <p className="text-ink-faint mt-3 text-[11px] leading-snug italic">
+              {t('lobby.lostSeatNote')}
+            </p>
           )}
 
           <p className="text-ink-faint mt-4 text-[11px]">

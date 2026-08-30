@@ -181,6 +181,10 @@ export const SETUP = {
     de: '{name} ist schon unterwegs. Sie nehmen dieses Haus zurück, mit Kasse und Ladung, statt ein zweites zu gründen.',
     en: '{name} is already under way. You take that house back, cash and cargo with it, rather than founding a second one.',
   },
+  'setup.oneOfThemYours': {
+    de: 'Eines dieser Häuser ist schon Ihres? Denselben Namen eintragen, dann nehmen Sie den Platz zurück.',
+    en: 'One of these houses already yours? Enter the same name and you take that seat back.',
+  },
   'setup.takeSeatBack': { de: 'Platz zurücknehmen', en: 'Take the seat back' },
   'setup.whoMaySail': { de: 'Wer darf mitfahren?', en: 'Who may sail?' },
   'setup.atStartOnly': { de: 'Nur zu Beginn', en: 'Only at the start' },

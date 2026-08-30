@@ -143,3 +143,57 @@ it('offers the terms to nobody but the host', async () => {
 
   expect(screen.queryByRole('button', { name: 'Bedingungen ändern' })).toBeNull()
 })
+
+/**
+ * The way back in, written down where the table can read it.
+ *
+ * The person who has lost a seat cannot see this screen — losing it is what
+ * took them off it — so the note is for the houses still at the table to pass
+ * on. It stands rather than appearing when a dot goes dark: a dot goes dark
+ * whenever a telephone locks, and an instruction raised each time would read
+ * as an alarm about something that mends itself.
+ */
+it('tells the table how a lost seat is taken back', () => {
+  atTheQuay('N76K')
+  render(<App />)
+
+  expect(screen.getByText(/demselben Namen wie beim ersten Mal/)).toBeTruthy()
+})
+
+it('says nothing about seats at a table that has none to lose', () => {
+  atTheQuay('N76K')
+  // One device, one room, no code: nothing here is held by a token.
+  useGame.setState({ net: null })
+  render(<App />)
+
+  expect(screen.queryByText(/demselben Namen wie beim ersten Mal/)).toBeNull()
+})
+
+/**
+ * Which of these houses is mine.
+ *
+ * Five portraits in five colours read as five strangers. The colour seal only
+ * helps once you know your own colour, which is the thing you came to the
+ * register to find out — so the row says so in words as well as in ink.
+ */
+it('marks the reader’s own house in the register', () => {
+  atTheQuay('N76K')
+  render(<App />)
+
+  const rows = screen.getAllByRole('listitem')
+  const [first, second] = rows
+  expect(rows).toHaveLength(2)
+  // p1 is this device's seat; Ada holds it, Bo does not.
+  expect(first!.textContent).toContain('Ada')
+  expect(first!.textContent).toContain('Ihr Haus')
+  expect(second!.textContent).toContain('Bo')
+  expect(second!.textContent).not.toContain('Ihr Haus')
+})
+
+it('marks nobody’s house at a table played round one device', () => {
+  atTheQuay('N76K')
+  useGame.setState({ net: null })
+  render(<App />)
+
+  expect(screen.queryByText('Ihr Haus')).toBeNull()
+})

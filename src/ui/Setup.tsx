@@ -1137,6 +1137,23 @@ function StepBeitreten({
 
       {seats && <TableAhead seats={seats} />}
 
+      {/*
+        Attached to the list of houses, because it is about that list.
+
+        Without it the only sign that a name can take a seat back is the note
+        that appears once the right one is typed — no help at all to someone
+        who does not know to try, and who would otherwise put in "Tobi 2" and
+        found a second house beside their own without ever being told.
+
+        It goes as soon as a name is recognised: the hint is replaced by the
+        answer, and stacking both would say the same thing twice.
+      */}
+      {!known && seats && seats.length > 0 && !mine && (
+        <p className="text-ink-faint mt-2 text-center text-[11px] leading-snug italic">
+          {t('setup.oneOfThemYours')}
+        </p>
+      )}
+
       {known ? (
         <div className="paper-card mt-4 rounded-md px-3.5 py-3">
           <p className="text-[13px] leading-tight font-semibold">{t('setup.haveSeat')}</p>

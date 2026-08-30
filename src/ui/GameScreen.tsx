@@ -546,6 +546,9 @@ export function GameScreen() {
           <SeasonSheet
             ctx={ctx}
             state={state}
+            // Over the wire this device is one house; at one device it is
+            // whichever house has the wheel, since there is no other "own".
+            you={mine ?? player.id}
             now={now}
             snap={snap}
             onSnap={close}
@@ -1059,6 +1062,7 @@ function HelmSwitcher({
 function SeasonSheet({
   ctx,
   state,
+  you,
   now,
   snap,
   onSnap,
@@ -1066,6 +1070,8 @@ function SeasonSheet({
 }: {
   ctx: EngineContext
   state: GameState
+  /** The house this device is reading for; its line is marked in the fleet. */
+  you: string
   now: number
   snap: SheetSnap
   onSnap: (s: SheetSnap) => void
@@ -1108,16 +1114,20 @@ function SeasonSheet({
             : t('season.lyingIn', {
                 port: lying ? named(lying)[locale] : t('season.atSea'),
               })
+          // Ten names down a list, one of them the reader's: worth a mark.
+          const yours = p.id === you
           return (
-            <li key={p.id} className="flex items-center gap-2">
+            <li key={p.id} className={`flex items-center gap-2 ${yours ? 'font-semibold' : ''}`}>
               <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/30"
+                className={`shrink-0 rounded-full border border-black/30 ${
+                  yours ? 'h-3 w-3 ring-1 ring-black/25' : 'h-2.5 w-2.5'
+                }`}
                 style={{ background: color.ink }}
               />
               <span className="min-w-0 flex-1 truncate">
-                {p.name} — <span className="text-ink-soft">{where}</span>
+                {p.name} — <span className="text-ink-soft font-normal">{where}</span>
               </span>
-              {eta && <span className="tnum text-ink-faint">{untilText(eta, now)}</span>}
+              {eta && <span className="tnum text-ink-faint font-normal">{untilText(eta, now)}</span>}
             </li>
           )
         })}

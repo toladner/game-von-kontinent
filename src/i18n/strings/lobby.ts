@@ -46,6 +46,16 @@ export const LOBBY = {
     de: '{season} Saison · {pace} je Punkt · {capital} Kapital',
     en: '{season} season · {pace} a point · {capital} capital',
   },
+  /*
+   * Deliberately not "if you have already registered" — the reader of this
+   * line is not the person who lost the seat; they cannot see this screen.
+   * It is the table being told the answer so it can pass it on.
+   */
+  'lobby.yours': { de: 'Ihr Haus', en: 'Your house' },
+  'lobby.lostSeatNote': {
+    de: 'Kommt jemand nicht mehr in sein Haus? Mit dem Code oben und demselben Namen wie beim ersten Mal nimmt er seinen Platz zurück — auch wenn schon gespielt wird.',
+    en: 'Somebody locked out of their house? With the code above and the same name as the first time, they take their seat back — even once play has begun.',
+  },
   'lobby.change': { de: 'Bedingungen ändern', en: 'Change the terms' },
   'lobby.apply': { de: 'Übernehmen', en: 'Apply' },
   'lobby.discard': { de: 'Verwerfen', en: 'Discard' },
