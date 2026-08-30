@@ -2219,17 +2219,56 @@ describe('the table one is about to join', () => {
   })
 
   /*
-   * Once she sails a seat holds money, cargo and what its captain has seen,
-   * and a name is not proof of any of it. The server refuses it too — this is
-   * the screen agreeing rather than the screen deciding.
+   * A house whose device lost its token is worse off once the ships have
+   * sailed, not better: it keeps its capital, it counts in the final
+   * reckoning, and in round play the turn stops at it and the table with it.
+   * So the name opens the same door there, and says what is being taken back.
    */
-  it('will not hand a seat over on a name once the ships have sailed', async () => {
+  it('takes a seat back by name once the ships have sailed too', async () => {
+    vi.stubGlobal(
+      'fetch',
+      answer({
+        meta: { joinPolicy: 'nur-zu-beginn', packId: 'classic' },
+        phase: 'segeln',
+        players: [seat('p1-s6d', 'Tobi', 0), seat('p2-6f7', 'Jojo', 1)],
+      }),
+    )
+    openJoin()
+    await settle()
+
+    // A table that takes no latecomers still says so — to a latecomer.
+    expect(screen.getByText(/nimmt keine Nachzügler auf/)).toBeTruthy()
+
+    act(() => {
+      fireEvent.change(screen.getByLabelText('Name der 3. Person'), {
+        target: { value: 'Tobi' },
+      })
+    })
+
+    // Not "on the quay": she is at sea, with a cash box and a hold.
+    expect(screen.getByText(/Tobi ist schon unterwegs/)).toBeTruthy()
+    expect(screen.queryByText(/nimmt keine Nachzügler auf/)).toBeNull()
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Platz zurücknehmen' }))
+    })
+    expect(useGame.getState().net?.code).toBe('WZUH')
+  })
+
+  /*
+   * The face of a house that already exists is the house's, not a fresh draw
+   * off the same name — and the ♀/♂ switch, which the server ignores for a
+   * seat being taken back, is not offered where it would decide nothing.
+   */
+  it('shows the house its own face when a seat is being taken back', async () => {
+    // A seat whose portrait is not what the name alone would draw.
+    const hers = makePersona('Tobi', 'classic', 'w')
     vi.stubGlobal(
       'fetch',
       answer({
         meta: { joinPolicy: 'jederzeit', packId: 'classic' },
         phase: 'segeln',
-        players: [seat('p1-s6d', 'Tobi', 0)],
+        players: [{ id: 'p1-s6d', name: 'Tobi', colorIndex: 0, portrait: hers.portrait }],
       }),
     )
     openJoin()
@@ -2240,8 +2279,21 @@ describe('the table one is about to join', () => {
         target: { value: 'Tobi' },
       })
     })
-    expect(screen.queryByText(/steht schon am Kai/)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Beitreten' })).toBeTruthy()
+
+    const drawn = (svg: Element | null) =>
+      (svg?.innerHTML ?? '').replace(/id="[^"]*"/g, '').replace(/url\(#[^)]*\)/g, '')
+
+    const shown = drawn(document.querySelector('.h-13 svg'))
+    const { container: expected } = render(<Portrait traits={hers.portrait} size={52} />)
+    expect(shown).toBe(drawn(expected.querySelector('svg')))
+
+    // The name alone would have drawn somebody else; this proves it did not.
+    const { container: guess } = render(
+      <Portrait traits={makePersona('Tobi', 'classic').portrait} size={52} />,
+    )
+    expect(shown).not.toBe(drawn(guess.querySelector('svg')))
+
+    expect(screen.queryByLabelText('Kauffrau oder Kaufmann')).toBeNull()
   })
 
   it('says plainly when the table will not have latecomers', async () => {

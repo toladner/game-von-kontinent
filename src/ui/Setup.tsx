@@ -4,7 +4,7 @@ import { LanguagePicker } from './Settings'
 import { YourTables } from './YourTables'
 import type { KnownTable } from '@app/net'
 import { forgetSeat, hasSeatAt, tableInfo, type TableLookup, type TableSeat } from '@app/net'
-import { makePersona, type Gender } from '@engine/persona'
+import { makePersona, type Gender, type PortraitTraits } from '@engine/persona'
 import { MAX_PLAYERS } from '@engine/reducer'
 import type { Seat } from '@engine/setup'
 import { NotifyCheck } from './NotifyCheck'
@@ -1100,16 +1100,22 @@ function StepBeitreten({
    * houses on the quay says what they are called. No extra question, no code
    * to keep, and where nothing matches it is the ordinary join it always was.
    *
-   * Only on the quay. Once she sails a seat holds money, cargo and what its
-   * captain has seen, and a name is not proof of anything — the server says
-   * the same, and says it again whatever this screen offers.
+   * Under way as much as on the quay. A house whose device lost its token is
+   * worse off once the ships have sailed, not better: it keeps its capital,
+   * counts in the final reckoning, and in round play the turn stops at it and
+   * the whole table with it. So the name opens the same door there — which
+   * does mean a table code and a name spend that house's money, and is why
+   * the server will not take a seat from under somebody sitting in it.
    */
   const mine = useMemo(() => {
-    if (!look?.ok || look.info.phase !== 'lobby') return null
+    if (!look?.ok) return null
     const typed = trader.name.trim().toLowerCase()
     if (!typed) return null
     return look.info.players.find((p) => p.name.trim().toLowerCase() === typed) ?? null
   }, [look, trader.name])
+
+  /** A house at sea is taken back as it stands; one on the quay has nothing yet. */
+  const atSea = mine !== null && look?.ok === true && look.info.phase !== 'lobby'
 
   const ready =
     clean.length >= 3 && (known || (trader.name.trim().length > 0 && (mine !== null || shut === null)))
@@ -1157,19 +1163,21 @@ function StepBeitreten({
               Beitreten der Vierte in Ocker. */}
           {/* The plan is the table's, and the same lookup that gives the
               seat its right number and colour gives the portrait its plan.
-              Where the name is one already on the quay, the seat is that
-              house's rather than the next one free — so the colour and the
-              number on show are the ones being taken back. */}
+              Where the name is one already at the table, the seat is that
+              house's rather than the next one free — so the colour, the
+              number and the face on show are the ones being taken back, and
+              not a fresh draw that happens to share a name. */}
           <TraderSlot
             index={mine ? mine.colorIndex : (seats?.length ?? 0)}
             trader={trader}
             packId={look?.ok ? look.info.meta.packId : null}
+            portrait={mine?.portrait ?? null}
             onChange={setTrader}
           />
 
           {mine && (
             <p className="text-press anim-fade mt-2.5 text-center text-[12px] leading-snug">
-              {t('setup.thatIsYou', { name: mine.name })}
+              {t(atSea ? 'setup.thatIsYouAtSea' : 'setup.thatIsYou', { name: mine.name })}
             </p>
           )}
         </>
@@ -1271,6 +1279,7 @@ function TraderSlot({
   index,
   trader,
   packId,
+  portrait,
   onChange,
   onRemove,
 }: {
@@ -1294,6 +1303,17 @@ function TraderSlot({
    * the point of this is that the face a player is shown is the face he gets.
    */
   packId: string | null
+  /**
+   * The face of a house that already exists, when this slot is taking one
+   * back rather than founding one.
+   *
+   * A persona is drawn from the name, the plan and the ♀/♂ switch, so a slot
+   * left to draw its own would show a stranger wearing the right name — and
+   * the switch would appear to change a house that is already at sea, when
+   * the server rightly ignores it. Given a face, the slot shows that face and
+   * puts the switch away: there is nothing left to decide.
+   */
+  portrait?: PortraitTraits | null
   onChange: (v: Trader) => void
   onRemove?: () => void
 }) {
@@ -1303,6 +1323,7 @@ function TraderSlot({
     () => (trimmed && packId ? makePersona(trimmed, packId, trader.gender) : null),
     [trimmed, packId, trader.gender],
   )
+  const face = portrait ?? persona?.portrait ?? null
   const color = PLAYER_COLORS[index % PLAYER_COLORS.length]!
   // A Kaufmann unless someone says otherwise, and shown as such from the
   // start — so the switch never moves on its own while a name is typed.
@@ -1314,9 +1335,9 @@ function TraderSlot({
       <div className="relative shrink-0">
         {/* Der Schlüssel wechselt nur beim ersten Buchstaben, nicht bei
             jedem — das Bildnis blendet einmal auf und zappelt nicht. */}
-        <div key={persona ? 'wer' : 'niemand'} className="anim-fade grid h-13 w-13 place-items-center">
-          {persona ? (
-            <Portrait traits={persona.portrait} size={52} />
+        <div key={face ? 'wer' : 'niemand'} className="anim-fade grid h-13 w-13 place-items-center">
+          {face ? (
+            <Portrait traits={face} size={52} />
           ) : (
             <div className="border-ink-soft/40 grid h-12 w-12 place-items-center rounded-full border border-dashed">
               <span className="text-ink-faint text-xs">?</span>
@@ -1352,30 +1373,35 @@ function TraderSlot({
           </p>
 
           {/* Immer da, damit beim Tippen nichts aufspringt — nur blasser,
-              solange noch niemand eingetragen ist. */}
-          <div
-            className={`flex shrink-0 overflow-hidden rounded-sm border border-black/20 transition-opacity duration-300 ${
-              persona ? 'opacity-100' : 'opacity-40'
-            }`}
-            role="group"
-            aria-label={t('setup.merchantEither')}
-          >
-            {(['w', 'm'] as const).map((g) => (
-              <button
-                key={g}
-                className={`btn-sm px-2 py-0.5 text-[12px] leading-none transition-colors ${
-                  chosen === g
-                    ? 'bg-ink/85 text-paper'
-                    : 'text-ink-soft hover:bg-black/5'
-                }`}
-                aria-pressed={chosen === g}
-                aria-label={t(g === 'w' ? 'setup.merchantWoman' : 'setup.merchantMan')}
-                onClick={() => onChange({ ...trader, gender: g })}
-              >
-                {g === 'w' ? '♀' : '♂'}
-              </button>
-            ))}
-          </div>
+              solange noch niemand eingetragen ist. Bei einem Haus, das es
+              schon gibt, ist dagegen nichts mehr zu wählen: der Schalter
+              verschwindet, statt folgenlos dazustehen und ein Bildnis zu
+              versprechen, das der Server gar nicht mehr annimmt. */}
+          {!portrait && (
+            <div
+              className={`flex shrink-0 overflow-hidden rounded-sm border border-black/20 transition-opacity duration-300 ${
+                persona ? 'opacity-100' : 'opacity-40'
+              }`}
+              role="group"
+              aria-label={t('setup.merchantEither')}
+            >
+              {(['w', 'm'] as const).map((g) => (
+                <button
+                  key={g}
+                  className={`btn-sm px-2 py-0.5 text-[12px] leading-none transition-colors ${
+                    chosen === g
+                      ? 'bg-ink/85 text-paper'
+                      : 'text-ink-soft hover:bg-black/5'
+                  }`}
+                  aria-pressed={chosen === g}
+                  aria-label={t(g === 'w' ? 'setup.merchantWoman' : 'setup.merchantMan')}
+                  onClick={() => onChange({ ...trader, gender: g })}
+                >
+                  {g === 'w' ? '♀' : '♂'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

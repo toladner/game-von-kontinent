@@ -244,10 +244,6 @@ export const REJECT = {
     de: 'Unter diesen Bedingungen käme nicht jeder mit. Die alten stehen weiter.',
     en: 'Not every house would come along under those terms. The old ones stand.',
   },
-  'reject.seatUnderWay': {
-    de: 'Die Partie läuft schon; ein Platz gehört dann nur noch seinem Schlüssel.',
-    en: 'The game is under way; a seat then belongs to its key alone.',
-  },
   'reject.noSuchSeat': {
     de: 'Diesen Platz gibt es an diesem Tisch nicht.',
     en: 'There is no such seat at this table.',

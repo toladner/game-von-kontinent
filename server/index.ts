@@ -556,15 +556,18 @@ export class GameRoom {
          * when its label said it only left the room, and the seat is still at
          * the table with nobody able to sit in it. Joining afresh is not the
          * same thing — it makes a second house under the same name and leaves
-         * the first standing there, and if the first was the one that opened
-         * the table then nobody can give the order to sail at all.
+         * the first standing there, holding its capital and counted in the
+         * final reckoning; and in round play the turn stops at that empty
+         * house forever, because nobody may act for it.
          *
-         * So a seat can be taken back by name, on three conditions: the ships
-         * are still tied up, the seat exists, and nobody is sitting in it as we
-         * speak. In the lobby that costs nothing to give away — every house
-         * holds the same capital, and who is at the table is public to anyone
-         * with the code already. Once she sails a seat holds money, cargo and
-         * what its captain has seen, and then the token is the only way in.
+         * So a seat is taken back by name, at any point in the game, on two
+         * conditions: the seat exists, and nobody is sitting in it as we
+         * speak. Under way that is a real key handed over on a name — a table
+         * code and a name spend that house's money. It is the arrangement
+         * asked for, and it is the same one every table has at the door
+         * already: the code alone seats a stranger wherever latecomers are
+         * allowed. The seat someone is actually playing is never taken from
+         * under them, which is the guard that matters in practice.
          *
          * The old token is left where it is rather than struck off: one house
          * may be played from a telephone and a desk at once, and this is the
@@ -573,9 +576,6 @@ export class GameRoom {
         if (message.seat) {
           const state = this.state
           const seat = message.seat
-          if (state.phase !== 'lobby') {
-            return this.send(socket, { t: 'error', reason: msg('reject.seatUnderWay') })
-          }
           if (!state.players.some((p) => p.id === seat)) {
             return this.send(socket, { t: 'error', reason: msg('reject.noSuchSeat') })
           }

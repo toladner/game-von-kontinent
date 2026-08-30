@@ -177,6 +177,10 @@ export const SETUP = {
     de: '{name} steht schon am Kai. Sie nehmen diesen Platz zurück, statt ein zweites Haus zu gründen.',
     en: '{name} is already on the quay. You take that seat back rather than founding a second house.',
   },
+  'setup.thatIsYouAtSea': {
+    de: '{name} ist schon unterwegs. Sie nehmen dieses Haus zurück, mit Kasse und Ladung, statt ein zweites zu gründen.',
+    en: '{name} is already under way. You take that house back, cash and cargo with it, rather than founding a second one.',
+  },
   'setup.takeSeatBack': { de: 'Platz zurücknehmen', en: 'Take the seat back' },
   'setup.whoMaySail': { de: 'Wer darf mitfahren?', en: 'Who may sail?' },
   'setup.atStartOnly': { de: 'Nur zu Beginn', en: 'Only at the start' },
@@ -235,8 +239,8 @@ export const SETUP = {
     en: 'The table is full — no more than {n} ships sail.',
   },
   'setup.tableUnderWay': {
-    de: 'Diese Partie ist unterwegs und nimmt keine Nachzügler auf.',
-    en: 'This game is under way and takes no latecomers.',
+    de: 'Diese Partie ist unterwegs und nimmt keine Nachzügler auf. Wer schon ein Haus hier hat, trägt dessen Namen ein.',
+    en: 'This game is under way and takes no latecomers. If a house here is already yours, enter its name.',
   },
   'setup.haveSeat': {
     de: 'Sie haben an diesem Tisch bereits einen Platz.',
