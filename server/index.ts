@@ -21,7 +21,7 @@ import { flagship } from '../src/engine/state'
 import type { GameState, JoinPolicy } from '../src/engine/state'
 import { nextEventAt } from '../src/engine/selectors'
 import { projectFor } from '../src/engine/fog'
-import type { AngebotMode, PreisMode, TravelMode } from '../src/engine/types'
+import type { AngebotMode, KonjunkturMode, PreisMode, TravelMode } from '../src/engine/types'
 import type { Gender } from '../src/engine/persona'
 import { sendPush, type PushSub, type Vapid } from './push'
 
@@ -66,6 +66,13 @@ export interface GameMeta {
    */
   readonly angebot?: AngebotMode
   readonly preise?: PreisMode
+  /**
+   * Which Konjunktur deck is on the table. Optional for the same reason as
+   * the two above, and absent means the pack's own — which is 'klassisch' on
+   * both plans, so every table opened before this field existed goes on
+   * replaying to exactly the game it was.
+   */
+  readonly konjunktur?: KonjunkturMode
   readonly packId: string
   readonly createdAt: number
   /**
@@ -87,6 +94,19 @@ type ClientMessage =
    * that misses one is only briefly looking at the wrong tab.
    */
   | { t: 'focus'; step: string }
+  /**
+   * The host changing his mind on the quayside.
+   *
+   * Not an action and never in the log: the settings are not something the
+   * game does, they are the game it is. They live in `meta`, the log is
+   * replayed against them, and so a change here is answered by handing every
+   * client the table again from the top rather than by appending anything.
+   *
+   * Only while the ships are still tied up. Once the first die is thrown the
+   * log means what it means and the terms it was played under cannot be
+   * rewritten under it.
+   */
+  | { t: 'configure'; settings: Partial<GameMeta> }
   | { t: 'ping' }
 
 type ServerMessage =
@@ -156,19 +176,7 @@ export default {
       const code = makeCode()
       const meta: GameMeta = {
         seed: `${code}-${Date.now().toString(36)}`,
-        totalRounds: clamp(body.totalRounds ?? 30, 1, 200),
-        startingCapital: clamp(body.startingCapital ?? 500_000, 50_000, 5_000_000),
-        joinPolicy: body.joinPolicy === 'jederzeit' ? 'jederzeit' : 'nur-zu-beginn',
-        sicht: body.sicht === 'realistisch' ? 'realistisch' : 'normal',
-        travel: body.travel === 'echtzeit' ? 'echtzeit' : 'runde',
-        // Fractional minutes are allowed: handy for a blitz table, and the
-        // only way an automated test can watch a voyage finish.
-        minutesPerPip: clampF(body.minutesPerPip ?? 6, 0.02, 240),
-        durationHours: clamp(body.durationHours ?? 24, 1, 720),
-        maxFleetSize: clamp(body.maxFleetSize ?? 1, 1, 6),
-        angebot: body.angebot === 'zufaellig' ? 'zufaellig' : 'fest',
-        preise: body.preise === 'entfernung' ? 'entfernung' : 'fest',
-        packId: typeof body.packId === 'string' ? body.packId : 'classic',
+        ...settle(body),
         createdAt: Date.now(),
         code,
       }
@@ -209,6 +217,75 @@ export default {
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(n)))
 const clampF = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+
+/** Everything about a table the host chooses, as against the seed and the code. */
+type Settings = Required<
+  Pick<
+    GameMeta,
+    | 'totalRounds'
+    | 'startingCapital'
+    | 'joinPolicy'
+    | 'sicht'
+    | 'travel'
+    | 'minutesPerPip'
+    | 'durationHours'
+    | 'maxFleetSize'
+    | 'angebot'
+    | 'preise'
+    | 'konjunktur'
+    | 'packId'
+  >
+>
+
+/** The Anleitung's terms, which is where a setting falls back to. */
+export const AS_PRINTED: Settings = {
+  totalRounds: 30,
+  startingCapital: 500_000,
+  joinPolicy: 'nur-zu-beginn',
+  sicht: 'normal',
+  travel: 'runde',
+  minutesPerPip: 6,
+  durationHours: 24,
+  maxFleetSize: 1,
+  angebot: 'fest',
+  preise: 'fest',
+  konjunktur: 'klassisch',
+  packId: 'classic',
+}
+
+/**
+ * The settings, read off whatever arrived and kept inside bounds.
+ *
+ * One reading for both ways a table is set — once when it is opened, and again
+ * every time the host changes his mind before casting off — because two
+ * readings would be two sets of bounds, and the second would be the one nobody
+ * remembered to widen.
+ *
+ * `base` is what a field falls back to when it is missing or unreadable: the
+ * printed terms at the outset, the table's own settings afterwards, so a
+ * change that names three fields leaves the rest as they stood.
+ */
+export function settle(body: Partial<GameMeta>, base: Partial<Settings> = {}): Settings {
+  const was = { ...AS_PRINTED, ...base }
+  const one = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+    allowed.includes(value as T) ? (value as T) : fallback
+  return {
+    totalRounds: clamp(body.totalRounds ?? was.totalRounds, 1, 200),
+    startingCapital: clamp(body.startingCapital ?? was.startingCapital, 50_000, 5_000_000),
+    joinPolicy: one(body.joinPolicy, ['nur-zu-beginn', 'jederzeit'] as const, was.joinPolicy),
+    sicht: one(body.sicht, ['normal', 'realistisch'] as const, was.sicht),
+    travel: one(body.travel, ['runde', 'echtzeit'] as const, was.travel),
+    // Fractional minutes are allowed: handy for a blitz table, and the
+    // only way an automated test can watch a voyage finish.
+    minutesPerPip: clampF(body.minutesPerPip ?? was.minutesPerPip, 0.02, 240),
+    durationHours: clamp(body.durationHours ?? was.durationHours, 1, 720),
+    maxFleetSize: clamp(body.maxFleetSize ?? was.maxFleetSize, 1, 6),
+    angebot: one(body.angebot, ['fest', 'zufaellig'] as const, was.angebot),
+    preise: one(body.preise, ['fest', 'entfernung'] as const, was.preise),
+    konjunktur: one(body.konjunktur, ['klassisch', 'erweitert'] as const, was.konjunktur),
+    packId: typeof body.packId === 'string' && body.packId ? body.packId : was.packId,
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Durable Object: one table
@@ -280,6 +357,7 @@ export class GameRoom {
       // falls back to the pack's own defaults, which is the old behaviour.
       ...(this.meta.angebot ? { angebot: this.meta.angebot } : {}),
       ...(this.meta.preise ? { preise: this.meta.preise } : {}),
+      ...(this.meta.konjunktur ? { konjunktur: this.meta.konjunktur } : {}),
     })
     for (const a of this.actions) s = applyAction(ctx, s, a).state
     this.state = s
@@ -507,6 +585,61 @@ export class GameRoom {
           actions: this.foggy ? [] : this.actions,
         })
         if (this.foggy) this.send(socket, { t: 'view', state: projectFor(this.state, null) })
+        return
+      }
+
+      case 'configure': {
+        const playerId = this.sockets.get(socket) ?? null
+        if (!playerId) {
+          return this.send(socket, { t: 'error', reason: msg('reject.notSeated') })
+        }
+        if (this.state.hostId !== playerId) {
+          return this.send(socket, { t: 'error', reason: msg('reject.hostConfigures') })
+        }
+        if (this.state.phase !== 'lobby') {
+          return this.send(socket, { t: 'error', reason: msg('reject.alreadyRunning') })
+        }
+
+        /*
+         * The log is replayed against the new terms, and a `join` the reducer
+         * refuses under them is a house that quietly stops being at the table
+         * — standing in the lobby, watching itself vanish, with nothing on
+         * screen to say why. No setting does that today (the smaller plan
+         * still starts twelve harbours), but the failure is silent and the
+         * check is a subtraction, so: build it, count the houses, and put the
+         * old terms back rather than lose one.
+         */
+        const before = this.state.players.length
+        const was = this.meta
+        this.meta = { ...this.meta, ...settle(message.settings, this.meta) }
+        this.rebuild()
+        if ((this.state?.players.length ?? 0) < before) {
+          this.meta = was
+          this.rebuild()
+          return this.send(socket, { t: 'error', reason: msg('reject.termsWouldStrand') })
+        }
+        await this.persist()
+        // New terms, new clock: a table that has just become a real-time one
+        // needs the first stroke to reckon from, exactly as at /create.
+        await this.catchUp()
+
+        /*
+         * Everyone gets the table again from the top, because that is what has
+         * changed — not a move within the game but the game the moves are in.
+         * The seat token is left blank on purpose: each client already holds
+         * its own and `rememberToken` ignores an empty one, so nothing has to
+         * be handed back out to say the settings moved.
+         */
+        for (const [other, who] of this.sockets) {
+          this.send(other, {
+            t: 'welcome',
+            playerId: who,
+            token: '',
+            meta: this.meta,
+            actions: this.foggy ? [] : this.actions,
+          })
+        }
+        if (this.foggy) this.broadcastViews()
         return
       }
 

@@ -169,6 +169,10 @@ export const SETUP = {
     de: 'Einer Partie beitreten können Sie gleich auf der Eingangsseite — dort ist nichts einzurichten.',
     en: 'You can join a table straight from the entrance page — there is nothing to set up there.',
   },
+  'setup.section.crew.hint': {
+    de: 'Ob nach der Ausfahrt noch jemand an Bord kommt.',
+    en: 'Whether anybody may still come aboard once the ships have sailed.',
+  },
   'setup.whoMaySail': { de: 'Wer darf mitfahren?', en: 'Who may sail?' },
   'setup.atStartOnly': { de: 'Nur zu Beginn', en: 'Only at the start' },
   'setup.atStartOnly.blurb': {

@@ -27,9 +27,19 @@ export interface GameMeta {
   /** Market options; absent on tables opened before they existed. */
   readonly angebot?: 'fest' | 'zufaellig'
   readonly preise?: 'fest' | 'entfernung'
+  readonly konjunktur?: 'klassisch' | 'erweitert'
   readonly packId: string
   readonly createdAt: number
 }
+
+/**
+ * What the host may still change while the ships are tied up.
+ *
+ * The seed, the code and the hour the table was opened are not in it: those
+ * are what the table *is*. Everything else is only the terms it will be played
+ * under, and until the first die is thrown nothing has been played under them.
+ */
+export type TableSettings = Partial<Omit<GameMeta, 'seed' | 'createdAt'>>
 
 type ServerMessage =
   | { t: 'welcome'; playerId: string | null; token: string; meta: GameMeta; actions: GameAction[] }
@@ -218,6 +228,7 @@ export async function createOnlineGame(options: {
   maxFleetSize: number
   angebot?: 'fest' | 'zufaellig'
   preise?: 'fest' | 'entfernung'
+  konjunktur?: 'klassisch' | 'erweitert'
   packId?: string
 }): Promise<{ code: string; meta: GameMeta }> {
   const res = await fetch('/api/games', {
@@ -351,6 +362,19 @@ export class Session {
   send(action: GameAction): boolean {
     if (this.socket?.readyState !== WebSocket.OPEN) return false
     this.socket.send(JSON.stringify({ t: 'action', action }))
+    return true
+  }
+
+  /**
+   * New terms for a table that has not cast off.
+   *
+   * Nothing comes back but the table itself, dealt again from the top: the
+   * server keeps the settings, not the log, so there is no reply to wait for
+   * and nothing to reconcile — the next `welcome` is the answer.
+   */
+  configure(settings: TableSettings): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false
+    this.socket.send(JSON.stringify({ t: 'configure', settings }))
     return true
   }
 

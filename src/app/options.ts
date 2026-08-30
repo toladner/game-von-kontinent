@@ -1,5 +1,7 @@
 import { PACK_ENTRIES, packById as packFromRegistry } from '@content/packs'
 import type { ContentPack } from '@engine/types'
+import type { GameState } from '@engine/state'
+import type { TableSettings } from '@app/net'
 import type { Localized } from '@i18n/locale'
 
 /**
@@ -92,6 +94,61 @@ export const DEFAULT_OPTIONS: GameOptions = {
   konjunktur: 'klassisch',
   joinPolicy: 'nur-zu-beginn',
   joinCode: '',
+}
+
+/**
+ * The terms of a table already standing, read back into the setup form.
+ *
+ * Until now the arrow only pointed one way: options were turned into a game
+ * and that was that. A host who wants to change his mind on the quayside needs
+ * the other direction, and needs it to be exact — the form he is handed has to
+ * be the form he filled in, or the first field he does not touch is the one
+ * that quietly changes.
+ */
+export function optionsOf(state: GameState): GameOptions {
+  return {
+    ...DEFAULT_OPTIONS,
+    // A table being reconsidered is by definition not the one-question route.
+    mode: 'vollstaendig',
+    table: 'online-eroeffnen',
+    packId: state.packId,
+    // The engine says 'runde' where the setup screen says 'wuerfel': the
+    // engine names the unit of time, the screen names the thing on the table.
+    travel: state.config.travel === 'echtzeit' ? 'echtzeit' : 'wuerfel',
+    totalRounds: state.config.totalRounds,
+    minutesPerPip: state.config.realtime.minutesPerPip,
+    durationHours: state.config.realtime.durationHours,
+    startingCapital: state.config.startingCapital,
+    fleetLimit: state.config.maxFleetSize,
+    sicht: state.config.sicht,
+    angebot: state.config.angebot,
+    preise: state.config.preise,
+    konjunktur: state.config.konjunkturMode,
+    joinPolicy: state.joinPolicy,
+  }
+}
+
+/**
+ * And back out again, as the settings a table is kept under.
+ *
+ * The seed is not here and never will be: it is what makes this table this
+ * table rather than another one with the same rules.
+ */
+export function settingsOf(options: GameOptions): TableSettings {
+  return {
+    packId: options.packId,
+    totalRounds: options.totalRounds,
+    startingCapital: options.startingCapital,
+    joinPolicy: options.joinPolicy,
+    sicht: options.sicht,
+    travel: options.travel === 'echtzeit' ? 'echtzeit' : 'runde',
+    minutesPerPip: options.minutesPerPip,
+    durationHours: options.durationHours,
+    maxFleetSize: options.fleetLimit,
+    angebot: options.angebot,
+    preise: options.preise,
+    konjunktur: options.konjunktur,
+  }
 }
 
 /**

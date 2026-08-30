@@ -240,6 +240,14 @@ export const REJECT = {
     de: 'Beitritt läuft über die Anmeldung.',
     en: 'Joining is done at the entrance.',
   },
+  'reject.termsWouldStrand': {
+    de: 'Unter diesen Bedingungen käme nicht jeder mit. Die alten stehen weiter.',
+    en: 'Not every house would come along under those terms. The old ones stand.',
+  },
+  'reject.hostConfigures': {
+    de: 'Nur wer die Partie eröffnet hat, ändert die Bedingungen.',
+    en: 'Only the house that opened the table may change its terms.',
+  },
   'reject.hostStarts': {
     de: 'Nur wer die Partie eröffnet hat, gibt sie frei.',
     en: 'Only the house that opened the table may start it.',

@@ -6,6 +6,7 @@ import { isNoteworthy, PLAYER_COLORS, useGame } from '@app/store'
 import { buyOffers, legalSteps, portAt, routeTo } from '@engine/selectors'
 import { flagship } from '@engine/state'
 import { makePersona } from '@engine/persona'
+import { Portrait } from './Portrait'
 import { createGame } from '@engine/setup'
 import { applyAction, replay } from '@engine/reducer'
 import { CLASSIC_PACK } from '@content/maps/classic'
@@ -2068,7 +2069,7 @@ describe('the table one is about to join', () => {
     vi.stubGlobal(
       'fetch',
       answer({
-        meta: { joinPolicy: 'nur-zu-beginn' },
+        meta: { joinPolicy: 'nur-zu-beginn', packId: 'classic' },
         phase: 'lobby',
         players: [seat('a', 'Sepp', 0), seat('b', 'Marie', 1)],
       }),
@@ -2085,7 +2086,7 @@ describe('the table one is about to join', () => {
     vi.stubGlobal(
       'fetch',
       answer({
-        meta: { joinPolicy: 'nur-zu-beginn' },
+        meta: { joinPolicy: 'nur-zu-beginn', packId: 'classic' },
         phase: 'lobby',
         players: [seat('a', 'Sepp', 0), seat('b', 'Marie', 1)],
       }),
@@ -2103,11 +2104,59 @@ describe('the table one is about to join', () => {
     expect(document.querySelector(`[title="Grün"]`)).toBeTruthy()
   })
 
+  /**
+   * The face a player is shown is the face he gets.
+   *
+   * A persona is drawn from the name *and the plan* — `makePersona` salts one
+   * with the other — and the anmeldung had the plan written in as 'classic'
+   * from when there was only the one. So a house signing on to a Weltplan
+   * table was shown a merchant off the classic board and met a different one
+   * in the lobby: another face, another Handelshaus, another Wahlspruch, and
+   * nothing anywhere to say why. The lookup that already tells this screen
+   * the right seat number and colour was carrying the plan all along.
+   */
+  it('draws the newcomer off the plan the table is actually played on', async () => {
+    vi.stubGlobal(
+      'fetch',
+      answer({
+        meta: { joinPolicy: 'nur-zu-beginn', packId: 'welt' },
+        phase: 'lobby',
+        players: [seat('a', 'Sepp', 0)],
+      }),
+    )
+    openJoin()
+    await settle()
+
+    act(() => {
+      fireEvent.change(screen.getByLabelText('Name der 2. Person'), {
+        target: { value: 'Kurt' },
+      })
+    })
+
+    // Every cameo carries generated ids for its clip and its hatching, so
+    // they are compared on the drawing rather than on the markup.
+    const drawing = (svg: Element | null) =>
+      svg?.innerHTML.replace(/id="[^"]*"/g, '').replace(/url\(#[^)]*\)/g, '')
+    // The slot being filled in, not one of the houses already at the quay.
+    const shown = drawing(document.querySelector('.h-13 svg'))
+    expect(shown, 'the newcomer should have a face by now').toBeTruthy()
+
+    const asDrawnHere = (packId: string) => {
+      const { container } = render(
+        <Portrait traits={makePersona('Kurt', packId, 'm').portrait} size={52} />,
+      )
+      return drawing(container.querySelector('svg'))
+    }
+
+    expect(shown, 'the plan the table is played on').toBe(asDrawnHere('welt'))
+    expect(shown, 'not the plan this screen used to assume').not.toBe(asDrawnHere('classic'))
+  })
+
   it('says plainly when the table will not have latecomers', async () => {
     vi.stubGlobal(
       'fetch',
       answer({
-        meta: { joinPolicy: 'nur-zu-beginn' },
+        meta: { joinPolicy: 'nur-zu-beginn', packId: 'classic' },
         phase: 'port',
         players: [seat('a', 'Sepp', 0)],
       }),
@@ -2128,7 +2177,7 @@ describe('the table one is about to join', () => {
     vi.stubGlobal(
       'fetch',
       answer({
-        meta: { joinPolicy: 'jederzeit' },
+        meta: { joinPolicy: 'jederzeit', packId: 'classic' },
         phase: 'port',
         players: [seat('a', 'Sepp', 0)],
       }),

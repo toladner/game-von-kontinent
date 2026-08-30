@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import { Portrait } from './Portrait'
+import { StepOptionen } from './Setup'
 import { PLAYER_COLORS, playerLabel, useGame } from '@app/store'
+import { optionsOf, settingsOf, type GameOptions } from '@app/options'
 import { useT } from '@app/locale'
 
 /**
@@ -10,12 +13,31 @@ export function Lobby() {
   const state = useGame((s) => s.state)!
   const net = useGame((s) => s.net)
   const dispatch = useGame((s) => s.dispatch)
-  const abandon = useGame((s) => s.abandon)
+  const leave = useGame((s) => s.leave)
+  const reconfigure = useGame((s) => s.reconfigure)
   const notice = useGame((s) => s.notice)
-  const { t, render, num } = useT()
+  const { t, render, num, tn } = useT()
 
   const isHost = net === null || state.hostId === net.playerId
   const online = new Set(net?.online ?? [])
+
+  /*
+   * The terms, open for a second look.
+   *
+   * A table is set before anybody has arrived, which is the worst moment to
+   * settle it: the third player turns up and says an hour a pip is a week of
+   * waiting, and until now the answer was to open a new table and hand out a
+   * new code. Nothing was stopping it — the settings are not in the log, they
+   * are the ground the log is replayed on, and while the log holds nothing but
+   * arrivals that ground can be moved without anything on it falling over.
+   *
+   * A draft rather than the settings themselves, because half-changed terms
+   * should not be dealt to the other houses on their way through: the form is
+   * this device's until it is handed in.
+   */
+  const [draft, setDraft] = useState<GameOptions | null>(null)
+  const change = <K extends keyof GameOptions>(key: K, value: GameOptions[K]) =>
+    setDraft((o) => (o ? { ...o, [key]: value } : o))
 
   return (
     <div className="board-shell h-full overflow-y-auto">
@@ -103,30 +125,90 @@ export function Lobby() {
                 : 'lobby.latecomersBarred',
             )}
             {' · '}
-            {t('lobby.terms', {
-              n: state.config.totalRounds,
-              capital: num(state.config.startingCapital),
-            })}
+            {/* Which figure governs depends on how the ships move, and saying
+                "30 Runden" over a table sailing on a clock was a plain
+                untruth — one the host can now walk into by changing it here. */}
+            {state.config.travel === 'echtzeit'
+              ? t('lobby.terms.clock', {
+                  season: tn('setup.hours', state.config.realtime.durationHours),
+                  pace: t('setup.minutes', { n: state.config.realtime.minutesPerPip }),
+                  capital: num(state.config.startingCapital),
+                })
+              : t('lobby.terms', {
+                  n: state.config.totalRounds,
+                  capital: num(state.config.startingCapital),
+                })}
           </p>
+
+          {isHost && net && !draft && (
+            <button
+              className="btn mt-4 w-full"
+              onClick={() => setDraft(optionsOf(state))}
+            >
+              {t('lobby.change')}
+            </button>
+          )}
+
+          {draft && (
+            <div className="mt-2">
+              <hr className="rule-double mx-auto my-5 w-2/3" />
+              <StepOptionen
+                options={draft}
+                set={change}
+                // The form updates two fields at once where one implies the
+                // other — fog brings real time with it — and it does that
+                // through a setter of its own. Adapted rather than cast: the
+                // draft can be put away while the form is open, and a setter
+                // that assumed otherwise would be writing to nothing.
+                setOptions={(update) =>
+                  setDraft((o) =>
+                    o ? (typeof update === 'function' ? update(o) : update) : o,
+                  )
+                }
+                withJoinPolicy
+                backLabel={t('lobby.discard')}
+                nextLabel={t('lobby.apply')}
+                onBack={() => setDraft(null)}
+                onNext={() => {
+                  reconfigure(settingsOf(draft))
+                  setDraft(null)
+                }}
+              />
+            </div>
+          )}
 
           {notice && <p className="text-rot mt-3 text-center text-sm">{render(notice)}</p>}
 
-          <div className="mt-7 flex items-center justify-between gap-3">
-            <button className="btn" onClick={abandon}>
-              {t('lobby.leave')}
-            </button>
-            {isHost ? (
-              <button
-                className="btn btn-primary"
-                disabled={state.players.length < 1}
-                onClick={() => dispatch({ type: 'start' })}
-              >
-                {t('lobby.castOff')}
+          {/* One decision at a time. With the form open the buttons that
+              matter are its own two, and leaving "Ausfahrt freigeben" beside
+              them would let the host cast off over a draft he had not handed
+              in — the terms he was looking at quietly not the terms he sailed
+              under. */}
+          {!draft && (
+            <div className="mt-7 flex items-center justify-between gap-3">
+              {/* Putting the game down, not walking out on it. The seat token
+                  stays, which is what keeps the table on the entrance page and
+                  what walks the app back in when it is next opened — a table
+                  waiting to cast off is the one most worth coming back to.
+                  This button used to give the seat up, on the strength of a
+                  label that said no such thing; the place to actually give one
+                  up is the ✕ beside the table in the list. */}
+              <button className="btn" onClick={leave}>
+                {t('lobby.leave')}
               </button>
-            ) : (
-              <p className="text-ink-soft text-xs italic">{t('lobby.waitingForHost')}</p>
-            )}
-          </div>
+              {isHost ? (
+                <button
+                  className="btn btn-primary"
+                  disabled={state.players.length < 1}
+                  onClick={() => dispatch({ type: 'start' })}
+                >
+                  {t('lobby.castOff')}
+                </button>
+              ) : (
+                <p className="text-ink-soft text-xs italic">{t('lobby.waitingForHost')}</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

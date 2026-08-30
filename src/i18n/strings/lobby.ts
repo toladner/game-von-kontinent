@@ -42,6 +42,13 @@ export const LOBBY = {
     de: '{n} Runden · {capital} Kapital',
     en: '{n} rounds · {capital} capital',
   },
+  'lobby.terms.clock': {
+    de: '{season} Saison · {pace} je Punkt · {capital} Kapital',
+    en: '{season} season · {pace} a point · {capital} capital',
+  },
+  'lobby.change': { de: 'Bedingungen ändern', en: 'Change the terms' },
+  'lobby.apply': { de: 'Übernehmen', en: 'Apply' },
+  'lobby.discard': { de: 'Verwerfen', en: 'Discard' },
   'lobby.leave': { de: 'Verlassen', en: 'Leave' },
   'lobby.castOff': { de: 'Ausfahrt freigeben', en: 'Give the order to sail' },
   'lobby.waitingForHost': {

@@ -505,11 +505,13 @@ function hintFor<T extends string>(options: readonly DropdownOption<T>[], value:
 function Nav({
   onBack,
   onNext,
+  backLabel,
   nextLabel,
   nextDisabled,
 }: {
   onBack: () => void
   onNext?: () => void
+  backLabel?: string
   nextLabel?: string
   nextDisabled?: boolean
 }) {
@@ -517,7 +519,7 @@ function Nav({
   return (
     <div className="mt-7 flex items-center justify-between gap-3">
       <button className="btn" onClick={onBack}>
-        {t('setup.back')}
+        {backLabel ?? t('setup.back')}
       </button>
       {onNext && (
         <button className="btn btn-primary" onClick={onNext} disabled={nextDisabled}>
@@ -673,18 +675,42 @@ function StepModus({
   )
 }
 
-function StepOptionen({
+/**
+ * Every knob, on one screen.
+ *
+ * Exported because the quayside borrows it: a table that has not cast off is
+ * still being set up, and the host changing his mind there should be looking
+ * at the same controls, in the same order, with the same notes underneath as
+ * when he opened it. A second, shorter form for the lobby would be a second
+ * set of bounds and a second place to forget an option.
+ */
+export function StepOptionen({
   options,
   set,
   setOptions,
   onBack,
   onNext,
+  backLabel,
+  nextLabel,
+  withJoinPolicy,
 }: {
   options: GameOptions
   set: <K extends keyof GameOptions>(k: K, v: GameOptions[K]) => void
   setOptions: React.Dispatch<React.SetStateAction<GameOptions>>
   onBack: () => void
   onNext: () => void
+  backLabel?: string
+  nextLabel?: string
+  /**
+   * Whether to ask who may still sail.
+   *
+   * The setup wizard asks it two screens later, once it is known that the
+   * table is an online one at all — the answer means nothing to a game played
+   * round one device. On the quayside it is known already, and it is the
+   * setting a host is most likely to want back: people are arriving while he
+   * looks at it.
+   */
+  withJoinPolicy?: boolean
 }) {
   const T = useT()
   const { t, tn, num, locale } = T
@@ -844,7 +870,26 @@ function StepOptionen({
         />
       </Section>
 
-      <Nav onBack={onBack} onNext={onNext} />
+      {withJoinPolicy && (
+        <Section title={t('setup.whoMaySail')} hint={t('setup.section.crew.hint')}>
+          <div className="space-y-2">
+            <Choice
+              title={t('setup.atStartOnly')}
+              blurb={t('setup.atStartOnly.blurb')}
+              selected={options.joinPolicy === 'nur-zu-beginn'}
+              onClick={() => set('joinPolicy', 'nur-zu-beginn' as JoinPolicy)}
+            />
+            <Choice
+              title={t('setup.anyTime')}
+              blurb={t('setup.anyTime.blurb')}
+              selected={options.joinPolicy === 'jederzeit'}
+              onClick={() => set('joinPolicy', 'jederzeit' as JoinPolicy)}
+            />
+          </div>
+        </Section>
+      )}
+
+      <Nav onBack={onBack} onNext={onNext} backLabel={backLabel} nextLabel={nextLabel} />
     </div>
   )
 }
@@ -940,6 +985,7 @@ function StepNamen({
             key={i}
             index={i}
             trader={trader}
+            packId={options.packId}
             onChange={(v) => setTrader(i, v)}
             onRemove={
               !online && names.length > 1
@@ -1081,7 +1127,14 @@ function StepBeitreten({
               also genau der hinter den schon angemeldeten. Ohne das saß jeder
               Beitretende in der Anmeldung als Spieler 1 in Blau und wurde beim
               Beitreten der Vierte in Ocker. */}
-          <TraderSlot index={seats?.length ?? 0} trader={trader} onChange={setTrader} />
+          {/* The plan is the table's, and the same lookup that gives the
+              seat its right number and colour gives the portrait its plan. */}
+          <TraderSlot
+            index={seats?.length ?? 0}
+            trader={trader}
+            packId={look?.ok ? look.info.meta.packId : null}
+            onChange={setTrader}
+          />
         </>
       )}
 
@@ -1176,19 +1229,38 @@ function TableAhead({ seats }: { seats: readonly TableSeat[] }) {
 function TraderSlot({
   index,
   trader,
+  packId,
   onChange,
   onRemove,
 }: {
   index: number
   trader: Trader
+  /**
+   * Which board this house will be trading on, or null while that is still
+   * being asked.
+   *
+   * The plan is half the key a persona is drawn from — `makePersona` salts the
+   * name with it — so this slot was drawing a Hamburg merchant off the classic
+   * board for a player about to sit down at the world one: a different face, a
+   * different house, a different motto, and no explanation for any of it
+   * between the name being typed and the lobby. The salt was written in as
+   * 'classic' when there was only the one plan, and stayed written in when
+   * there were two.
+   *
+   * Null draws nobody rather than drawing a guess. On the join screen the
+   * plan is the table's and only the table can say which it is; a portrait
+   * shown before it answers is a portrait that would have to be redrawn, and
+   * the point of this is that the face a player is shown is the face he gets.
+   */
+  packId: string | null
   onChange: (v: Trader) => void
   onRemove?: () => void
 }) {
   const { t, locale } = useT()
   const trimmed = trader.name.trim()
   const persona = useMemo(
-    () => (trimmed ? makePersona(trimmed, 'classic', trader.gender) : null),
-    [trimmed, trader.gender],
+    () => (trimmed && packId ? makePersona(trimmed, packId, trader.gender) : null),
+    [trimmed, packId, trader.gender],
   )
   const color = PLAYER_COLORS[index % PLAYER_COLORS.length]!
   // A Kaufmann unless someone says otherwise, and shown as such from the

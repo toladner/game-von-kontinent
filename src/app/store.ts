@@ -20,6 +20,7 @@ import {
   Session,
   type ConnectionStatus,
   type GameMeta,
+  type TableSettings,
 } from './net'
 import { armPush } from './push'
 import { currentLocale, useLocaleStore } from './locale'
@@ -210,6 +211,15 @@ interface Store {
   markNewsRead: () => void
   /** Tell the other seats which harbour panel we are on. No-op offline. */
   announceFocus: (step: string) => void
+  /**
+   * New terms for the table, from the host, before it casts off.
+   *
+   * Online only and lobby only, both of which the server checks again: this
+   * only carries the request. What comes back is not an answer but the table
+   * dealt afresh — the settings are the ground the log is replayed on, so
+   * changing them re-founds the game rather than adding to it.
+   */
+  reconfigure: (settings: TableSettings) => void
   setActing: (playerId: string) => void
   /** True when this device may act right now. */
   myTurn: () => boolean
@@ -716,6 +726,11 @@ export const useGame = create<Store>((set, get) => ({
       maxFleetSize: options.maxFleetSize ?? 1,
       angebot: options.angebot ?? 'fest',
       preise: options.preise ?? 'fest',
+      // Chosen on the setup screen since the extended deck existed and
+      // dropped on the floor here ever since: an online table was handed to
+      // `createOnlineGame` without it and played the printed 27 whatever the
+      // host had picked. The server now keeps it in `meta` like the rest.
+      konjunktur: options.konjunktur ?? 'klassisch',
       packId: options.packId ?? DEFAULT_PACK_ID,
     })
     get().join(code, who.name, who.gender)
@@ -755,6 +770,7 @@ export const useGame = create<Store>((set, get) => ({
           ...(meta.maxFleetSize ? { maxFleetSize: meta.maxFleetSize } : {}),
           ...(meta.angebot ? { angebot: meta.angebot } : {}),
           ...(meta.preise ? { preise: meta.preise } : {}),
+          ...(meta.konjunktur ? { konjunktur: meta.konjunktur } : {}),
         })
         // Under fog the log is withheld — you know only what you witnessed,
         // which is the point — and a finished view arrives separately.
@@ -1035,6 +1051,10 @@ export const useGame = create<Store>((set, get) => ({
 
   announceFocus(step) {
     session?.sendFocus(step)
+  },
+
+  reconfigure(settings) {
+    session?.configure(settings)
   },
 }))
 
