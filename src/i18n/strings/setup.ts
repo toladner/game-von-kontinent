@@ -173,6 +173,11 @@ export const SETUP = {
     de: 'Ob nach der Ausfahrt noch jemand an Bord kommt.',
     en: 'Whether anybody may still come aboard once the ships have sailed.',
   },
+  'setup.thatIsYou': {
+    de: '{name} steht schon am Kai. Sie nehmen diesen Platz zurück, statt ein zweites Haus zu gründen.',
+    en: '{name} is already on the quay. You take that seat back rather than founding a second house.',
+  },
+  'setup.takeSeatBack': { de: 'Platz zurücknehmen', en: 'Take the seat back' },
   'setup.whoMaySail': { de: 'Wer darf mitfahren?', en: 'Who may sail?' },
   'setup.atStartOnly': { de: 'Nur zu Beginn', en: 'Only at the start' },
   'setup.atStartOnly.blurb': {

@@ -181,7 +181,14 @@ interface Store {
     seat: Seat,
     options: BeginOptions & { joinPolicy: JoinPolicy; sicht?: 'normal' | 'realistisch' },
   ) => Promise<string>
-  join: (code: string, name: string, gender?: Gender) => void
+  /**
+   * Sit down at a table.
+   *
+   * `seat` takes back a house already standing on the quay whose token this
+   * device has lost, rather than adding a second one under the same name. The
+   * server decides whether it may — see its `hello`.
+   */
+  join: (code: string, name: string, gender?: Gender, seat?: string) => void
   dispatch: (action: GameAction) => void
   resume: () => boolean
   /**
@@ -737,7 +744,7 @@ export const useGame = create<Store>((set, get) => ({
     return code
   },
 
-  join(code, name, gender) {
+  join(code, name, gender, seat) {
     session?.close()
     // A networked game is never saved locally; the server holds the log.
     saved = null
@@ -836,7 +843,7 @@ export const useGame = create<Store>((set, get) => ({
         if (!get().state) forgetTable()
         set({ notice: reason })
       },
-    })
+    }, seat)
     session.connect()
   },
 

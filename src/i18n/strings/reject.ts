@@ -244,6 +244,18 @@ export const REJECT = {
     de: 'Unter diesen Bedingungen käme nicht jeder mit. Die alten stehen weiter.',
     en: 'Not every house would come along under those terms. The old ones stand.',
   },
+  'reject.seatUnderWay': {
+    de: 'Die Partie läuft schon; ein Platz gehört dann nur noch seinem Schlüssel.',
+    en: 'The game is under way; a seat then belongs to its key alone.',
+  },
+  'reject.noSuchSeat': {
+    de: 'Diesen Platz gibt es an diesem Tisch nicht.',
+    en: 'There is no such seat at this table.',
+  },
+  'reject.seatTaken': {
+    de: 'In diesem Platz sitzt gerade jemand.',
+    en: 'Somebody is sitting in that seat right now.',
+  },
   'reject.hostConfigures': {
     de: 'Nur wer die Partie eröffnet hat, ändert die Bedingungen.',
     en: 'Only the house that opened the table may change its terms.',

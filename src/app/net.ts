@@ -294,6 +294,14 @@ export class Session {
     /** Undefined lets the server derive a persona from the name alone. */
     private readonly gender: Gender | undefined,
     private readonly handlers: SessionHandlers,
+    /**
+     * A seat already at the table that this device means to take back.
+     *
+     * Only for the first hello, and only where the token is gone: after the
+     * server hands one over, the token is what returns to the seat, so a
+     * dropped line reconnects the ordinary way and this is never sent twice.
+     */
+    private readonly seat?: string,
   ) {}
 
   connect(): void {
@@ -308,10 +316,15 @@ export class Session {
       this.retry = 0
       this.handlers.onStatus('verbunden')
       const token = storedToken(this.code)
-      // A remembered token returns to the same seat; otherwise ask for one.
+      // A remembered token returns to the same seat; a named seat takes one
+      // back; otherwise ask for a new one.
       socket.send(
         JSON.stringify(
-          token ? { t: 'hello', token } : { t: 'hello', name: this.name, gender: this.gender },
+          token
+            ? { t: 'hello', token }
+            : this.seat
+              ? { t: 'hello', seat: this.seat }
+              : { t: 'hello', name: this.name, gender: this.gender },
         ),
       )
     })

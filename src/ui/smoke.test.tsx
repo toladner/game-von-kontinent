@@ -2152,6 +2152,98 @@ describe('the table one is about to join', () => {
     expect(shown, 'not the plan this screen used to assume').not.toBe(asDrawnHere('classic'))
   })
 
+  /**
+   * The way back to a seat whose proof is gone.
+   *
+   * The token that says a house is this device's lives on the device, so
+   * clearing the browser, changing telephones or pressing a button whose label
+   * promised less than it did leaves the house standing at the table with
+   * nothing able to sit in it. Typing the name again founded a *second* house
+   * beside the first — and where the first was the one that opened the table,
+   * that left a table nobody could give the order to sail.
+   *
+   * The name is the recognition, because it is what would be typed anyway and
+   * this screen already knows every name on the quay.
+   */
+  it('recognises a name already on the quay and takes that seat back', async () => {
+    vi.stubGlobal(
+      'fetch',
+      answer({
+        meta: { joinPolicy: 'nur-zu-beginn', packId: 'classic' },
+        phase: 'lobby',
+        players: [seat('p1-s6d', 'Tobi', 0), seat('p2-6f7', 'Jojo', 1)],
+      }),
+    )
+    openJoin()
+    await settle()
+
+    // Ordinary until the name means something: the third seat, in green.
+    expect(screen.getByRole('button', { name: 'Beitreten' })).toBeTruthy()
+
+    act(() => {
+      fireEvent.change(screen.getByLabelText('Name der 3. Person'), {
+        target: { value: '  tobi ' },
+      })
+    })
+
+    // Spelled and spaced as it pleases; a name is a name.
+    expect(screen.getByText(/Tobi steht schon am Kai/)).toBeTruthy()
+    // And the seat on show is the one being taken back, not the next free one.
+    expect(document.querySelector('[title="Blau"]')).toBeTruthy()
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Platz zurücknehmen' }))
+    })
+    expect(useGame.getState().net?.code).toBe('WZUH')
+  })
+
+  it('founds a new house for a name nobody at the table is using', async () => {
+    vi.stubGlobal(
+      'fetch',
+      answer({
+        meta: { joinPolicy: 'nur-zu-beginn', packId: 'classic' },
+        phase: 'lobby',
+        players: [seat('p1-s6d', 'Tobi', 0), seat('p2-6f7', 'Jojo', 1)],
+      }),
+    )
+    openJoin()
+    await settle()
+
+    act(() => {
+      fireEvent.change(screen.getByLabelText('Name der 3. Person'), {
+        target: { value: 'Kurt' },
+      })
+    })
+    expect(screen.queryByText(/steht schon am Kai/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Beitreten' })).toBeTruthy()
+  })
+
+  /*
+   * Once she sails a seat holds money, cargo and what its captain has seen,
+   * and a name is not proof of any of it. The server refuses it too — this is
+   * the screen agreeing rather than the screen deciding.
+   */
+  it('will not hand a seat over on a name once the ships have sailed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      answer({
+        meta: { joinPolicy: 'jederzeit', packId: 'classic' },
+        phase: 'segeln',
+        players: [seat('p1-s6d', 'Tobi', 0)],
+      }),
+    )
+    openJoin()
+    await settle()
+
+    act(() => {
+      fireEvent.change(screen.getByLabelText('Name der 2. Person'), {
+        target: { value: 'Tobi' },
+      })
+    })
+    expect(screen.queryByText(/steht schon am Kai/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Beitreten' })).toBeTruthy()
+  })
+
   it('says plainly when the table will not have latecomers', async () => {
     vi.stubGlobal(
       'fetch',

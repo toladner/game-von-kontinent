@@ -85,7 +85,11 @@ export interface GameMeta {
 
 /** Wire protocol. Small, versioned by shape rather than a number. */
 type ClientMessage =
-  | { t: 'hello'; token?: string; name?: string; gender?: Gender }
+  /**
+   * `token` returns to a seat; `name` asks for a new one; `seat` takes back
+   * one already at the table whose proof this device has lost.
+   */
+  | { t: 'hello'; token?: string; name?: string; gender?: Gender; seat?: string }
   | { t: 'action'; action: GameAction }
   | { t: 'start' }
   /**
@@ -540,6 +544,58 @@ export class GameRoom {
           if (this.foggy) {
             this.send(socket, { t: 'view', state: projectFor(this.state, existing.playerId) })
           }
+          this.broadcastPresence()
+          return
+        }
+
+        /*
+         * A house coming back to a seat it can no longer prove is its own.
+         *
+         * The token is the proof, and it lives on the device: clear the
+         * browser, change telephones, or press a button that gives the seat up
+         * when its label said it only left the room, and the seat is still at
+         * the table with nobody able to sit in it. Joining afresh is not the
+         * same thing — it makes a second house under the same name and leaves
+         * the first standing there, and if the first was the one that opened
+         * the table then nobody can give the order to sail at all.
+         *
+         * So a seat can be taken back by name, on three conditions: the ships
+         * are still tied up, the seat exists, and nobody is sitting in it as we
+         * speak. In the lobby that costs nothing to give away — every house
+         * holds the same capital, and who is at the table is public to anyone
+         * with the code already. Once she sails a seat holds money, cargo and
+         * what its captain has seen, and then the token is the only way in.
+         *
+         * The old token is left where it is rather than struck off: one house
+         * may be played from a telephone and a desk at once, and this is the
+         * same arrangement arrived at the other way round.
+         */
+        if (message.seat) {
+          const state = this.state
+          const seat = message.seat
+          if (state.phase !== 'lobby') {
+            return this.send(socket, { t: 'error', reason: msg('reject.seatUnderWay') })
+          }
+          if (!state.players.some((p) => p.id === seat)) {
+            return this.send(socket, { t: 'error', reason: msg('reject.noSuchSeat') })
+          }
+          if ([...this.sockets.values()].some((who) => who === seat)) {
+            return this.send(socket, { t: 'error', reason: msg('reject.seatTaken') })
+          }
+
+          const token = crypto.randomUUID()
+          this.seats.set(token, { playerId: seat, token })
+          await this.persist()
+
+          this.sockets.set(socket, seat)
+          this.send(socket, {
+            t: 'welcome',
+            playerId: seat,
+            token,
+            meta: this.meta,
+            actions: this.foggy ? [] : this.actions,
+          })
+          if (this.foggy) this.send(socket, { t: 'view', state: projectFor(state, seat) })
           this.broadcastPresence()
           return
         }

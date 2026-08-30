@@ -192,7 +192,7 @@ export function Setup() {
             <StepBeitreten
               initialCode={invited}
               onBack={() => setStep('modus')}
-              onJoin={(code, trader) => join(code, trader.name, trader.gender)}
+              onJoin={(code, trader, seat) => join(code, trader.name, trader.gender, seat)}
             />
           )}
         </div>
@@ -1046,7 +1046,8 @@ function StepBeitreten({
 }: {
   initialCode: string
   onBack: () => void
-  onJoin: (code: string, trader: Trader) => void
+  /** `seat` is a house on the quay being taken back, not a new one. */
+  onJoin: (code: string, trader: Trader, seat?: string) => void
 }) {
   const { t } = useT()
   const [code, setCode] = useState(initialCode)
@@ -1083,8 +1084,35 @@ function StepBeitreten({
    * ask. So it stops asking, and says whose seat it is going back to.
    */
   const known = useMemo(() => (clean.length >= 3 ? hasSeatAt(clean) : false), [clean, given])
+
+  /*
+   * The house standing on the quay under the name being typed.
+   *
+   * The seat token is the proof that a house is this device's, and it lives on
+   * the device: clear the browser, change telephones, or press a button whose
+   * label promised less than it did, and the house is still at the table with
+   * nothing able to sit in it. Typing the name again used to make a second
+   * house beside the first — and if the first was the one that opened the
+   * table, nobody could give the order to sail at all.
+   *
+   * So the name is the recognition. It is what the player would type anyway,
+   * and it is already known to this screen: the same lookup that draws the
+   * houses on the quay says what they are called. No extra question, no code
+   * to keep, and where nothing matches it is the ordinary join it always was.
+   *
+   * Only on the quay. Once she sails a seat holds money, cargo and what its
+   * captain has seen, and a name is not proof of anything — the server says
+   * the same, and says it again whatever this screen offers.
+   */
+  const mine = useMemo(() => {
+    if (!look?.ok || look.info.phase !== 'lobby') return null
+    const typed = trader.name.trim().toLowerCase()
+    if (!typed) return null
+    return look.info.players.find((p) => p.name.trim().toLowerCase() === typed) ?? null
+  }, [look, trader.name])
+
   const ready =
-    clean.length >= 3 && (known || (trader.name.trim().length > 0 && shut === null))
+    clean.length >= 3 && (known || (trader.name.trim().length > 0 && (mine !== null || shut === null)))
 
   return (
     <div className="anim-fade">
@@ -1128,22 +1156,35 @@ function StepBeitreten({
               Beitretende in der Anmeldung als Spieler 1 in Blau und wurde beim
               Beitreten der Vierte in Ocker. */}
           {/* The plan is the table's, and the same lookup that gives the
-              seat its right number and colour gives the portrait its plan. */}
+              seat its right number and colour gives the portrait its plan.
+              Where the name is one already on the quay, the seat is that
+              house's rather than the next one free — so the colour and the
+              number on show are the ones being taken back. */}
           <TraderSlot
-            index={seats?.length ?? 0}
+            index={mine ? mine.colorIndex : (seats?.length ?? 0)}
             trader={trader}
             packId={look?.ok ? look.info.meta.packId : null}
             onChange={setTrader}
           />
+
+          {mine && (
+            <p className="text-press anim-fade mt-2.5 text-center text-[12px] leading-snug">
+              {t('setup.thatIsYou', { name: mine.name })}
+            </p>
+          )}
         </>
       )}
 
-      {!known && shut && <p className="text-rot mt-3 text-center text-[12px] leading-snug">{shut}</p>}
+      {!known && !mine && shut && (
+        <p className="text-rot mt-3 text-center text-[12px] leading-snug">{shut}</p>
+      )}
 
       <Nav
         onBack={onBack}
-        onNext={() => onJoin(clean, { ...trader, name: trader.name.trim() })}
-        nextLabel={t(known ? 'setup.backAboard' : 'setup.joinIt')}
+        onNext={() =>
+          onJoin(clean, { ...trader, name: trader.name.trim() }, mine?.id)
+        }
+        nextLabel={t(known ? 'setup.backAboard' : mine ? 'setup.takeSeatBack' : 'setup.joinIt')}
         nextDisabled={!ready}
       />
     </div>
