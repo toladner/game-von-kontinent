@@ -94,8 +94,8 @@ export const UI = {
    * already happened moves.
    */
   'settings.rules.hint': {
-    de: 'Die Ladung ist dann nur noch in See in Gefahr, im Hafen liegt sie sicher, und nicht jedes Schiff im Sturm trifft es. Gilt ab dem Augenblick, in dem Sie es übernehmen — der bisherige Verlauf bleibt unangetastet. Das ganze Kontor liest es im Tagblatt.',
-    en: 'Cargo is then at risk only at sea and safe in harbour, and not every ship in a gale is caught. It holds from the moment you adopt it — the season so far is untouched. The whole table reads about it in the paper.',
+    de: 'Die Ladung ist dann nur noch in See in Gefahr, im Hafen liegt sie sicher, und nicht jedes Schiff im Sturm trifft es. Gilt ab dem Augenblick, in dem Sie es übernehmen — der bisherige Verlauf bleibt unangetastet.',
+    en: 'Cargo is then at risk only at sea and safe in harbour, and not every ship in a gale is caught. It holds from the moment you adopt it — the season so far is untouched.',
   },
   'settings.terms.hint': {
     de: 'Solange am Kai liegt, steht alles noch offen.',

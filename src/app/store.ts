@@ -523,7 +523,7 @@ function describe(
         [],
       )
     case 'rulesAdopted':
-      return line(say('log.rulesAdopted'), 'wichtig', [])
+      return null
     case 'gameOver':
       return line(say('log.gameOver'), 'wichtig', [])
     default:

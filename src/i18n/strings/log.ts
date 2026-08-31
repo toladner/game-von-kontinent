@@ -119,16 +119,6 @@ export const LOG = {
     de: 'Runde {round} — rotes Feld, die Konjunktur spricht mit.',
     en: 'Round {round} — a red square; the market has its say.',
   },
-  /*
-   * Says what changed rather than that something did. "Neue Regeln" would
-   * leave every house wondering which of their plans had just stopped being
-   * true; the only thing this edition changes for a ship at sea is the
-   * weather, so that is what it names.
-   */
-  'log.rulesAdopted': {
-    de: 'Neue Wetterordnung ab heute: die Ladung ist nur noch in See in Gefahr, im Hafen liegt sie sicher, und nicht jedes Schiff im Sturm trifft es. Was bisher geschah, bleibt wie es war.',
-    en: 'New weather rules from today: cargo is at risk only at sea and safe in harbour, and not every ship in a gale is caught. What has already happened stands as it was.',
-  },
   'log.gameOver': {
     de: 'Die letzte Runde ist gefahren. Schlußabrechnung.',
     en: 'The last round is sailed. Final reckoning.',
