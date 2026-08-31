@@ -11,6 +11,41 @@ import land from '@content/geo/land.json'
 import { PLAYER_COLORS } from '@app/store'
 
 const BOARD_W = 1200
+
+/**
+ * How far up or down a vessel is drawn from the node she is standing on.
+ *
+ * The fan exists for one case: two ships lying in the same harbour, where
+ * without it the second is hidden under the first. It used to be struck from
+ * the whole table instead — the house's seat at it, plus the vessel's place
+ * in its own fleet — so every ship was offset whether or not there was
+ * anything to be offset from, and the offset grew with the number of houses.
+ * At six the first house's ship was drawn ten points off her node, and ten
+ * points on a plan zoomed to a coastline is sixty pixels: she sat on the land
+ * beside the sea lane she was sailing along.
+ *
+ * So a ship under way is drawn on her line, full stop — there is nothing at
+ * sea for her to be hiding under. A ship in harbour is fanned against the
+ * vessels actually lying there and no others, which is also why a lone ship
+ * in an empty harbour now sits in it rather than just north of it.
+ */
+export function shipNudge(
+  fleet: readonly { readonly id: string; readonly nodeId: string; readonly sailing: boolean }[],
+  vessel: { readonly id: string; readonly nodeId: string; readonly sailing: boolean },
+  gap = 9,
+): number {
+  // Said twice on purpose: the filter below would drop her anyway, but a
+  // reader asking what happens to a ship at sea should find the answer in
+  // the first line rather than infer it from a findIndex returning -1.
+  if (vessel.sailing) return 0
+  const alongside = fleet.filter((v) => !v.sailing && v.nodeId === vessel.nodeId)
+  if (alongside.length < 2) return 0
+  const berth = alongside.findIndex((v) => v.id === vessel.id)
+  if (berth < 0) return 0
+  // Centred on the node: fanning outwards from the first house left a table
+  // of ten with its last ship a long way from the harbour it was in.
+  return (berth - (alongside.length - 1) / 2) * gap
+}
 const MIN_K = 0.8
 const MAX_K = 8
 /**
@@ -449,12 +484,18 @@ export function Board({
     [state.players],
   )
 
-  // Every vessel of every house, not just the flagships.
+  // Every vessel of every house, not just the flagships. Gathered first so
+  // that a ship in harbour can be fanned against the ones actually beside
+  // her — see `shipNudge`.
+  const afloat = state.players.flatMap((p) =>
+    p.fleet
+      .filter((v) => !v.hidden)
+      .map((v) => ({ id: v.id, nodeId: v.nodeId, sailing: v.voyage !== null })),
+  )
+
   const ships = state.players
-    .flatMap((p, playerIndex) =>
-      p.fleet.map((vehicle, vehicleIndex) => ({ p, vehicle, playerIndex, vehicleIndex })),
-    )
-    .map(({ p, vehicle, playerIndex, vehicleIndex }) => {
+    .flatMap((p) => p.fleet.map((vehicle) => ({ p, vehicle })))
+    .map(({ p, vehicle }) => {
       // A rival's ship you cannot see is simply not drawn.
       if (vehicle.hidden) return null
       const here = at(vehicle.nodeId)
@@ -474,11 +515,11 @@ export function Board({
         pos,
         from,
         sailing: Boolean(voyage),
-        // Ships lying in the same harbour are fanned out so none is hidden
-        // under another, and the fan is centred on the node — offsetting from
-        // the first house outwards left a table of ten with its last ship
-        // sitting a long way off the harbour it is actually in.
-        nudge: (playerIndex - (state.players.length - 1) / 2) * 4 + vehicleIndex * 5,
+        nudge: shipNudge(afloat, {
+          id: vehicle.id,
+          nodeId: vehicle.nodeId,
+          sailing: voyage !== null,
+        }),
       }
     })
 
