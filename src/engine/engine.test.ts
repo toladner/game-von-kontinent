@@ -1123,6 +1123,84 @@ describe('the rules a table sat down to', () => {
     expect(titles(old)).toEqual(titles(now))
   })
 
+  it('takes up the new rules from a moment on, without moving what is behind it', () => {
+    // The whole point of doing this as an action rather than as a setting.
+    // A term that simply became different would be re-read from the top of
+    // the log; an action has a place in it, so the fold changes at that place
+    // and nowhere earlier.
+    const T = 1_800_000_000_000
+    const opened = () =>
+      replay(
+        ctx,
+        createGame(ctx, {
+          seed: 'wechsel',
+          travel: 'echtzeit',
+          minutesPerPip: 1,
+          durationHours: 8,
+          konjunktur: 'erweitert',
+        }),
+        [
+          { type: 'tick', at: T },
+          { type: 'join', playerId: 'a', name: 'Ada' },
+          { type: 'join', playerId: 'b', name: 'Bo' },
+          { type: 'start' },
+        ],
+      )
+
+    const old = opened()
+    expect(old.config.regeln).toBe(1)
+    expect(old.config.weatherAtSeaOnly).toBe(false)
+
+    const now = applyAction(ctx, old, { type: 'adoptRules', regeln: REGELSTAND })
+    expect(now.state.config.regeln).toBe(REGELSTAND)
+    expect(now.state.config.weatherAtSeaOnly).toBe(true)
+    expect(now.state.config.weatherCatchPercent).toBeLessThan(100)
+    expect(now.events.some((e) => e.type === 'rulesAdopted')).toBe(true)
+
+    // Everything but the terms is exactly where it was: same ships, same
+    // cash, same cargo, same dice. Only the deck has been swapped card for
+    // card, which is the one thing that had to move with the rules.
+    const season = (s: GameState) => JSON.stringify({ ...s, config: null, deck: null, seq: 0 })
+    expect(season(now.state)).toBe(season(old))
+  })
+
+  it('deals on in the same order after the rules change', () => {
+    // Same length, same places, so the table goes on drawing what it was
+    // going to draw — three of the cards simply do something else now.
+    const s = replay(
+      ctx,
+      createGame(ctx, { seed: 'reihe', konjunktur: 'erweitert' }),
+      openingActions(['Ada', 'Bo']),
+    )
+    const after = applyAction(ctx, s, { type: 'adoptRules', regeln: REGELSTAND }).state
+
+    const titles = (t: GameState) => t.deck.map((id) => ctx.cardsById.get(id)!.title.de)
+    expect(titles(after)).toEqual(titles(s))
+    expect(after.deck).toHaveLength(s.deck.length)
+
+    // And the cards themselves are the reformed ones.
+    const water = after.deck
+      .map((id) => ctx.cardsById.get(id)!)
+      .find((c) => c.title.de === 'Wassereinbruch')!
+    expect(water.effects.map((e) => e.kind)).toEqual(['cargoDamagedByDrawer'])
+  })
+
+  it('will not take up an older edition, nor one that does not exist', () => {
+    const s = replay(
+      ctx,
+      createGame(ctx, { seed: 'rueck', konjunktur: 'erweitert', regeln: REGELSTAND }),
+      openingActions(['Ada', 'Bo']),
+    )
+    // Backwards is the retroactive change again in a different hat.
+    const back = applyAction(ctx, s, { type: 'adoptRules', regeln: 1 })
+    expect(back.state.config.regeln).toBe(REGELSTAND)
+    expect(back.events.some((e) => e.type === 'rejected')).toBe(true)
+
+    const ahead = applyAction(ctx, s, { type: 'adoptRules', regeln: REGELSTAND + 5 })
+    expect(ahead.state.config.regeln).toBe(REGELSTAND)
+    expect(ahead.events.some((e) => e.type === 'rejected')).toBe(true)
+  })
+
   it('leaves the old weather exactly as it was', () => {
     // The whole point, stated as the thing a player would notice: under the
     // first Regelstand a gale empties every hold in the ocean, harbour or

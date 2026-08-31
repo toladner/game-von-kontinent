@@ -25,6 +25,21 @@ export type GameAction =
     }
   /** The host opens the season. */
   | { readonly type: 'start' }
+  /**
+   * The host takes the table onto a later edition of the rules, from here on.
+   *
+   * The one way to change a rule mid-season without changing the season. A
+   * table's Regelstand is otherwise fixed when it is opened, because the
+   * server keeps no state but the log and a rule that changes retroactively
+   * rewrites what has already happened. But an action *has a place in the
+   * log*: everything before it folds under the old rules and everything after
+   * it under the new, which is exactly the thing a merchant means by "from
+   * now on".
+   *
+   * Forwards only. Going back would be the retroactive change again, wearing
+   * a different hat.
+   */
+  | { readonly type: 'adoptRules'; readonly regeln: number }
   | { readonly type: 'roll' }
   | { readonly type: 'step'; readonly to: NodeId }
   | { readonly type: 'drawKonjunktur' }
@@ -101,6 +116,8 @@ export type GameEvent =
       readonly midGame: boolean
     }
   | { readonly type: 'gameStarted' }
+  /** The table has taken up a later edition of the rules; the log says when. */
+  | { readonly type: 'rulesAdopted'; readonly regeln: number }
   | {
       readonly type: 'setSail'
       readonly playerId: string

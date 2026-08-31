@@ -86,6 +86,17 @@ export const UI = {
   },
   'settings.game': { de: 'Diese Partie', en: 'This game' },
   'settings.terms': { de: 'Bedingungen', en: 'Terms' },
+  'settings.rules': { de: 'Neue Wetterordnung übernehmen', en: 'Adopt the new weather rules' },
+  'settings.rules.confirm': { de: 'Ab jetzt danach spielen', en: 'Play by them from now on' },
+  /*
+   * Both halves said in one breath, because the second is the one that makes
+   * the first safe to press: the weather gets gentler, and nothing that has
+   * already happened moves.
+   */
+  'settings.rules.hint': {
+    de: 'Die Ladung ist dann nur noch in See in Gefahr, im Hafen liegt sie sicher, und nicht jedes Schiff im Sturm trifft es. Gilt ab dem Augenblick, in dem Sie es übernehmen — der bisherige Verlauf bleibt unangetastet. Das ganze Kontor liest es im Tagblatt.',
+    en: 'Cargo is then at risk only at sea and safe in harbour, and not every ship in a gale is caught. It holds from the moment you adopt it — the season so far is untouched. The whole table reads about it in the paper.',
+  },
   'settings.terms.hint': {
     de: 'Solange am Kai liegt, steht alles noch offen.',
     en: 'Nothing is settled while the ships are still alongside.',

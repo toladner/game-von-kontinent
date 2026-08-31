@@ -522,6 +522,8 @@ function describe(
         event.red ? 'wichtig' : 'neutral',
         [],
       )
+    case 'rulesAdopted':
+      return line(say('log.rulesAdopted'), 'wichtig', [])
     case 'gameOver':
       return line(say('log.gameOver'), 'wichtig', [])
     default:

@@ -15,6 +15,7 @@ import type {
 import { flagship } from './state'
 import { seeVehicle } from './fog'
 import { makePersona, makeShipIdentity } from './persona'
+import { REGELSTAND, regelnFuer } from './regeln'
 import { nextInt } from './rng'
 import { goodOf, type EngineContext } from './context'
 import { isPort } from './mapbuild'
@@ -982,6 +983,9 @@ export function applyAction(
   // belong to whoever is currently at the table.
   if (action.type === 'join') return applyJoin(ctx, state, action)
   if (action.type === 'start') return applyStart(state)
+  // Not a move within the game but a change to the game the moves are in, so
+  // it stands with join and start rather than under the turn order.
+  if (action.type === 'adoptRules') return applyAdoptRules(ctx, state, action)
   // Above the lobby check on purpose: waiting for the table to fill is
   // exactly when there is something to say.
   if (action.type === 'telegramm') return applyTelegramm(state, action)
@@ -1748,6 +1752,61 @@ function turnMarket(ctx: EngineContext, draft: Draft, events: GameEvent[]): void
         settleStandingCard(ctx, draft, i, vehicle, 'berth', events)
       }
     }
+  }
+}
+
+/**
+ * Take the table onto a later edition of the rules, from this moment on.
+ *
+ * The only way a rule may change under a season that is already being played,
+ * and it works precisely because it is an action. A table's Regelstand is
+ * otherwise settled when it is opened: the server keeps no state but the log
+ * and folds it again on every wake, so a rule that simply *became* different
+ * would not change the game from here on, it would change what had already
+ * happened. An action has a place in that log. Everything before it folds
+ * under the old rules and everything after it under the new — cargo that went
+ * over the side on the Tuesday stays over the side, and Wednesday's gale is
+ * the gentler one.
+ *
+ * The deck is swapped card for card rather than reshuffled. The two editions
+ * are the same length and in the same order, so every card keeps its place:
+ * the table goes on drawing what it was going to draw, and three of them do
+ * what the new edition says they do.
+ */
+function applyAdoptRules(
+  ctx: EngineContext,
+  state: GameState,
+  action: Extract<GameAction, { type: 'adoptRules' }>,
+): ActionResult {
+  if (action.regeln > REGELSTAND) {
+    return reject(state, 'reject.noSuchRules')
+  }
+  // Forwards only: going back is the retroactive change again in a hat.
+  if (action.regeln <= state.config.regeln) {
+    return reject(state, 'reject.rulesNotNewer')
+  }
+
+  const stand = regelnFuer(action.regeln)
+  const swap = (id: string) => ctx.reformedCardId.get(id) ?? id
+  const draft = draftOf(state)
+  draft.seq += 1
+  draft.config = {
+    ...draft.config,
+    regeln: stand.regeln,
+    weatherAtSeaOnly: stand.weatherAtSeaOnly,
+    weatherCatchPercent: stand.weatherCatchPercent,
+  }
+  draft.deck = draft.deck.map(swap)
+  // The card still standing over the market keeps its place too, so a notice
+  // on screen does not turn into a different notice underneath the reader.
+  if (draft.marketCardId) draft.marketCardId = swap(draft.marketCardId)
+  if (draft.pendingCard) {
+    draft.pendingCard = { ...draft.pendingCard, cardId: swap(draft.pendingCard.cardId) }
+  }
+
+  return {
+    state: draft as GameState,
+    events: [{ type: 'rulesAdopted', regeln: stand.regeln }],
   }
 }
 

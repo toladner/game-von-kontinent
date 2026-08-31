@@ -6,6 +6,8 @@ import { useGame } from '@app/store'
 import type { TableSettings } from '@app/net'
 import { createGame, openingActions } from '@engine/setup'
 import { replay } from '@engine/reducer'
+import { REGELSTAND } from '@engine/regeln'
+import type { GameAction } from '@engine/actions'
 import type { GameState } from '@engine/state'
 
 /**
@@ -20,11 +22,11 @@ import type { GameState } from '@engine/state'
  */
 
 /** A table under way, with this device holding the host's seat. */
-function underWay(): GameState {
+function underWay(regeln?: number): GameState {
   const ctx = useGame.getState().ctx
   const state = replay(
     ctx,
-    createGame(ctx, { seed: 'terms', maxFleetSize: 3 }),
+    createGame(ctx, { seed: 'terms', maxFleetSize: 3, ...(regeln ? { regeln } : {}) }),
     openingActions(['Ada', 'Bo']),
   )
   useGame.setState({
@@ -89,6 +91,31 @@ it('hands the change to the table, not to this device alone', () => {
   // Read off the table it is standing on, so a form nobody touched asks for
   // the terms already in force rather than the form's own defaults.
   expect(sent[0]!.maxFleetSize).toBe(3)
+})
+
+it('offers an old table the new weather, and says what it will and will not touch', () => {
+  // N76K's problem, and the reason this is an action rather than a setting:
+  // the host wants the gentler weather from here on without the season so
+  // far coming out differently.
+  const state = underWay()
+  expect(state.config.regeln).toBe(1)
+  sheet(state)
+
+  expect(screen.getByText(/der bisherige Verlauf bleibt unangetastet/)).toBeTruthy()
+  const sent: GameAction[] = []
+  useGame.setState({ dispatch: (a) => void sent.push(a) })
+
+  // Asks twice: it changes the game under five houses who pressed nothing.
+  fireEvent.click(screen.getByText('Neue Wetterordnung übernehmen'))
+  expect(sent).toHaveLength(0)
+  fireEvent.click(screen.getByText('Ab jetzt danach spielen'))
+  expect(sent).toEqual([{ type: 'adoptRules', regeln: REGELSTAND }])
+})
+
+it('says nothing about new rules to a table already playing them', () => {
+  const state = underWay(REGELSTAND)
+  sheet(state)
+  expect(screen.queryByText('Neue Wetterordnung übernehmen')).toBeNull()
 })
 
 it('offers it to nobody but the host', () => {

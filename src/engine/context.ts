@@ -17,6 +17,16 @@ export interface EngineContext {
   readonly cardsById: ReadonlyMap<string, KonjunkturCard>
   /** Effective export list for a port, honouring per-port overrides. */
   readonly exportsOf: (portId: string) => readonly number[]
+  /**
+   * The same card, one edition later.
+   *
+   * The two extended decks are the same length and in the same order, so a
+   * card in one has a twin at the same place in the other. A table that takes
+   * up the new rules mid-season swaps the ids in its deck through this and
+   * goes on drawing in the same order it was — the same card on the same day,
+   * doing what the new edition says it does.
+   */
+  readonly reformedCardId: ReadonlyMap<string, string>
 }
 
 export function createContext(pack: ContentPack): EngineContext {
@@ -48,7 +58,14 @@ export function createContext(pack: ContentPack): EngineContext {
     return list
   }
 
-  return { pack, graph, goodsById, portsById, cardsById, exportsOf }
+  const reformedCardId = new Map<string, string>()
+  const before = pack.konjunkturErweitertVorReform ?? []
+  const after = pack.konjunkturErweitert ?? []
+  if (before.length === after.length) {
+    for (let i = 0; i < before.length; i++) reformedCardId.set(before[i]!.id, after[i]!.id)
+  }
+
+  return { pack, graph, goodsById, portsById, cardsById, exportsOf, reformedCardId }
 }
 
 export function goodOf(ctx: EngineContext, id: number): Good {

@@ -769,6 +769,12 @@ export class GameRoom {
       if (state.hostId !== playerId) return msg('reject.hostStarts')
       return null
     }
+    // The terms of the table are the host's, whosever turn it is — and this
+    // one is not a move, so no turn order applies to it.
+    if (action.type === 'adoptRules') {
+      if (state.hostId !== playerId) return msg('reject.hostConfigures')
+      return null
+    }
 
     // Nobody acts for another house, whichever way the table is played. In
     // round play the turn check below happened to cover this; in real-time

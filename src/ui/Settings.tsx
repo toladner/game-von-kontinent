@@ -5,6 +5,7 @@ import { ShareRow } from './Lobby'
 import { StepOptionen } from './Setup'
 import { optionsOf, settingsOf, type GameOptions } from '@app/options'
 import { useGame, type NetState } from '@app/store'
+import { REGELSTAND } from '@engine/regeln'
 import type { GameState } from '@engine/state'
 import { useLocaleStore, useT } from '@app/locale'
 import { LOCALES, LOCALE_NAMES } from '@i18n/locale'
@@ -41,9 +42,13 @@ export function SettingsSheet({
   const { t } = useT()
   const [confirming, setConfirming] = useState(false)
   const [draft, setDraft] = useState<GameOptions | null>(null)
+  const [adopting, setAdopting] = useState(false)
   const reconfigure = useGame((s) => s.reconfigure)
+  const dispatch = useGame((s) => s.dispatch)
   const realtime = state.config.travel === 'echtzeit'
   const isHost = net !== null && net.playerId === state.hostId
+  /** A table opened under an older edition, with a newer one available. */
+  const behind = state.phase !== 'lobby' && state.config.regeln < REGELSTAND
 
   return (
     <Sheet snap={snap} onSnap={onSnap} title={t('settings.title')} subtitle={t('settings.subtitle')}>
@@ -127,6 +132,43 @@ export function SettingsSheet({
               <p className="text-ink-faint mt-1.5 text-[12px] leading-snug">
                 {t(state.phase === 'lobby' ? 'settings.terms.hint' : 'settings.terms.sailed')}
               </p>
+
+              {/*
+                And the one rule change a season already at sea can take.
+
+                Not a term but an action, which is the whole reason it can be
+                offered here at all: it goes into the log with a place in it,
+                so everything before it stays folded under the old rules and
+                everything after it under the new. Nothing that has happened
+                moves; only what happens next is different.
+
+                Offered rather than applied quietly, and it asks twice, because
+                it changes the game under five other houses who did not press
+                anything — the paper announces it to all of them afterwards.
+              */}
+              {behind && (
+                <>
+                  <hr className="rule-double mx-auto my-5 w-2/3" />
+                  {adopting ? (
+                    <button
+                      className="btn btn-primary w-full"
+                      onClick={() => {
+                        dispatch({ type: 'adoptRules', regeln: REGELSTAND })
+                        setAdopting(false)
+                      }}
+                    >
+                      {t('settings.rules.confirm')}
+                    </button>
+                  ) : (
+                    <button className="btn w-full" onClick={() => setAdopting(true)}>
+                      {t('settings.rules')}
+                    </button>
+                  )}
+                  <p className="text-ink-faint mt-1.5 text-[12px] leading-snug">
+                    {t('settings.rules.hint')}
+                  </p>
+                </>
+              )}
             </>
           )}
         </Group>

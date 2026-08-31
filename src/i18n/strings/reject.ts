@@ -246,6 +246,19 @@ export const REJECT = {
    * merchant does not care that the server folds a log, they care that
    * yesterday would come out differently.
    */
+  'reject.noSuchRules': {
+    de: 'Diese Fassung der Regeln kennt das Kontor nicht.',
+    en: 'The counting house knows no such edition of the rules.',
+  },
+  /*
+   * Backwards would be the retroactive change again in a different hat: the
+   * log folds forwards, so an older edition adopted now would re-adjudicate
+   * everything since the newer one was taken up.
+   */
+  'reject.rulesNotNewer': {
+    de: 'Nur vorwärts. Eine ältere Fassung ließe den bisherigen Verlauf anders ausgehen.',
+    en: 'Forwards only. An older edition would make the season so far come out differently.',
+  },
   'reject.termsWouldRewrite': {
     de: 'Das änderte, was schon geschehen ist — die Partie liefe von vorn anders. Die alten Bedingungen stehen weiter.',
     en: 'That would change what has already happened — the season would come out differently. The old terms stand.',
