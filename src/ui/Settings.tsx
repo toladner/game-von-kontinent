@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Sheet, type SheetSnap } from './Sheet'
 import { NotifyCheck } from './NotifyCheck'
 import { ShareRow } from './Lobby'
-import type { NetState } from '@app/store'
+import { StepOptionen } from './Setup'
+import { optionsOf, settingsOf, type GameOptions } from '@app/options'
+import { useGame, type NetState } from '@app/store'
 import type { GameState } from '@engine/state'
 import { useLocaleStore, useT } from '@app/locale'
 import { LOCALES, LOCALE_NAMES } from '@i18n/locale'
@@ -38,7 +40,10 @@ export function SettingsSheet({
 }) {
   const { t } = useT()
   const [confirming, setConfirming] = useState(false)
+  const [draft, setDraft] = useState<GameOptions | null>(null)
+  const reconfigure = useGame((s) => s.reconfigure)
   const realtime = state.config.travel === 'echtzeit'
+  const isHost = net !== null && net.playerId === state.hostId
 
   return (
     <Sheet snap={snap} onSnap={onSnap} title={t('settings.title')} subtitle={t('settings.subtitle')}>
@@ -80,6 +85,52 @@ export function SettingsSheet({
           <p className="text-ink-soft text-[12px] leading-snug">{t('settings.local')}</p>
         )}
       </Group>
+
+      {/*
+        Changing a term after the ships have sailed.
+
+        This used to be the lobby's business alone, on the sound reasoning
+        that a table already at sea cannot have its rules moved under it. But
+        the reasoning proves less than it was taken to prove: a term that
+        changes what a past action *meant* rewrites the season, and a term
+        that only bears on what is still to come does not. The server folds
+        the log both ways and compares, so the host may ask and be told —
+        which is better than the old answer, which was to refuse a question
+        it had never actually looked at.
+
+        Host only, and only at a table played over the wire: at one device
+        there is nobody to be surprised by it but the person doing it.
+      */}
+      {isHost && (
+        <Group title={t('settings.terms')}>
+          {draft ? (
+            <StepOptionen
+              options={draft}
+              set={(key, value) => setDraft((o) => (o ? { ...o, [key]: value } : o))}
+              setOptions={(update) =>
+                setDraft((o) => (o ? (typeof update === 'function' ? update(o) : update) : o))
+              }
+              withJoinPolicy
+              backLabel={t('lobby.discard')}
+              nextLabel={t('lobby.apply')}
+              onBack={() => setDraft(null)}
+              onNext={() => {
+                reconfigure(settingsOf(draft))
+                setDraft(null)
+              }}
+            />
+          ) : (
+            <>
+              <button className="btn w-full" onClick={() => setDraft(optionsOf(state))}>
+                {t('lobby.change')}
+              </button>
+              <p className="text-ink-faint mt-1.5 text-[12px] leading-snug">
+                {t(state.phase === 'lobby' ? 'settings.terms.hint' : 'settings.terms.sailed')}
+              </p>
+            </>
+          )}
+        </Group>
+      )}
 
       <Group title={t('settings.leaving')}>
         <button className="btn w-full" onClick={onLeave}>

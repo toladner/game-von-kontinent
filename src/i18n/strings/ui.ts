@@ -85,6 +85,20 @@ export const UI = {
     en: 'In a dice game nothing moves without a throw, so there is little to report. The setting still holds for your next real-time game.',
   },
   'settings.game': { de: 'Diese Partie', en: 'This game' },
+  'settings.terms': { de: 'Bedingungen', en: 'Terms' },
+  'settings.terms.hint': {
+    de: 'Solange am Kai liegt, steht alles noch offen.',
+    en: 'Nothing is settled while the ships are still alongside.',
+  },
+  /*
+   * Said before the host opens the form rather than after the server has
+   * refused, because a form that mostly bounces teaches nothing. This says
+   * which kind of change will go through and why, in one line.
+   */
+  'settings.terms.sailed': {
+    de: 'Die Partie läuft. Was nur das Kommende betrifft, läßt sich noch ändern — was den bisherigen Verlauf anders ausgehen ließe, nicht.',
+    en: 'The season is under way. Anything that bears only on what is still to come can still be changed; anything that would make the season so far come out differently cannot.',
+  },
   'settings.table': { de: 'Tisch', en: 'Table' },
   'settings.line': { de: 'Leitung', en: 'Line' },
   'settings.line.up': { de: 'steht', en: 'open' },

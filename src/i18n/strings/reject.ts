@@ -240,6 +240,16 @@ export const REJECT = {
     de: 'Beitritt läuft über die Anmeldung.',
     en: 'Joining is done at the entrance.',
   },
+  /*
+   * Said to a host who is trying to change a term that would move the season
+   * that has already been played. Names the reason rather than the rule: a
+   * merchant does not care that the server folds a log, they care that
+   * yesterday would come out differently.
+   */
+  'reject.termsWouldRewrite': {
+    de: 'Das änderte, was schon geschehen ist — die Partie liefe von vorn anders. Die alten Bedingungen stehen weiter.',
+    en: 'That would change what has already happened — the season would come out differently. The old terms stand.',
+  },
   'reject.termsWouldStrand': {
     de: 'Unter diesen Bedingungen käme nicht jeder mit. Die alten stehen weiter.',
     en: 'Not every house would come along under those terms. The old ones stand.',

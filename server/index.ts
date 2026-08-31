@@ -670,10 +670,6 @@ export class GameRoom {
         if (this.state.hostId !== playerId) {
           return this.send(socket, { t: 'error', reason: msg('reject.hostConfigures') })
         }
-        if (this.state.phase !== 'lobby') {
-          return this.send(socket, { t: 'error', reason: msg('reject.alreadyRunning') })
-        }
-
         /*
          * The log is replayed against the new terms, and a `join` the reducer
          * refuses under them is a house that quietly stops being at the table
@@ -684,6 +680,31 @@ export class GameRoom {
          * old terms back rather than lose one.
          */
         const before = this.state.players.length
+        /*
+         * And once the table has sailed, the same trick answers a harder
+         * question than it was built for.
+         *
+         * This used to be a flat refusal: no changes after cast-off. The
+         * reason was sound — the server keeps no state but the log, so terms
+         * that change what a past action *meant* do not change the game from
+         * here on, they change what already happened. But "no changes" is a
+         * blunt reading of it. Most terms would indeed move the season;
+         * some move nothing at all, and there is no need to guess which,
+         * because the log can simply be folded both ways and compared.
+         *
+         * So: fold it under the new terms and look. If every ship, every
+         * guilder and every card sits exactly where it sat, the change
+         * touches only what is still to come and the host may have it. If
+         * anything moved, the old terms go back and the host is told why.
+         *
+         * Compared with `config` set aside, because the terms are the thing
+         * being changed; what may not move is the season they were played in.
+         */
+        const sailed = this.state.phase !== 'lobby'
+        const history = (s: GameState | null) =>
+          s ? JSON.stringify({ ...s, config: null }) : ''
+        const seasonBefore = sailed ? history(this.state) : ''
+
         const was = this.meta
         this.meta = { ...this.meta, ...settle(message.settings, this.meta) }
         this.rebuild()
@@ -691,6 +712,11 @@ export class GameRoom {
           this.meta = was
           this.rebuild()
           return this.send(socket, { t: 'error', reason: msg('reject.termsWouldStrand') })
+        }
+        if (sailed && history(this.state) !== seasonBefore) {
+          this.meta = was
+          this.rebuild()
+          return this.send(socket, { t: 'error', reason: msg('reject.termsWouldRewrite') })
         }
         await this.persist()
         // New terms, new clock: a table that has just become a real-time one
