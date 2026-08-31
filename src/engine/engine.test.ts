@@ -1103,6 +1103,41 @@ describe('weather over one part of the world', () => {
     return out
   }
 
+  /**
+   * Cast off — every hull the house owns.
+   *
+   * Cargo is only at risk at sea now, so a test about weather has to get the
+   * ship off the quay before there is anything to prove. Departure is
+   * backdated by hand rather than ticked up to: ticking turns the market, and
+   * a stray card would have spoiled the cargo before the card under test
+   * ever reached it.
+   */
+  const underWay = (s: GameState, by: string): GameState => {
+    const index = s.players.findIndex((p) => p.id === by)
+    let out = s
+    for (const ship of s.players[index]!.fleet) {
+      const from = ship.nodeId
+      // Far enough that she is still at sea when the card turns.
+      const target = [...ctx.portsById.keys()].find(
+        (id) => id !== portAt(ctx, from) && routeTo(ctx, from, null, id).length >= 8,
+      )!
+      out = applyAction(ctx, out, { type: 'setCourse', to: target, vehicleId: ship.id, by }).state
+    }
+    return {
+      ...out,
+      players: out.players.map((p, i) =>
+        i === index
+          ? {
+              ...p,
+              fleet: p.fleet.map((v) =>
+                v.voyage ? { ...v, voyage: { ...v.voyage, departsAt: out.now - 1 } } : v,
+              ),
+            }
+          : p,
+      ),
+    }
+  }
+
   /** Which part of the world a house's ship is in. */
   const whereabouts = (s: GameState, by: string): Continent =>
     continentOf(ctx, flagship(s.players.find((p) => p.id === by)!).nodeId)!
@@ -1133,7 +1168,7 @@ describe('weather over one part of the world', () => {
   })
 
   it('spoils cargo instead of sinking it, and it stays in the hold', () => {
-    const s = laden(seatedRealtime(), 'a')
+    const s = underWay(laden(seatedRealtime(), 'a'), 'a')
     const before = flagship(s.players[0]!).cargo
     expect(before.length).toBeGreaterThan(0)
 
@@ -1148,12 +1183,16 @@ describe('weather over one part of the world', () => {
   })
 
   it('halves what a spoiled posten fetches', () => {
-    const s = laden(seatedRealtime(), 'a')
-    const here = portAt(ctx, flagship(s.players[0]!).nodeId)!
+    const alongside = laden(seatedRealtime(), 'a')
+    const here = portAt(ctx, flagship(alongside.players[0]!).nodeId)!
     const clean = new Map(
-      flagship(s.players[0]!).cargo.map((c) => [c.uid, quoteSale(ctx, s, c, here).price]),
+      flagship(alongside.players[0]!).cargo.map((c) => [
+        c.uid,
+        quoteSale(ctx, alongside, c, here).price,
+      ]),
     )
 
+    const s = underWay(alongside, 'a')
     const hit = turn(s, cardFor('cargoDamagedInRegion', whereabouts(s, 'a'))).state
     const spoiled = damagedOf(hit, 0)
     expect(spoiled.length).toBeGreaterThan(0)
@@ -1169,7 +1208,7 @@ describe('weather over one part of the world', () => {
     // Hitting an already-spoiled posten would quietly make the second storm
     // a no-op, and worse: it would always be the dearest cargo that shrugged
     // the weather off, because that is the one a storm reaches for first.
-    const s = laden(seatedRealtime(), 'a')
+    const s = underWay(laden(seatedRealtime(), 'a'), 'a')
     const card = cardFor('cargoDamagedInRegion', whereabouts(s, 'a'))
 
     const first = turn(s, card)
@@ -1183,7 +1222,8 @@ describe('weather over one part of the world', () => {
   })
 
   it('leaves ships in other oceans alone', () => {
-    const s = laden(seatedRealtime(), 'a')
+    // At sea, so that what spares her is the ocean and not the quay.
+    const s = underWay(laden(seatedRealtime(), 'a'), 'a')
     const here = whereabouts(s, 'a')
     const elsewhere = [...new Set(CLASSIC_PACK.map.countries.map((c) => c.continent))].find(
       (c) => c !== here && cardFor('cargoDamagedInRegion', c),
@@ -1226,7 +1266,7 @@ describe('weather over one part of the world', () => {
     const victims = new Set<string>()
 
     for (const seed of ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8']) {
-      const s = laden(laden(seatedRealtime(seed), 'a'), 'b')
+      const s = underWay(underWay(laden(laden(seatedRealtime(seed), 'a'), 'b'), 'a'), 'b')
       for (const e of turn(s, fire).events) {
         if (e.type === 'cargoLost') victims.add(e.playerId)
       }
@@ -1258,7 +1298,6 @@ describe('weather over one part of the world', () => {
     s = applyAction(ctx, s, { type: 'buyVehicle', kindId: 'kuestenschoner', by: 'a' }).state
     const fleet = s.players[0]!.fleet
     expect(fleet).toHaveLength(2)
-    // Both lie in the same harbour, so the same weather covers both.
     expect(fleet[1]!.nodeId).toBe(fleet[0]!.nodeId)
 
     // Load the second ship, which is not the one Ada is sailing aboard.
@@ -1272,9 +1311,68 @@ describe('weather over one part of the world', () => {
     const second = () => s.players[0]!.fleet.find((v) => v.id === fleet[1]!.id)!
     expect(second().cargo.length).toBeGreaterThan(0)
 
+    // Both put to sea out of the same harbour, so the same gale covers both.
+    s = underWay(s, 'a')
     const hit = turn(s, cardFor('cargoDamagedInRegion', whereabouts(s, 'a')))
     const after = hit.state.players[0]!.fleet.find((v) => v.id === fleet[1]!.id)!
     expect(after.cargo.filter((c) => c.damaged).length).toBeGreaterThan(0)
+  })
+
+  it('passes over a ship lying in harbour', () => {
+    // The reason the extended deck felt like a tax rather than weather. The
+    // market turns every twenty minutes whether anyone is at the table or
+    // not, so a house that moored for the night was being emptied in its
+    // sleep by gales it could neither see nor sail out of. Now the sea takes
+    // cargo and a harbour keeps it, and lying up is a thing you can choose.
+    const alongside = laden(seatedRealtime(), 'a')
+    const before = flagship(alongside.players[0]!).cargo.length
+    expect(before).toBeGreaterThan(0)
+
+    const storm = cardFor('stormInRegion', whereabouts(alongside, 'a'))
+    const rode = turn(alongside, storm)
+    expect(flagship(rode.state.players[0]!).cargo).toHaveLength(before)
+    expect(rode.events.some((e) => e.type === 'cargoLost')).toBe(false)
+
+    // The same gale, the same ocean, the same hold — but under way.
+    const sailed = turn(underWay(alongside, 'a'), storm)
+    expect(sailed.events.some((e) => e.type === 'cargoLost')).toBe(true)
+  })
+
+  it('leaves a fire in a hold alongside to the harbour', () => {
+    // Same rule for the misfortunes that name no ocean: pirates board ships
+    // under way, and a fire in a berthed hold is put out by the quay.
+    const fire = deck.find((c) => c.effects.some((e) => e.kind === 'cargoLostByDrawer'))!
+    const alongside = laden(seatedRealtime(), 'a')
+    expect(turn(alongside, fire).events.some((e) => e.type === 'cargoLost')).toBe(false)
+    expect(turn(underWay(alongside, 'a'), fire).events.some((e) => e.type === 'cargoLost')).toBe(
+      true,
+    )
+  })
+
+  it('lets water in the hold spoil the cargo rather than sink it', () => {
+    // "Die Ladung hat gelitten" is the Havarie formula word for word, and the
+    // card then threw two posten over the side. It was also one of three
+    // cards that always found somebody, which is why they did most of the
+    // damage in the deck between them.
+    const flooded = deck.find((c) => c.effects.some((e) => e.kind === 'cargoDamagedByDrawer'))!
+    const s = underWay(laden(seatedRealtime(), 'a'), 'a')
+    const before = flagship(s.players[0]!).cargo.length
+
+    const hit = turn(s, flooded)
+    expect(flagship(hit.state.players[0]!).cargo).toHaveLength(before)
+    expect(hit.events.some((e) => e.type === 'cargoDamaged')).toBe(true)
+    expect(hit.events.some((e) => e.type === 'cargoLost')).toBe(false)
+  })
+
+  it('robs only the houses that are actually out east', () => {
+    // The card names the Strait of Malacca and used to rob whichever laden
+    // ship the dice picked, so a house off Patagonia could lose a posten to
+    // pirates in Malaya.
+    const piracy = deck.find((c) => c.title.de === 'Seeräuberei')!
+    for (const effect of piracy.effects) {
+      expect(effect.kind).toBe('stormInRegion')
+      expect('continent' in effect && effect.continent).toBe('asien')
+    }
   })
 
   it('blows itself out in a season, not in a working day', () => {
@@ -1774,7 +1872,8 @@ describe('reading the temper of a Konjunkturkarte', () => {
           e.kind === 'cargoDamagedInRegion' ||
           e.kind === 'delayInRegion' ||
           e.kind === 'portClosed' ||
-          e.kind === 'cargoLostByDrawer',
+          e.kind === 'cargoLostByDrawer' ||
+          e.kind === 'cargoDamagedByDrawer',
       ),
     )
     expect(bad.length).toBeGreaterThan(5)

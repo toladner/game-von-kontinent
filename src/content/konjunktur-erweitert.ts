@@ -451,14 +451,14 @@ export const KONJUNKTUR_ERWEITERT: readonly KonjunkturCard[] = [
   card(
     L('Taifunwarnung', 'Typhoon warning'),
     {
-      de: ['Südchinesisches Meer', 'Ein Posten geht über Bord', 'und die Fahrt verzögert sich'],
-      en: ['South China Sea', 'One lot goes over the side', 'and the voyage is delayed'],
+      de: ['Südchinesisches Meer', 'Ein Posten hat gelitten', 'und die Fahrt verzögert sich'],
+      en: ['South China Sea', 'One lot has suffered', 'and the voyage is delayed'],
     },
     [
       {
-        kind: 'stormInRegion',
+        kind: 'cargoDamagedInRegion',
         continent: 'asien',
-        lose: 1,
+        count: 1,
         title: L('Taifun — Südchinesisches Meer', 'Typhoon — South China Sea'),
       },
       {
@@ -487,12 +487,13 @@ export const KONJUNKTUR_ERWEITERT: readonly KonjunkturCard[] = [
   card(
     L('Seeräuberei', 'Piracy'),
     {
-      de: ['In der Straße von Malakka', 'Ein Posten Ihrer Ladung', 'ist verschwunden'],
-      en: ['In the Strait of Malacca', 'One lot of your cargo', 'has vanished'],
+      de: ['In der Straße von Malakka', 'Wer dort fährt, vermißt', 'einen Posten seiner Ladung'],
+      en: ['In the Strait of Malacca', 'Anyone sailing there is', 'a lot of cargo short'],
     },
     [
       {
-        kind: 'cargoLostByDrawer',
+        kind: 'stormInRegion',
+        continent: 'asien',
         lose: 1,
         title: L('Seeräuberei in der Straße von Malakka', 'Piracy in the Strait of Malacca'),
       },
@@ -509,10 +510,10 @@ export const KONJUNKTUR_ERWEITERT: readonly KonjunkturCard[] = [
   card(
     L('Wassereinbruch', 'Water in the hold'),
     {
-      de: ['Die Ladung hat gelitten', 'Zwei Posten sind unverkäuflich'],
-      en: ['The cargo has suffered', 'Two lots are unsaleable'],
+      de: ['Zwei Posten haben gelitten', 'Erlös nur zur Hälfte'],
+      en: ['Two lots have suffered', 'Proceeds halved'],
     },
-    [{ kind: 'cargoLostByDrawer', lose: 2, title: L('Wassereinbruch', 'Water in the hold') }],
+    [{ kind: 'cargoDamagedByDrawer', count: 2, title: L('Wassereinbruch', 'Water in the hold') }],
   ),
 
   // --- Örtliche Zahlungen ---------------------------------------------------

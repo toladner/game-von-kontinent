@@ -193,6 +193,63 @@ function atSea(state: GameState, vehicle: VehicleInstance): boolean {
   return state.now >= voyage.departsAt
 }
 
+/**
+ * Whether the weather can reach her at all.
+ *
+ * A gale in the Nordsee emptying a hold that is lying alongside in Hamburg
+ * with a watchman aboard is not weather, it is a fine. Worse, in a real-time
+ * season it is a fine levied while the merchant is asleep: the market turns
+ * every twenty minutes whether anyone is at the table or not, and the ships
+ * that spend the night in harbour were being robbed for spending it there.
+ *
+ * So the whole family of misfortunes — storm, Havarie, fire, pirates — now
+ * asks one question first, and it is the same question in both games. On the
+ * clock: has she cast off. On the board: is she standing on open water rather
+ * than in a harbour. Either way the rule a player learns is one line long —
+ * *cargo is at risk at sea* — and lying up becomes a thing you can choose.
+ */
+function exposedToWeather(ctx: EngineContext, state: GameState, vehicle: VehicleInstance): boolean {
+  if (state.config.travel === 'echtzeit') return atSea(state, vehicle)
+  return portAt(ctx, vehicle.nodeId) === null
+}
+
+/**
+ * Which ship the shipboard misfortunes find.
+ *
+ * In round play the card was turned by somebody and it is theirs. A world
+ * card in real time has no drawer, and answering that with `drawerIndex` —
+ * nought, always — meant a fire in the hold broke out aboard the first house
+ * to have sat down, every single time. So the deck picks a laden ship
+ * instead, out of the game's own dice.
+ *
+ * Either way she has to be at sea. Pirates board ships under way, and a fire
+ * in a hold lying alongside is put out by the harbour: the same rule the
+ * weather follows, and the reason this returns nobody rather more often than
+ * it used to.
+ */
+function unlucky(
+  ctx: EngineContext,
+  draft: Draft,
+  drawerIndex: number,
+): [number, string] | null {
+  if (draft.config.travel !== 'echtzeit') {
+    const own = flagship(draft.players[drawerIndex]!)
+    if (!exposedToWeather(ctx, draft as GameState, own)) return null
+    return [drawerIndex, own.id]
+  }
+  const laden: Array<[number, string]> = []
+  for (let i = 0; i < draft.players.length; i++) {
+    for (const ship of draft.players[i]!.fleet) {
+      if (ship.cargo.length === 0) continue
+      if (!exposedToWeather(ctx, draft as GameState, ship)) continue
+      laden.push([i, ship.id])
+    }
+  }
+  if (laden.length === 0) return null
+  const [choice, rng] = nextInt(draft.rng, laden.length)
+  draft.rng = rng
+  return laden[choice]!
+}
 
 /**
  * Throw cargo overboard, dearest first.
@@ -364,10 +421,13 @@ function forEachShipIn(
   draft: Draft,
   continent: Continent,
   hit: (index: number, ship: VehicleInstance) => void,
+  /** Weather passes over a harbour; a delay or a levy finds her anywhere. */
+  atSeaOnly = false,
 ): void {
   for (let i = 0; i < draft.players.length; i++) {
     for (const ship of [...draft.players[i]!.fleet]) {
       if (continentOf(ctx, ship.nodeId) !== continent) continue
+      if (atSeaOnly && !exposedToWeather(ctx, draft as GameState, ship)) continue
       hit(i, ship)
     }
   }
@@ -533,15 +593,23 @@ function applyEffect(
     }
 
     case 'stormInRegion': {
-      forEachShipIn(ctx, draft, effect.continent, (i, ship) =>
-        jettison(draft, i, ship.id, effect.lose, effect.title, events),
+      forEachShipIn(
+        ctx,
+        draft,
+        effect.continent,
+        (i, ship) => jettison(draft, i, ship.id, effect.lose, effect.title, events),
+        true,
       )
       return
     }
 
     case 'cargoDamagedInRegion': {
-      forEachShipIn(ctx, draft, effect.continent, (i, ship) =>
-        spoil(draft, i, ship.id, effect.count, effect.title, events),
+      forEachShipIn(
+        ctx,
+        draft,
+        effect.continent,
+        (i, ship) => spoil(draft, i, ship.id, effect.count, effect.title, events),
+        true,
       )
       return
     }
@@ -568,26 +636,14 @@ function applyEffect(
     }
 
     case 'cargoLostByDrawer': {
-      // In round play the card was turned by somebody, and it is theirs. A
-      // world card in real time has no drawer, and answering that with
-      // `drawerIndex` — nought, always — meant a fire in the hold broke out
-      // aboard the first house to have sat down, every single time. So the
-      // deck picks a laden ship instead, out of the game's own dice.
-      if (draft.config.travel !== 'echtzeit') {
-        jettison(draft, drawerIndex, flagship(draft.players[drawerIndex]!).id, effect.lose, effect.title, events)
-        return
-      }
-      const laden: Array<[number, string]> = []
-      for (let i = 0; i < draft.players.length; i++) {
-        for (const ship of draft.players[i]!.fleet) {
-          if (ship.cargo.length > 0) laden.push([i, ship.id])
-        }
-      }
-      if (laden.length === 0) return
-      const [choice, rng] = nextInt(draft.rng, laden.length)
-      draft.rng = rng
-      const [index, vehicleId] = laden[choice]!
-      jettison(draft, index, vehicleId, effect.lose, effect.title, events)
+      const victim = unlucky(ctx, draft, drawerIndex)
+      if (victim) jettison(draft, victim[0], victim[1], effect.lose, effect.title, events)
+      return
+    }
+
+    case 'cargoDamagedByDrawer': {
+      const victim = unlucky(ctx, draft, drawerIndex)
+      if (victim) spoil(draft, victim[0], victim[1], effect.count, effect.title, events)
       return
     }
 

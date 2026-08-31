@@ -195,12 +195,28 @@ export const ADVICE = {
     en: 'It holds for {n} rounds on every sale in this part of the world — for you as for the others. Elsewhere nothing changes.',
   },
   'advice.card.storm.one': {
-    de: 'Jedes Schiff in diesem Seegebiet verliert einen Posten — den teuersten zuerst. Wer anderswo fährt, kommt davon.',
-    en: 'Every ship in these waters loses a lot — the dearest first. Anyone sailing elsewhere is spared.',
+    de: 'Jedes Schiff in See in diesem Gebiet verliert einen Posten — den teuersten zuerst. Wer im Hafen liegt oder anderswo fährt, kommt davon.',
+    en: 'Every ship at sea in these waters loses a lot — the dearest first. Anyone lying in harbour, or sailing elsewhere, is spared.',
   },
   'advice.card.storm.other': {
-    de: 'Jedes Schiff in diesem Seegebiet verliert {n} Posten — den teuersten zuerst. Wer anderswo fährt, kommt davon.',
-    en: 'Every ship in these waters loses {n} lots — the dearest first. Anyone sailing elsewhere is spared.',
+    de: 'Jedes Schiff in See in diesem Gebiet verliert {n} Posten — den teuersten zuerst. Wer im Hafen liegt oder anderswo fährt, kommt davon.',
+    en: 'Every ship at sea in these waters loses {n} lots — the dearest first. Anyone lying in harbour, or sailing elsewhere, is spared.',
+  },
+  'advice.card.damage.one': {
+    de: 'Jedes Schiff in See in diesem Gebiet bringt einen Posten beschädigt ein — den teuersten zuerst. Er bleibt an Bord und bringt nur den halben Erlös.',
+    en: 'Every ship at sea in these waters brings a lot in damaged — the dearest first. It stays aboard and fetches only half.',
+  },
+  'advice.card.damage.other': {
+    de: 'Jedes Schiff in See in diesem Gebiet bringt {n} Posten beschädigt ein — die teuersten zuerst. Sie bleiben an Bord und bringen nur den halben Erlös.',
+    en: 'Every ship at sea in these waters brings {n} lots in damaged — the dearest first. They stay aboard and fetch only half.',
+  },
+  'advice.card.cargoDamaged.one': {
+    de: 'Ein Posten Ihrer Ladung ist beschädigt, der teuerste zuerst — er bleibt an Bord und bringt nur den halben Erlös.',
+    en: 'One lot of your cargo is damaged, the dearest first — it stays aboard and fetches only half.',
+  },
+  'advice.card.cargoDamaged.other': {
+    de: '{n} Posten Ihrer Ladung sind beschädigt, die teuersten zuerst — sie bleiben an Bord und bringen nur den halben Erlös.',
+    en: '{n} lots of your cargo are damaged, the dearest first — they stay aboard and fetch only half.',
   },
   'advice.card.cargoLost.one': {
     de: 'Sie verlieren einen Posten Ihrer Ladung, den teuersten zuerst.',

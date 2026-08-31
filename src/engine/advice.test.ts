@@ -168,6 +168,25 @@ describe('what a Konjunkturkarte did to you', () => {
     effects,
   })
 
+  it('says half of what, when the weather only spoils the cargo', () => {
+    const s = table()
+    const soaked = konjunkturOutcome(
+      ctx,
+      s.players[0]!,
+      cardWith([
+        {
+          kind: 'cargoDamagedInRegion',
+          continent: 'europa',
+          count: 1,
+          title: { de: 'Havarie', en: 'Damage at sea' },
+        },
+      ]),
+    )
+    expect(soaked.headline).toBe('Havarie')
+    expect(soaked.detail).toContain('halben Erlös')
+    expect(soaked.tone).toBe('schlecht')
+  })
+
   it('names the sum on a Telegramm rather than the rule', () => {
     const s = table()
     const out = konjunkturOutcome(

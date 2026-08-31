@@ -358,6 +358,23 @@ export function konjunkturOutcome(
           tone: 'schlecht',
         }
 
+      case 'cargoDamagedInRegion':
+        return {
+          headline: effect.title[locale],
+          detail: tn(locale, 'advice.card.damage', effect.count),
+          tone: 'schlecht',
+        }
+
+      case 'cargoDamagedByDrawer':
+        return {
+          headline: effect.title[locale],
+          detail:
+            held > 0
+              ? tn(locale, 'advice.card.cargoDamaged', effect.count)
+              : t(locale, 'advice.card.cargoLost.empty'),
+          tone: held > 0 ? 'schlecht' : 'neutral',
+        }
+
       case 'cargoLostByDrawer':
         return {
           headline: effect.title[locale],

@@ -886,6 +886,7 @@ export function konjunkturTenor(card: KonjunkturCard): Tenor {
       case 'stormInRegion':
       case 'cargoDamagedInRegion':
       case 'cargoLostByDrawer':
+      case 'cargoDamagedByDrawer':
       case 'delayInRegion':
       case 'portClosed':
         sum -= 1

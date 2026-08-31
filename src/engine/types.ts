@@ -280,6 +280,16 @@ export type KonjunkturEffect =
       readonly lose: number
       readonly title: Localized<string>
     }
+  /**
+   * The same misfortune, spoiling rather than taking — `cargoDamagedInRegion`
+   * for a card that names no ocean. Water in the hold ruins a cargo where it
+   * lies; it does not throw it over the side, and the card always said so.
+   */
+  | {
+      readonly kind: 'cargoDamagedByDrawer'
+      readonly count: number
+      readonly title: Localized<string>
+    }
   /** A windfall or demand for every ship lying in one continent's harbours. */
   | {
       readonly kind: 'regionalLevy'

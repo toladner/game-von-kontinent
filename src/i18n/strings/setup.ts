@@ -133,8 +133,8 @@ export const SETUP = {
   },
   'setup.konjunktur.extended': { de: 'Erweitert', en: 'Extended' },
   'setup.konjunktur.extended.hint': {
-    de: 'Dazu Stürme, die Ladung über Bord gehen lassen, Hausse und Baisse über einzelnen Erdteilen, Seeräuber und örtliche Gebühren. Wo Sie stehen, zählt dann mit.',
-    en: 'And gales that take cargo over the side, booms and slumps over single parts of the world, pirates and local dues. Where you are then counts for something.',
+    de: 'Dazu Stürme, die Ladung über Bord gehen lassen, Hausse und Baisse über einzelnen Erdteilen, Seeräuber und örtliche Gebühren. Wo Sie stehen, zählt dann mit: in See ist die Ladung in Gefahr, im Hafen liegt sie sicher.',
+    en: 'And gales that take cargo over the side, booms and slumps over single parts of the world, pirates and local dues. Where you are then counts for something: cargo is at risk at sea and safe in harbour.',
   },
 
   'setup.section.house': { de: 'Das Handelshaus', en: 'The merchant house' },

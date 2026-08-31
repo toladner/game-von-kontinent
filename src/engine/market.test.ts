@@ -5,6 +5,7 @@ import { createGame, openingActions } from './setup'
 import { applyAction, replay } from './reducer'
 import {
   buyOffers,
+  continentOf,
   marketReport,
   portAt,
   quoteSale,
@@ -246,6 +247,18 @@ describe('Konjunktur "erweitert"', () => {
     for (const offer of buyOffers(ctx, s, s.players[0]!, portId).filter((o) => o.status === 'ok')) {
       loaded = applyAction(ctx, loaded, { type: 'buy', goodId: offer.goodId }).state
     }
+    // On the board a ship is at sea when she is standing on open water
+    // rather than in a harbour, and weather only reaches her there.
+    const seaNode = [...ctx.graph.nodesById.keys()].find(
+      (id) => portAt(ctx, id) === null && continentOf(ctx, id) === 'europa',
+    )!
+    loaded = {
+      ...loaded,
+      players: loaded.players.map((p, i) =>
+        i === 0 ? { ...p, fleet: p.fleet.map((v) => ({ ...v, nodeId: seaNode })) } : p,
+      ),
+    }
+
     const before = flagship(loaded.players[0]!).cargo
     expect(before.length, 'need two posten to prove the dearest goes first')
       .toBeGreaterThanOrEqual(2)
