@@ -1291,7 +1291,9 @@ function KonjunkturSheet({
 }) {
   const { t, locale } = useT()
   const card = state.pendingCard ? ctx.cardsById.get(state.pendingCard.cardId) : null
-  const outcome = card ? konjunkturOutcome(ctx, player, card, locale) : null
+  const outcome = card
+    ? konjunkturOutcome(ctx, player, card, locale, state.config.weatherCatchPercent)
+    : null
 
   return (
     <Sheet

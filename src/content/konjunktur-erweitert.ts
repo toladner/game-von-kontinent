@@ -607,3 +607,81 @@ export const KONJUNKTUR_ERWEITERT: readonly KonjunkturCard[] = [
     ],
   ),
 ]
+
+// ---------------------------------------------------------------------------
+// Der Regelstand: the deck as it stood before the weather was thinned out
+// ---------------------------------------------------------------------------
+
+/**
+ * A game is its seed and its log. The server keeps no state of its own — it
+ * folds the log to find out where every ship is — so a card whose effects
+ * change quietly rewrites the past of every table already at sea. Cargo that
+ * went over the side on Tuesday is back in the hold, the sale that followed
+ * it never happened, and six people find their books rewritten overnight.
+ *
+ * That is not a hypothetical. It happened once, on the day the weather was
+ * rebalanced, and this is the fix: three cards kept exactly as they read, so
+ * a table opened under the old Regelstand goes on playing the game it sat
+ * down to. The same principle the optional fields of `GameMeta` already
+ * follow, written out for content rather than for settings.
+ *
+ * Keyed by the German title, which is what identifies a card to a reader.
+ */
+const VOR_DER_WETTERREFORM: Readonly<
+  Record<string, Pick<KonjunkturCard, 'lines' | 'effects'>>
+> = {
+  Seeräuberei: {
+    lines: {
+      de: ['In der Straße von Malakka', 'Ein Posten Ihrer Ladung', 'ist verschwunden'],
+      en: ['In the Strait of Malacca', 'One lot of your cargo', 'has vanished'],
+    },
+    effects: [
+      {
+        kind: 'cargoLostByDrawer',
+        lose: 1,
+        title: L('Seeräuberei in der Straße von Malakka', 'Piracy in the Strait of Malacca'),
+      },
+    ],
+  },
+  Wassereinbruch: {
+    lines: {
+      de: ['Die Ladung hat gelitten', 'Zwei Posten sind unverkäuflich'],
+      en: ['The cargo has suffered', 'Two lots are unsaleable'],
+    },
+    effects: [
+      { kind: 'cargoLostByDrawer', lose: 2, title: L('Wassereinbruch', 'Water in the hold') },
+    ],
+  },
+  Taifunwarnung: {
+    lines: {
+      de: ['Südchinesisches Meer', 'Ein Posten geht über Bord', 'und die Fahrt verzögert sich'],
+      en: ['South China Sea', 'One lot goes over the side', 'and the voyage is delayed'],
+    },
+    effects: [
+      {
+        kind: 'stormInRegion',
+        continent: 'asien',
+        lose: 1,
+        title: L('Taifun — Südchinesisches Meer', 'Typhoon — South China Sea'),
+      },
+      {
+        kind: 'delayInRegion',
+        continent: 'asien',
+        minutes: 30,
+        title: L('Taifun — Südchinesisches Meer', 'Typhoon — South China Sea'),
+      },
+    ],
+  },
+}
+
+/**
+ * The same deck, same length, same order — so the same seed deals the same
+ * permutation and the same card comes up on the same day. Three of them
+ * simply do what they used to do. Their ids differ so that both decks can
+ * live in one lookup; nothing but the shuffle ever reads an id.
+ */
+export const KONJUNKTUR_ERWEITERT_VOR_REFORM: readonly KonjunkturCard[] =
+  KONJUNKTUR_ERWEITERT.map((c) => {
+    const old = VOR_DER_WETTERREFORM[c.title.de]
+    return old ? { ...c, ...old, id: `${c.id}v1` } : c
+  })

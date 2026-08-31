@@ -72,6 +72,21 @@ describe('the terms of a table', () => {
    * was chosen on the setup screen, dropped before it reached the server, and
    * every online table played the printed 27 whatever the host had picked.
    */
+  it('will not let anyone move a table onto different rules', () => {
+    // The Regelstand is the date on the rulebook a table was opened with, not
+    // a setting the host may change his mind about. Changing it mid-season
+    // would not change the game from there on — the server folds the log from
+    // the beginning, so it would change what had already happened.
+    const asked = settle({ regeln: 99, konjunktur: 'erweitert' } as never)
+    expect('regeln' in asked).toBe(false)
+
+    // And a change that names it leaves the table's own where it stands: the
+    // host's settings are merged over the meta, not in place of it.
+    const meta = { regeln: 1, ...settle({ travel: 'echtzeit' }) }
+    const after = { ...meta, ...settle({ regeln: 99 } as never, meta) }
+    expect(after.regeln).toBe(1)
+  })
+
   it('carries the Konjunktur deck, which online tables never used to', () => {
     expect(settle({ konjunktur: 'erweitert' }).konjunktur).toBe('erweitert')
     expect(settle({}).konjunktur).toBe('klassisch')

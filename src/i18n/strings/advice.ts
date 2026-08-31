@@ -202,6 +202,22 @@ export const ADVICE = {
     de: 'Jedes Schiff in See in diesem Gebiet verliert {n} Posten — den teuersten zuerst. Wer im Hafen liegt oder anderswo fährt, kommt davon.',
     en: 'Every ship at sea in these waters loses {n} lots — the dearest first. Anyone lying in harbour, or sailing elsewhere, is spared.',
   },
+  'advice.card.storm.some.one': {
+    de: 'Wen es erwischt, verliert einen Posten — den teuersten zuerst. Nicht jedes Schiff im Sturm trifft es, und wer im Hafen liegt, kommt davon.',
+    en: 'Whichever ships it catches lose a lot — the dearest first. Not every ship in a gale is caught, and one lying in harbour is spared.',
+  },
+  'advice.card.storm.some.other': {
+    de: 'Wen es erwischt, verliert {n} Posten — die teuersten zuerst. Nicht jedes Schiff im Sturm trifft es, und wer im Hafen liegt, kommt davon.',
+    en: 'Whichever ships it catches lose {n} lots — the dearest first. Not every ship in a gale is caught, and one lying in harbour is spared.',
+  },
+  'advice.card.damage.some.one': {
+    de: 'Wen es erwischt, bringt einen Posten beschädigt ein — den teuersten zuerst. Er bleibt an Bord und bringt nur den halben Erlös.',
+    en: 'Whichever ships it catches bring a lot in damaged — the dearest first. It stays aboard and fetches only half.',
+  },
+  'advice.card.damage.some.other': {
+    de: 'Wen es erwischt, bringt {n} Posten beschädigt ein — die teuersten zuerst. Sie bleiben an Bord und bringen nur den halben Erlös.',
+    en: 'Whichever ships it catches bring {n} lots in damaged — the dearest first. They stay aboard and fetch only half.',
+  },
   'advice.card.damage.one': {
     de: 'Jedes Schiff in See in diesem Gebiet bringt einen Posten beschädigt ein — den teuersten zuerst. Er bleibt an Bord und bringt nur den halben Erlös.',
     en: 'Every ship at sea in these waters brings a lot in damaged — the dearest first. It stays aboard and fetches only half.',

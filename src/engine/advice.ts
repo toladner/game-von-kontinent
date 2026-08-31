@@ -285,8 +285,16 @@ export function konjunkturOutcome(
   player: PlayerState,
   card: KonjunkturCard,
   locale: Locale = 'de',
+  /**
+   * The table's `weatherCatchPercent`. 100 — every hull in the ocean, every
+   * time — is the default because it is what the first Regelstand did, and a
+   * caller that has not been told otherwise is reading an old table.
+   */
+  catchPercent = 100,
 ): CardOutcome {
   const money = (n: number) => formatNumber(locale, n)
+  /** Whether the weather takes everything it covers, or rolls for it. */
+  const sure = catchPercent >= 100
   const held = flagship(player).cargo.reduce((sum, item) => sum + item.pricePaid, 0)
   const inPort = portAt(ctx, flagship(player).nodeId) !== null
 
@@ -354,14 +362,14 @@ export function konjunkturOutcome(
       case 'stormInRegion':
         return {
           headline: effect.title[locale],
-          detail: tn(locale, 'advice.card.storm', effect.lose),
+          detail: tn(locale, sure ? 'advice.card.storm' : 'advice.card.storm.some', effect.lose),
           tone: 'schlecht',
         }
 
       case 'cargoDamagedInRegion':
         return {
           headline: effect.title[locale],
-          detail: tn(locale, 'advice.card.damage', effect.count),
+          detail: tn(locale, sure ? 'advice.card.damage' : 'advice.card.damage.some', effect.count),
           tone: 'schlecht',
         }
 

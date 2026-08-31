@@ -10,6 +10,7 @@ import type {
   TravelMode,
 } from './types'
 import type { Gender } from './persona'
+import { regelnFuer } from './regeln'
 import { seedFrom, shuffle, type RngState } from './rng'
 import { rollExports } from './market'
 
@@ -39,6 +40,12 @@ export interface NewGameOptions {
   readonly preise?: PreisMode
   /** 'erweitert' adds storms, regional booms and pirates to the deck. */
   readonly konjunktur?: KonjunkturMode
+  /**
+   * Which edition of the rules. Absent means a table opened before the field
+   * existed, which is edition 1 — see `REGELSTAND`. Never defaulted to the
+   * current edition: that is precisely the bug this field exists to stop.
+   */
+  readonly regeln?: number
 }
 
 /**
@@ -50,8 +57,13 @@ export interface NewGameOptions {
  * instead of three.
  */
 export function createGame(ctx: EngineContext, options: NewGameOptions = {}): GameState {
+  // A table opened before this field existed is edition 1 and stays there.
+  const stand = regelnFuer(options.regeln ?? 1)
   const config = {
     ...ctx.pack.config,
+    regeln: stand.regeln,
+    weatherAtSeaOnly: stand.weatherAtSeaOnly,
+    weatherCatchPercent: stand.weatherCatchPercent,
     ...(options.totalRounds ? { totalRounds: options.totalRounds } : {}),
     ...(options.startingCapital ? { startingCapital: options.startingCapital } : {}),
     ...(options.travel ? { travel: options.travel } : {}),
@@ -71,10 +83,16 @@ export function createGame(ctx: EngineContext, options: NewGameOptions = {}): Ga
 
   const [ports, rngAfterPorts] = shuffle(ctx.pack.map.startPorts, rng)
   rng = rngAfterPorts
-  // Which deck is on the table is a rule of this game, not of the pack.
+  // Which deck is on the table is a rule of this game, not of the pack —
+  // and which edition of that deck is a rule of the day it was opened. Both
+  // arrays are the same length and in the same order, so the same seed deals
+  // the same permutation either way.
+  const erweitert = stand.reformedDeck
+    ? ctx.pack.konjunkturErweitert
+    : (ctx.pack.konjunkturErweitertVorReform ?? ctx.pack.konjunkturErweitert)
   const cards =
     config.konjunkturMode === 'erweitert'
-      ? (ctx.pack.konjunkturErweitert ?? ctx.pack.konjunktur)
+      ? (erweitert ?? ctx.pack.konjunktur)
       : ctx.pack.konjunktur
   const [deck, rngAfterDeck] = shuffle(
     cards.map((c) => c.id),

@@ -442,6 +442,21 @@ export interface RuleConfig {
   readonly startingVehicle: Vehicle
   /** How many vessels one house may run at once. */
   readonly maxFleetSize: number
+  /**
+   * Which edition of the rules this table sat down to. See `REGELSTAND`.
+   *
+   * Everything the number decides is spelled out in the two fields below, so
+   * the reducer asks what the rule *is* rather than which year it is from,
+   * and a rule can be traced without reading a changelog.
+   */
+  readonly regeln: number
+  /** Whether cargo is at risk only at sea, or in harbour as well. */
+  readonly weatherAtSeaOnly: boolean
+  /**
+   * The chance in a hundred that heavy weather actually finds a given ship.
+   * 100 is the old certainty: every hull in the ocean, every time.
+   */
+  readonly weatherCatchPercent: number
 }
 
 // ---------------------------------------------------------------------------
@@ -462,5 +477,14 @@ export interface ContentPack {
    * printed cards, so the mode adds weather rather than replacing the game.
    */
   readonly konjunkturErweitert?: readonly KonjunkturCard[]
+  /**
+   * The same deck as it read under an earlier Regelstand.
+   *
+   * Carried rather than discarded because the server has no state but the
+   * log: a table already at sea folds its whole season again on every deploy,
+   * and a card that quietly changed effects would rewrite what has already
+   * happened to it. See `REGELSTAND`.
+   */
+  readonly konjunkturErweitertVorReform?: readonly KonjunkturCard[]
   readonly config: RuleConfig
 }

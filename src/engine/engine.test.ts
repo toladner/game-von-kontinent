@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CLASSIC_PACK } from '@content/maps/classic'
 import { createContext } from './context'
 import { createGame, openingActions } from './setup'
+import { REGELSTAND } from './regeln'
 import { applyAction, replay, TELEGRAM_LIMIT } from './reducer'
 import {
   buyOffers,
@@ -1059,6 +1060,94 @@ describe('what a hold may carry', () => {
  * market only deals ids it can find in the pack, so an invented card turns
  * into no card at all and every assertion below would pass by doing nothing.
  */
+/**
+ * Der Regelstand.
+ *
+ * The sharpest failure this codebase can have, and it has had it once. The
+ * server keeps no state: it folds the log again on every deploy to find out
+ * where the ships are. So a rule that changes does not change the game from
+ * here on, it changes what already happened — cargo that went over the side
+ * on the Tuesday is back in the hold, and every sale since happened to a
+ * different ship. Six people came back to rewritten books.
+ *
+ * These tests are the fence around that. They are not about weather; they
+ * are about a table going on playing the game it sat down to.
+ */
+describe('the rules a table sat down to', () => {
+  const ctx = createContext(CLASSIC_PACK)
+
+  it('takes a table with no Regelstand for the oldest one', () => {
+    // Absent means a table opened before the field existed. Defaulting it to
+    // the current edition instead is exactly the bug: it is the line that
+    // would quietly re-adjudicate every game already at sea.
+    const old = createGame(ctx, { seed: 'alt', konjunktur: 'erweitert' })
+    expect(old.config.regeln).toBe(1)
+    expect(old.config.weatherAtSeaOnly).toBe(false)
+    expect(old.config.weatherCatchPercent).toBe(100)
+  })
+
+  it('opens a new table at the current one', () => {
+    const now = createGame(ctx, { seed: 'neu', konjunktur: 'erweitert', regeln: REGELSTAND })
+    expect(now.config.regeln).toBe(REGELSTAND)
+    expect(now.config.weatherAtSeaOnly).toBe(true)
+    expect(now.config.weatherCatchPercent).toBeLessThan(100)
+  })
+
+  it('deals an older table the cards it was dealt then', () => {
+    // Three cards changed what they do. A table on the old Regelstand has to
+    // go on drawing the old ones or its past moves under it.
+    const old = createGame(ctx, { seed: 'alt', konjunktur: 'erweitert' })
+    const now = createGame(ctx, { seed: 'alt', konjunktur: 'erweitert', regeln: REGELSTAND })
+
+    const kindsOf = (s: GameState, title: string) =>
+      s.deck
+        .map((id) => ctx.cardsById.get(id)!)
+        .filter((c) => c.title.de === title)
+        .flatMap((c) => c.effects.map((e) => e.kind))
+
+    expect(kindsOf(old, 'Wassereinbruch')).toEqual(['cargoLostByDrawer'])
+    expect(kindsOf(now, 'Wassereinbruch')).toEqual(['cargoDamagedByDrawer'])
+    expect(kindsOf(old, 'Seeräuberei')).toEqual(['cargoLostByDrawer'])
+    expect(kindsOf(now, 'Seeräuberei')).toEqual(['stormInRegion'])
+  })
+
+  it('deals them in the same order, so the same day brings the same card', () => {
+    // The two decks are the same length and in the same order, so one seed
+    // deals one permutation. A table that changed edition mid-season would
+    // otherwise find its whole remaining deck reshuffled as well.
+    const old = createGame(ctx, { seed: 'gleich', konjunktur: 'erweitert' })
+    const now = createGame(ctx, { seed: 'gleich', konjunktur: 'erweitert', regeln: REGELSTAND })
+    expect(old.deck).toHaveLength(now.deck.length)
+
+    const titles = (s: GameState) => s.deck.map((id) => ctx.cardsById.get(id)!.title.de)
+    expect(titles(old)).toEqual(titles(now))
+  })
+
+  it('leaves the old weather exactly as it was', () => {
+    // The whole point, stated as the thing a player would notice: under the
+    // first Regelstand a gale empties every hold in the ocean, harbour or
+    // no, every single time. That was worth changing and is not worth
+    // un-happening for the tables that are living through it.
+    const s = replay(
+      ctx,
+      createGame(ctx, {
+        seed: 'alt',
+        travel: 'echtzeit',
+        minutesPerPip: 1,
+        durationHours: 8,
+        konjunktur: 'erweitert',
+      }),
+      [
+        { type: 'tick', at: 1_800_000_000_000 },
+        { type: 'join', playerId: 'a', name: 'Ada' },
+        { type: 'start' },
+      ],
+    )
+    expect(s.config.weatherAtSeaOnly).toBe(false)
+    expect(s.config.weatherCatchPercent).toBe(100)
+  })
+})
+
 describe('weather over one part of the world', () => {
   const T0 = 1_800_000_000_000
   const MIN = 60_000
@@ -1073,6 +1162,7 @@ describe('weather over one part of the world', () => {
         minutesPerPip: 1,
         durationHours: 8,
         konjunktur: 'erweitert',
+        regeln: REGELSTAND,
       }),
       [
         { type: 'tick', at: T0 },
@@ -1150,9 +1240,28 @@ describe('weather over one part of the world', () => {
         ...speaking(s),
         deck: [card.id, ...s.deck.filter((d) => d !== card.id)],
         marketSince: s.now - s.config.realtime.marketIntervalMinutes * MIN,
+        config: {
+          ...s.config,
+          // The market always speaks here; whether it had anything to say is
+          // a different test from what it said.
+          realtime: { ...s.config.realtime, marketChancePercent: 100 },
+        },
       },
       { type: 'tick', at: s.now + 1000 },
     )
+
+  /**
+   * Weather that finds every ship it covers.
+   *
+   * Most of these tests are about what heavy weather *does* — what it takes,
+   * what it spoils, whose hull it reaches. Whether it finds a given ship is
+   * one roll and one test of its own, and letting it into the others would
+   * only make them flake.
+   */
+  const certain = (s: GameState): GameState => ({
+    ...s,
+    config: { ...s.config, weatherCatchPercent: 100 },
+  })
 
   const damagedOf = (s: GameState, i: number) =>
     flagship(s.players[i]!).cargo.filter((c) => c.damaged)
@@ -1168,7 +1277,7 @@ describe('weather over one part of the world', () => {
   })
 
   it('spoils cargo instead of sinking it, and it stays in the hold', () => {
-    const s = underWay(laden(seatedRealtime(), 'a'), 'a')
+    const s = certain(underWay(laden(seatedRealtime(), 'a'), 'a'))
     const before = flagship(s.players[0]!).cargo
     expect(before.length).toBeGreaterThan(0)
 
@@ -1192,7 +1301,7 @@ describe('weather over one part of the world', () => {
       ]),
     )
 
-    const s = underWay(alongside, 'a')
+    const s = certain(underWay(alongside, 'a'))
     const hit = turn(s, cardFor('cargoDamagedInRegion', whereabouts(s, 'a'))).state
     const spoiled = damagedOf(hit, 0)
     expect(spoiled.length).toBeGreaterThan(0)
@@ -1208,7 +1317,7 @@ describe('weather over one part of the world', () => {
     // Hitting an already-spoiled posten would quietly make the second storm
     // a no-op, and worse: it would always be the dearest cargo that shrugged
     // the weather off, because that is the one a storm reaches for first.
-    const s = underWay(laden(seatedRealtime(), 'a'), 'a')
+    const s = certain(underWay(laden(seatedRealtime(), 'a'), 'a'))
     const card = cardFor('cargoDamagedInRegion', whereabouts(s, 'a'))
 
     const first = turn(s, card)
@@ -1223,7 +1332,7 @@ describe('weather over one part of the world', () => {
 
   it('leaves ships in other oceans alone', () => {
     // At sea, so that what spares her is the ocean and not the quay.
-    const s = underWay(laden(seatedRealtime(), 'a'), 'a')
+    const s = certain(underWay(laden(seatedRealtime(), 'a'), 'a'))
     const here = whereabouts(s, 'a')
     const elsewhere = [...new Set(CLASSIC_PACK.map.countries.map((c) => c.continent))].find(
       (c) => c !== here && cardFor('cargoDamagedInRegion', c),
@@ -1266,7 +1375,7 @@ describe('weather over one part of the world', () => {
     const victims = new Set<string>()
 
     for (const seed of ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8']) {
-      const s = underWay(underWay(laden(laden(seatedRealtime(seed), 'a'), 'b'), 'a'), 'b')
+      const s = certain(underWay(underWay(laden(laden(seatedRealtime(seed), 'a'), 'b'), 'a'), 'b'))
       for (const e of turn(s, fire).events) {
         if (e.type === 'cargoLost') victims.add(e.playerId)
       }
@@ -1286,6 +1395,7 @@ describe('weather over one part of the world', () => {
         minutesPerPip: 1,
         durationHours: 8,
         konjunktur: 'erweitert',
+        regeln: REGELSTAND,
         maxFleetSize: 2,
       }),
       [
@@ -1312,11 +1422,31 @@ describe('weather over one part of the world', () => {
     expect(second().cargo.length).toBeGreaterThan(0)
 
     // Both put to sea out of the same harbour, so the same gale covers both.
-    s = underWay(s, 'a')
+    s = certain(underWay(s, 'a'))
     const hit = turn(s, cardFor('cargoDamagedInRegion', whereabouts(s, 'a')))
     const after = hit.state.players[0]!.fleet.find((v) => v.id === fleet[1]!.id)!
     expect(after.cargo.filter((c) => c.damaged).length).toBeGreaterThan(0)
   })
+
+  /**
+   * How often a card takes cargo, alongside and at sea, over many seeds.
+   *
+   * The card is chosen per table, because a card that names an ocean has to
+   * name the one this seed's ship is actually in — otherwise the sweep
+   * measures how often a house happens to start in the Nordsee.
+   */
+  const sweep = (pick: (s: GameState) => KonjunkturCard) => {
+    let inPort = 0
+    let atSea = 0
+    const seeds = 40
+    for (let i = 0; i < seeds; i++) {
+      const alongside = laden(seatedRealtime(`sweep${i}`), 'a')
+      const card = pick(alongside)
+      if (turn(alongside, card).events.some((e) => e.type === 'cargoLost')) inPort++
+      if (turn(underWay(alongside, 'a'), card).events.some((e) => e.type === 'cargoLost')) atSea++
+    }
+    return { inPort, atSea, seeds }
+  }
 
   it('passes over a ship lying in harbour', () => {
     // The reason the extended deck felt like a tax rather than weather. The
@@ -1324,29 +1454,38 @@ describe('weather over one part of the world', () => {
     // not, so a house that moored for the night was being emptied in its
     // sleep by gales it could neither see nor sail out of. Now the sea takes
     // cargo and a harbour keeps it, and lying up is a thing you can choose.
-    const alongside = laden(seatedRealtime(), 'a')
-    const before = flagship(alongside.players[0]!).cargo.length
-    expect(before).toBeGreaterThan(0)
+    //
+    // Swept rather than sampled: a gale is a roll, so one seed proving a loss
+    // would be one seed, and one seed proving none would be the roll.
+    const hit = sweep((s) => cardFor('stormInRegion', whereabouts(s, 'a')))
+    expect(hit.inPort).toBe(0)
+    expect(hit.atSea).toBeGreaterThan(0)
+  })
 
-    const storm = cardFor('stormInRegion', whereabouts(alongside, 'a'))
-    const rode = turn(alongside, storm)
-    expect(flagship(rode.state.players[0]!).cargo).toHaveLength(before)
-    expect(rode.events.some((e) => e.type === 'cargoLost')).toBe(false)
+  it('lets most ships ride the gale out', () => {
+    // Every hull in the ocean losing a posten every time is not weather, it
+    // is a fee, and it was most of why the extended deck felt like one. The
+    // odds are a rule of the table, so the test asks the table for them
+    // rather than hard-coding the number here.
+    const s = seatedRealtime()
+    const chance = s.config.weatherCatchPercent
+    expect(chance).toBeLessThan(100)
 
-    // The same gale, the same ocean, the same hold — but under way.
-    const sailed = turn(underWay(alongside, 'a'), storm)
-    expect(sailed.events.some((e) => e.type === 'cargoLost')).toBe(true)
+    const hit = sweep((t) => cardFor('stormInRegion', whereabouts(t, 'a')))
+    expect(hit.atSea).toBeLessThan(hit.seeds)
+    // Wide bounds on purpose: this is here to catch a rule that has silently
+    // become a certainty or a dead letter, not to pin the dice down.
+    expect(hit.atSea / hit.seeds).toBeGreaterThan(chance / 100 - 0.25)
+    expect(hit.atSea / hit.seeds).toBeLessThan(chance / 100 + 0.25)
   })
 
   it('leaves a fire in a hold alongside to the harbour', () => {
     // Same rule for the misfortunes that name no ocean: pirates board ships
     // under way, and a fire in a berthed hold is put out by the quay.
     const fire = deck.find((c) => c.effects.some((e) => e.kind === 'cargoLostByDrawer'))!
-    const alongside = laden(seatedRealtime(), 'a')
-    expect(turn(alongside, fire).events.some((e) => e.type === 'cargoLost')).toBe(false)
-    expect(turn(underWay(alongside, 'a'), fire).events.some((e) => e.type === 'cargoLost')).toBe(
-      true,
-    )
+    const hit = sweep(() => fire)
+    expect(hit.inPort).toBe(0)
+    expect(hit.atSea).toBeGreaterThan(0)
   })
 
   it('lets water in the hold spoil the cargo rather than sink it', () => {
@@ -1355,7 +1494,7 @@ describe('weather over one part of the world', () => {
     // cards that always found somebody, which is why they did most of the
     // damage in the deck between them.
     const flooded = deck.find((c) => c.effects.some((e) => e.kind === 'cargoDamagedByDrawer'))!
-    const s = underWay(laden(seatedRealtime(), 'a'), 'a')
+    const s = certain(underWay(laden(seatedRealtime(), 'a'), 'a'))
     const before = flagship(s.players[0]!).cargo.length
 
     const hit = turn(s, flooded)

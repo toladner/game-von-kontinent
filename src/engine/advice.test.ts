@@ -168,6 +168,27 @@ describe('what a Konjunkturkarte did to you', () => {
     effects,
   })
 
+  it('tells each table the odds its own weather is played on', () => {
+    // The card face says the same thing on every table because a printed card
+    // does; whether a gale finds every ship or two in five is a rule of the
+    // table it is turned on, so the Makler is where that gets said.
+    const s = table()
+    const gale = cardWith([
+      {
+        kind: 'stormInRegion',
+        continent: 'europa',
+        lose: 1,
+        title: { de: 'Sturm', en: 'Gale' },
+      },
+    ])
+
+    const certain = konjunkturOutcome(ctx, s.players[0]!, gale, 'de', 100)
+    expect(certain.detail).toContain('Jedes Schiff')
+
+    const rolled = konjunkturOutcome(ctx, s.players[0]!, gale, 'de', 40)
+    expect(rolled.detail).toContain('Nicht jedes Schiff')
+  })
+
   it('says half of what, when the weather only spoils the cargo', () => {
     const s = table()
     const soaked = konjunkturOutcome(

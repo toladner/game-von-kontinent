@@ -12,6 +12,7 @@
 import { packById } from '../src/content/packs'
 import { createContext } from '../src/engine/context'
 import { createGame } from '../src/engine/setup'
+import { REGELSTAND } from '../src/engine/regeln'
 import { applyAction } from '../src/engine/reducer'
 import type { GameAction, GameEvent } from '../src/engine/actions'
 import { msg, t, type Message } from '../src/i18n'
@@ -73,6 +74,16 @@ export interface GameMeta {
    * replaying to exactly the game it was.
    */
   readonly konjunktur?: KonjunkturMode
+  /**
+   * Which edition of the rules this table sat down to.
+   *
+   * Stamped when the table is opened and never changed after — not by the
+   * host, not by `configure`, not by a deploy. The server keeps no state but
+   * the log, so a rule that changed under a table already at sea would not
+   * change its future, it would rewrite its past. Absent means a table from
+   * before the field existed, which is edition 1. See `REGELSTAND`.
+   */
+  readonly regeln?: number
   readonly packId: string
   readonly createdAt: number
   /**
@@ -181,6 +192,9 @@ export default {
       const meta: GameMeta = {
         seed: `${code}-${Date.now().toString(36)}`,
         ...settle(body),
+        // Outside `settle` on purpose: this is not a setting the host chooses
+        // or may later change, it is the date on the rulebook they opened.
+        regeln: REGELSTAND,
         createdAt: Date.now(),
         code,
       }
@@ -362,6 +376,10 @@ export class GameRoom {
       ...(this.meta.angebot ? { angebot: this.meta.angebot } : {}),
       ...(this.meta.preise ? { preise: this.meta.preise } : {}),
       ...(this.meta.konjunktur ? { konjunktur: this.meta.konjunktur } : {}),
+      // Absent for a table opened before the field existed, and createGame
+      // reads that as edition 1 — which is what such a table has been
+      // playing all along.
+      ...(this.meta.regeln ? { regeln: this.meta.regeln } : {}),
     })
     for (const a of this.actions) s = applyAction(ctx, s, a).state
     this.state = s

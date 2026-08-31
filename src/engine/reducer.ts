@@ -202,15 +202,45 @@ function atSea(state: GameState, vehicle: VehicleInstance): boolean {
  * every twenty minutes whether anyone is at the table or not, and the ships
  * that spend the night in harbour were being robbed for spending it there.
  *
- * So the whole family of misfortunes — storm, Havarie, fire, pirates — now
- * asks one question first, and it is the same question in both games. On the
+ * So the whole family of misfortunes — storm, Havarie, fire, pirates — asks
+ * one question first, and it is the same question in both games. On the
  * clock: has she cast off. On the board: is she standing on open water rather
  * than in a harbour. Either way the rule a player learns is one line long —
  * *cargo is at risk at sea* — and lying up becomes a thing you can choose.
+ *
+ * Asked of `config` rather than answered here, because a table that was
+ * opened before this rule existed has to go on playing without it. See
+ * `REGELSTAND`.
  */
 function exposedToWeather(ctx: EngineContext, state: GameState, vehicle: VehicleInstance): boolean {
+  if (!state.config.weatherAtSeaOnly) return true
   if (state.config.travel === 'echtzeit') return atSea(state, vehicle)
   return portAt(ctx, vehicle.nodeId) === null
+}
+
+/**
+ * Whether this particular ship is the one the weather finds.
+ *
+ * Every hull in the ocean losing a posten every time is not how a gale works
+ * — most ships come through one, which is what seamanship is for — and it was
+ * the arithmetic that made the extended deck feel like a tax rather than
+ * weather. A ship that stays at sea, which is what a ship in a real-time
+ * season does, was in somebody's weather most of the day.
+ *
+ * A roll also gives the news something worth printing. "Der Orkan hat vier
+ * Häuser erwischt, zwei sind durchgekommen" is a story; "every ship loses a
+ * posten" is a fee.
+ *
+ * Draws from the game's own dice, so a replay of the same log finds the same
+ * ships. Silent at 100, which is the old certainty and what a table opened
+ * under the first Regelstand goes on playing.
+ */
+function weatherFinds(draft: Draft): boolean {
+  const chance = draft.config.weatherCatchPercent
+  if (chance >= 100) return true
+  const [roll, rng] = nextInt(draft.rng, 100)
+  draft.rng = rng
+  return roll < chance
 }
 
 /**
@@ -246,6 +276,9 @@ function unlucky(
     }
   }
   if (laden.length === 0) return null
+  // The fire is put out in time rather more often than not, same as a ship
+  // rides out a gale. One card is one card; it should not be a certainty.
+  if (!weatherFinds(draft)) return null
   const [choice, rng] = nextInt(draft.rng, laden.length)
   draft.rng = rng
   return laden[choice]!
@@ -427,7 +460,12 @@ function forEachShipIn(
   for (let i = 0; i < draft.players.length; i++) {
     for (const ship of [...draft.players[i]!.fleet]) {
       if (continentOf(ctx, ship.nodeId) !== continent) continue
-      if (atSeaOnly && !exposedToWeather(ctx, draft as GameState, ship)) continue
+      if (atSeaOnly) {
+        if (!exposedToWeather(ctx, draft as GameState, ship)) continue
+        // Rolled per hull, and only for hulls actually in the weather, so a
+        // quiet ocean costs the dice nothing and the odds mean what they say.
+        if (ship.cargo.length > 0 && !weatherFinds(draft)) continue
+      }
       hit(i, ship)
     }
   }

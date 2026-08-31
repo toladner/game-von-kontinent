@@ -2,7 +2,11 @@ import type { ContentPack, RuleConfig, Vehicle } from '../../../engine/types'
 import { buildMap } from '../../../engine/mapbuild'
 import { GOODS } from '../../goods'
 import { KONJUNKTUR_DECK } from '../../konjunktur'
-import { KONJUNKTUR_ERWEITERT } from '../../konjunktur-erweitert'
+import {
+  KONJUNKTUR_ERWEITERT,
+  KONJUNKTUR_ERWEITERT_VOR_REFORM,
+} from '../../konjunktur-erweitert'
+import { AKTUELLE_REGELN } from '../../../engine/regeln'
 import { COUNTRIES } from './countries'
 import { PORTS, START_PORTS } from './ports'
 import { LEGS } from './legs'
@@ -50,6 +54,7 @@ export const CLASSIC_CONFIG: RuleConfig = {
   cardCopiesPerGood: 2,
   localGlutSaleRate: 0.75,
   damagedSaleRate: 0.5,
+  ...AKTUELLE_REGELN,
   distressSaleRate: 0.75,
   finalRoundGlutSaleRate: 0.75,
   collisionDamageRate: 0.25,
@@ -145,5 +150,6 @@ export const CLASSIC_PACK: ContentPack = {
   goods: GOODS,
   konjunktur: KONJUNKTUR_DECK,
   konjunkturErweitert: KONJUNKTUR_ERWEITERT,
+  konjunkturErweitertVorReform: KONJUNKTUR_ERWEITERT_VOR_REFORM,
   config: CLASSIC_CONFIG,
 }
